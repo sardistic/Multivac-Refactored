@@ -73,34 +73,44 @@ async def handle_image_generation(message, prompt: str, reply_msg=None) -> Optio
             image_prompt = prompt[14:].strip() 
             
             # Check for attachments (Reference Images)
+            ref_images = []
+            headers = {"User-Agent": "Mozilla/5.0"}
+            
+            # 1. Attachments
             if message and message.attachments:
                 logging.info(f"Found {len(message.attachments)} attachments for Gemini reference generation.")
-                ref_images = []
-                headers = {"User-Agent": "Mozilla/5.0"}
-                
                 for att in message.attachments:
                     if att.content_type and att.content_type.startswith("image/"):
                         try:
-                            # We can use att.url or save directly. 
-                            # Since we need BytesIO, let's download.
-                            # Discord.py attachments have .read() but that's async? 
-                            # 'message' here is the discord.Message object.
-                            # safely sync download via requests for now to keep utils simple/sync-ish logic 
-                            # (though handle_image_generation is async, so we could await att.read())
-                            
-                            # let's try requests for robustness if att.read() isn't available in this context easily without import
                             r = requests.get(att.url, headers=headers, timeout=20)
                             if r.status_code == 200:
                                 ref_images.append(BytesIO(r.content))
                         except Exception as e:
                             logging.error(f"Failed to download attachment {att.url}: {e}")
 
-                if ref_images:
-                    from gemini_utils import generate_gemini_with_references
-                    img = generate_gemini_with_references(image_prompt, ref_images)
-                    if img:
-                        return img
-                    # If failed, fall through to normal generation or fallback
+            # 2. URLs in prompt
+            # Regex to find http/https urls ending in image extensions
+            # (Simplistic check, but covers most direct image links)
+            url_pattern = r'(https?://\S+\.(?:png|jpg|jpeg|webp|gif))'
+            urls = re.findall(url_pattern, prompt, re.IGNORECASE)
+            
+            for url in urls:
+                try:
+                    logging.info(f"Found image URL in prompt: {url}")
+                    r = requests.get(url, headers=headers, timeout=20)
+                    if r.status_code == 200 and "image" in r.headers.get("Content-Type", ""):
+                        ref_images.append(BytesIO(r.content))
+                        # Optional: Remove URL from prompt so it's not rendered as text? 
+                        # image_prompt = image_prompt.replace(url, "").strip()
+                except Exception as e:
+                    logging.error(f"Failed to download URL {url}: {e}")
+
+            if ref_images:
+                from gemini_utils import generate_gemini_with_references
+                img = generate_gemini_with_references(image_prompt, ref_images)
+                if img:
+                    return img
+                # If failed, fall through to normal generation or fallback
             
             # Normal generation (no attachments or ref-gen failed)
             img = generate_gemini_image(image_prompt, width, height)
