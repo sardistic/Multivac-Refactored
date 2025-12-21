@@ -297,12 +297,12 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
                 # Structured Prompting for "Style Transfer" / Edit behavior
                 # We need to encourage transformation, otherwise it just describes the base image.
                 structured_prompt = (
-                    "Using the FIRST image as the visual structure and subject (Base), "
-                    "and the subsequent images as the Art Style Reference (Style): "
-                    "Re-render the Base image ensuring it matches the Style References. "
-                    "Adopt the color palette, shading, linework, and artistic medium of the Style images "
-                    "while keeping the composition of the Base image. "
-                    f"Request: {clean_prompt}"
+                    f"User Request: {clean_prompt}\n"
+                    "TASK: COMPLETELY RE-DRAW the subject from the FIRST image using the ART STYLE of the subsequent images.\n"
+                    "1. Identify the subject and pose from the first image.\n"
+                    "2. Identify the artistic medium, linework, and color palette from the style reference images.\n"
+                    "3. GENERATE A NEW IMAGE that combines that subject with that style.\n"
+                    "CRITICAL: The output must look like a drawing/rendering from the style reference. Do not just filter the original."
                 )
                 
                 # Include base image first
