@@ -277,7 +277,7 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
 
         # 2) Gemini Edit
         if prompt.lower().startswith("gemini edit"):
-            edit_prompt = prompt[11:].strip()
+            original_prompt = prompt[11:].strip()
             
             # Collect references from urls[1:]
             ref_bytes = []
@@ -286,23 +286,28 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
                 if b:
                     ref_bytes.append(b)
             
-            # If we have references + base, use generate_gemini_with_references
-            # But wait, generate_gemini_with_references takes [prompt, img, img...]
-            # Semantically: "Here is the base image, here are refs, make result."
-            # We treat base image as just another reference in multimodal context? 
-            # Or does 'edit' imply base image is special?
-            # In Gemini 1.5/2.0 Flash, it's just a bag of context.
-            
             from gemini_utils import generate_gemini_with_references, edit_gemini_image
             
             if ref_bytes:
                 # Multimodal with multiple images
-                # Include base image first?
+                # Strip URLs from prompt to avoid confusing the model with text links it already has as images
+                # (Simple regex to remove http/https links)
+                clean_prompt = re.sub(r"https?://\S+", "", original_prompt).strip()
+                
+                # Structured Prompting for "Style Transfer" / Edit behavior
+                structured_prompt = (
+                    "INSTRUCTIONS: The FIRST image provided is the BASE content. "
+                    "The subsequent images are STYLE references. "
+                    "Re-generate the BASE image content using the STYLE of the reference images. "
+                    f"User Prompt: {clean_prompt}"
+                )
+                
+                # Include base image first
                 all_inputs = [base_image_bytes] + ref_bytes
-                img = generate_gemini_with_references(edit_prompt, all_inputs)
+                img = generate_gemini_with_references(structured_prompt, all_inputs)
             else:
-                # Single image "edit"
-                img = edit_gemini_image(base_image_bytes, edit_prompt)
+                # Single image "edit" (Instruction based)
+                img = edit_gemini_image(base_image_bytes, original_prompt)
                 
             if img:
                 return img
