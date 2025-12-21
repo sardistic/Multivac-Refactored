@@ -35,19 +35,26 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
     elif height > width:
         aspect_ratio = "9:16"
 
-    try:
         # User requested: gemini-2.5-flash-image
         # And used client.models.generate_content in their example.
         model = "gemini-2.5-flash-image"
         
         logger.info(f"Generating image with model: {model}")
+        
+        # Using the config structure from the user's snippet
+        # to ensure proper image generation triggers.
+        config = types.GenerateContentConfig(
+            response_modalities=["IMAGE"], # We primarily want image
+            image_config=types.ImageConfig(
+                aspect_ratio=aspect_ratio,
+                image_size="1024x1024" # Equivalent to "1K"? SDK might accept enum or string
+            )
+        )
+        
         response = client.models.generate_content(
             model=model,
             contents=[prompt],
-            # config=types.GenerateContentConfig(
-            #    response_mime_type="image/png" 
-            # ) 
-            # "image/png" caused 400 INVALID_ARGUMENT. Removing config to let defaults handle it.
+            config=config
         )
         
         # Parse response for image
@@ -79,11 +86,6 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
 def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
     """
     Edit an image using Gemini.
-    WARNING: As of late 2024, 'edit' via SDK might require specific models like gemini-2.0-flash-exp 
-    handling multi-modal input for *instruction based* editing, or a specific edit endpoint.
-    
-    If pure 'edit' isn't supported, we might treat it as "image-to-image" generation 
-    (providing image + prompt).
     """
     client = _get_client()
     if not client:
@@ -93,24 +95,18 @@ def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
         # Load bytes into PIL Image
         input_image = PILImage.open(image_bytes)
 
-        # Gemini 2.5 Flash Image / 2.0 Flash Exp often support image input
+        # Gemini 2.5 Flash Image
         model = "gemini-2.5-flash-image" 
         
-        # Construct the prompt with image
-        # Note: This is Technically "multimodal generation", closest to "edit" 
-        # if we ask it to "change X to Y" in the prompt along with the image.
-        
+        # Use config to enforce image output
+        config = types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
+        )
+
         response = client.models.generate_content(
             model=model,
             contents=[prompt, input_image],
-            # We want an image back? 
-            # Currently Gemini 2.0 Flash might mostly return text unless explicitly capable of outputting images.
-            # TRUE image editing (inpainting/editing) usually requires Imagen models with specific edit endpoints.
-            # But the user linked docs for "image generation" which includes editing sections often.
-            # If standard generate_content doesn't return image, we might need to wait for full support.
-            
-            # However, user snippet showed "generate_content" returning parts with "inline_data".
-            # Let's try that pattern from their snippet.
+            config=config
         )
 
         if not response.parts:
@@ -119,13 +115,8 @@ def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
 
         for part in response.parts:
             if part.inline_data: 
-                # Decode
-                # The SDK might provide a helper or we handle raw bytes
-                # part.inline_data.data is usually bytes
                 return BytesIO(part.inline_data.data)
                 
-            # Or if the SDK wraps it as executable code/image?
-            # User snippet: part.as_image()
             try:
                 if hasattr(part, "as_image"):
                     img = part.as_image()
@@ -162,9 +153,15 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
         
         logger.info(f"Generating with references (count={len(pil_images)}) using model: {model}")
         
+        # User snippet config pattern
+        config = types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
+        )
+        
         response = client.models.generate_content(
             model=model,
             contents=contents,
+            config=config
         )
 
         if not response.parts:
