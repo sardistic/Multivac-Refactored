@@ -36,16 +36,11 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
         aspect_ratio = "9:16"
 
     try:
-        # Docs suggest: gemini-2.0-flash-exp or imagen-3.0-generate-002
-        # User snippet used: gemini-2.5-flash-image?
-        # Let's try "imagen-3.0-generate-002" as verified earlier, or adhere to user if requested.
-        # User snippet showed: model="gemini-2.5-flash-image"
-        # We will try the user's suggestion first, falling back if needed? 
-        # Actually, let's stick to the one we know works or the user's specific request.
-        # User snippet clearly requested "gemini-2.5-flash-image".
-        
-        model = "imagen-3.0-generate-002" 
+        # Docs/User snippet suggest various models. 
+        # "gemini-2.0-flash-exp" is a strong candidate for image generation in the new SDK.
+        model = "gemini-2.0-flash-exp" 
 
+        logger.info(f"Generating image with model: {model}")
         response = client.models.generate_image(
             model=model,
             prompt=prompt,
@@ -58,14 +53,17 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
         if response.generated_images:
             img = response.generated_images[0]
             if img.image:
-                # SDK returns a PIL Image object usually if requesting raw, 
-                # but 'generated_images' entry has 'image' field which is PIL.Image?
-                # The SDK docs say: .generated_images[].image is a PIL.Image.Image
-                
                 buf = BytesIO()
                 img.image.save(buf, format="PNG")
                 buf.seek(0)
                 return buf
+            else:
+                logger.warning("Response has generated_images but no 'image' field (bytes?)")
+        else:
+             logger.warning("Response returned no generated_images.")
+
+    except Exception as e:
+        logger.exception(f"Gemini generation failed: {e}")
 
     except Exception as e:
         logger.exception(f"Gemini generation failed: {e}")
