@@ -140,3 +140,52 @@ def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
         logger.exception(f"Gemini edit failed: {e}")
 
     return None
+
+def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]) -> Optional[BytesIO]:
+    """
+    Generate an image using a text prompt and multiple reference images.
+    """
+    client = _get_client()
+    if not client:
+        return None
+
+    try:
+        # Load all bytes into PIL Images
+        pil_images = []
+        for img_bytes in reference_images:
+            pil_images.append(PILImage.open(img_bytes))
+
+        # Use gemini-2.5-flash-image for multimodal generation
+        model = "gemini-2.5-flash-image"
+        
+        contents = [prompt] + pil_images
+        
+        logger.info(f"Generating with references (count={len(pil_images)}) using model: {model}")
+        
+        response = client.models.generate_content(
+            model=model,
+            contents=contents,
+        )
+
+        if not response.parts:
+            logger.warning(f"Gemini ref-gen returned no parts. Response: {response}")
+            return None
+
+        for part in response.parts:
+            if part.inline_data: 
+                return BytesIO(part.inline_data.data)
+                
+            try:
+                if hasattr(part, "as_image"):
+                    img = part.as_image()
+                    buf = BytesIO()
+                    img.save(buf, format="PNG")
+                    buf.seek(0)
+                    return buf
+            except:
+                pass
+
+    except Exception as e:
+        logger.exception(f"Gemini ref-gen failed: {e}")
+
+    return None
