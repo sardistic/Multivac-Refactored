@@ -76,7 +76,32 @@ async def handle_image_generation(message, prompt: str, reply_msg=None) -> Optio
             ref_images = []
             headers = {"User-Agent": "Mozilla/5.0"}
             
-            # 1. Attachments
+            # 0. Check Reply Message (The "This")
+            if reply_msg:
+                # Attachments in reply
+                if reply_msg.attachments:
+                     for att in reply_msg.attachments:
+                        if att.content_type and att.content_type.startswith("image/"):
+                            try:
+                                logging.info(f"Found attachment in reply: {att.url}")
+                                r = requests.get(att.url, headers=headers, timeout=20)
+                                if r.status_code == 200:
+                                    ref_images.append(BytesIO(r.content))
+                            except Exception as e:
+                                logging.error(f"Failed to download reply attachment {att.url}: {e}")
+                # Embeds in reply (rare but possible if replying to a bot image)
+                if reply_msg.embeds:
+                    for embed in reply_msg.embeds:
+                        if embed.image and embed.image.url:
+                             try:
+                                logging.info(f"Found embed image in reply: {embed.image.url}")
+                                r = requests.get(embed.image.url, headers=headers, timeout=20)
+                                if r.status_code == 200:
+                                    ref_images.append(BytesIO(r.content))
+                             except Exception as e:
+                                logging.error(f"Failed to download reply embed {embed.image.url}: {e}")
+
+            # 1. Attachments in current message
             if message and message.attachments:
                 logging.info(f"Found {len(message.attachments)} attachments for Gemini reference generation.")
                 for att in message.attachments:
