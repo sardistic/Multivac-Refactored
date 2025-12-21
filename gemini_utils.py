@@ -36,9 +36,8 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
         aspect_ratio = "9:16"
 
     try:
-        # Docs/User snippet suggest various models. 
-        # "gemini-2.0-flash-exp" is a strong candidate for image generation in the new SDK.
-        model = "gemini-2.0-flash-exp" 
+        # "imagen-3.0-generate-002" is the dedicated image generation model.
+        model = "imagen-3.0-generate-002" 
 
         logger.info(f"Generating image with model: {model}")
         response = client.models.generate_image(
@@ -58,12 +57,12 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
                 buf.seek(0)
                 return buf
             else:
-                logger.warning("Response has generated_images but no 'image' field (bytes?)")
+                logger.warning(f"Response has generated_images but no 'image' field: {response}")
         else:
-             logger.warning("Response returned no generated_images.")
+             logger.warning(f"Response returned no generated_images: {response}")
 
     except Exception as e:
-        logger.exception(f"Gemini generation failed: {e}")
+        logger.exception(f"Gemini generation failed (model={model}): {e}")
 
     except Exception as e:
         logger.exception(f"Gemini generation failed: {e}")
