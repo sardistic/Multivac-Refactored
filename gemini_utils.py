@@ -156,10 +156,10 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
         
         # User snippet config pattern
         config = types.GenerateContentConfig(
-            response_modalities=["IMAGE"],
+            response_modalities=["TEXT", "IMAGE"], # Match user snippet exactly
             image_config=types.ImageConfig(
-                aspect_ratio="1:1", # Default, or derive from base image if possible.
-                image_size="1024x1024"
+                aspect_ratio="1:1",
+                # image_size="1024x1024" # causing 400? Let defaults handle it.
             )
         )
         
