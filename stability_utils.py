@@ -232,54 +232,121 @@ async def generate_gpt_image(prompt: str) -> Optional[BytesIO]:
         return None
 
 
-async def edit_image_with_prompt(image_url: str, prompt: str) -> Optional[BytesIO]:
+async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> Optional[BytesIO]:
     """
     Edit an image with a text prompt.
-    - If prompt starts with 'gemini edit', uses Gemini SDK.
-    - Else uses OpenAI Images API.
+    - image_input: Single URL/B64 string OR List of strings. 
+                   If list, index 0 is Base, others are References.
+    - If prompt starts with 'gemini edit', uses Gemini SDK (Multimodal).
+    - Else uses OpenAI Images API (Single image).
     """
     try:
-        # 1) Fetch image bytes first
-        if image_url.startswith("data:image/"):
-            image_b64 = image_url.split(",", 1)[1]
-            image_bytes = base64.b64decode(image_b64)
+        # Normalize input to list
+        if isinstance(image_input, str):
+            urls = [image_input]
         else:
-            headers = {"User-Agent": "Mozilla/5.0"}
-            resp = requests.get(image_url, headers=headers, timeout=20)
-            resp.raise_for_status()
-            image_bytes = resp.content
+            urls = image_input
+            
+        if not urls:
+            return None
+            
+        # Helper to decode a single url/b64
+        def decode_img(u):
+            if u.startswith("data:image/"):
+                try:
+                    hp = u.split(",", 1)
+                    if len(hp) == 2:
+                         return BytesIO(base64.b64decode(hp[1]))
+                except:
+                    pass
+            else:
+                try:
+                    h = {"User-Agent": "Mozilla/5.0"}
+                    r = requests.get(u, headers=h, timeout=20)
+                    if r.status_code == 200:
+                        return BytesIO(r.content)
+                except:
+                    pass
+            return None
+
+        # 1) Fetch Base Image
+        base_image_bytes = decode_img(urls[0])
+        if not base_image_bytes:
+            logging.warning("Could not decode base image for editing.")
+            return None
 
         # 2) Gemini Edit
         if prompt.lower().startswith("gemini edit"):
             edit_prompt = prompt[11:].strip()
-            # We need a BytesIO for the SDK utils
-            buf = BytesIO(image_bytes)
-            img = edit_gemini_image(buf, edit_prompt)
+            
+            # Collect references from urls[1:]
+            ref_bytes = []
+            for u in urls[1:]:
+                b = decode_img(u)
+                if b:
+                    ref_bytes.append(b)
+            
+            # If we have references + base, use generate_gemini_with_references
+            # But wait, generate_gemini_with_references takes [prompt, img, img...]
+            # Semantically: "Here is the base image, here are refs, make result."
+            # We treat base image as just another reference in multimodal context? 
+            # Or does 'edit' imply base image is special?
+            # In Gemini 1.5/2.0 Flash, it's just a bag of context.
+            
+            from gemini_utils import generate_gemini_with_references, edit_gemini_image
+            
+            if ref_bytes:
+                # Multimodal with multiple images
+                # Include base image first?
+                all_inputs = [base_image_bytes] + ref_bytes
+                img = generate_gemini_with_references(edit_prompt, all_inputs)
+            else:
+                # Single image "edit"
+                img = edit_gemini_image(base_image_bytes, edit_prompt)
+                
             if img:
                 return img
              
             logging.warning("Gemini edit failed; falling back to GPT edit.")
-            # Note: We don't have the 'message' object here easily in current signature to send a DM/Channel msg 
-            # unless we change signature. 
-            # For now, we will just log it. If user really wants the notification, we'd need to thread 'message' through.
-            # But wait, looking at discord_bot.py, 'edit_image_with_prompt' is called with just url/prompt.
-            
-            # Since we can't easily notify without refactoring the bot interface, we will skip the user notification 
-            # for *editing* fallback for now, OR we can hack it if we had a global ref or context.
-            # Let's keep it simple and just fall through.
+            # Fall through to OpenAI logic below...
+            # Note: OpenAI only supports single image edit. logic continues.
             
         # 3) OpenAI Edit (Fallback/Default)
+        # Use only base_image_bytes
+        base_image_bytes.seek(0) # Ensure valid stream
+        
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
-            temp_file.write(image_bytes)
+            temp_file.write(base_image_bytes.read())
             temp_file.flush()
             temp_path = temp_file.name
 
         with open(temp_path, "rb") as img_file:
-            result = await openai_client.images.edit(
-                model="gpt-image-1",
-                prompt=prompt,
-                image=[img_file],
-            )
+            # OpenAI mask behavior is optional? API says 'image' and 'prompt' are required. 'mask' optional.
+            # DALL-E 2 edits usually require a mask for inpainting, or it does "variations"?
+            # Actually openai.images.edit REQUIRES a mask usually. 
+            # If no mask is provided, it might behave like "variations" or error?
+            # But the user logs showed: method='post', url='/images/edits'... files=[('image', ...)] ... 'prompt': ...
+            # If it worked before, we stick to it.
+            
+            try:
+                # Try simple edit without mask (some libraries/endpoints support this as full generation from init image?)
+                # Wait, 'images.edit' implies inpainting. 'images.create_variation' is different.
+                # If the user code was working before, we keep it. 
+                # But typically 'edit' needs a mask. 
+                # Unless they mean "DALL-E 3" style "edit the prompt"? No, DALL-E 3 doesn't do img2img.
+                # DALL-E 2 does.
+                
+                # We'll stick to exactly what was there: client.images.edit(image=..., prompt=...)
+                # If it fails due to missing mask, that's an OpenAI issue, but it seems it fell back and ran.
+                result = await openai_client.images.edit(
+                    model="gpt-image-1", # Likely DALL-E 2
+                    prompt=prompt,
+                    image=[img_file], # SDK weirdness, sometimes takes file-like
+                )
+            except Exception as e:
+                # Fallback to variation if edit fails without mask?
+                logging.warning(f"OpenAI edit failed: {e}")
+                return None
 
         edited_b64 = result.data[0].b64_json if result and result.data else None
         if not edited_b64:

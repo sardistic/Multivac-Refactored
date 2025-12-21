@@ -472,8 +472,25 @@ async def on_message(message: discord.Message):
     intent = await classify_intent(raw_prompt)
     logger.debug(f"Intent classified as: {intent}")
 
-    # Collect image inputs (attachments, URLs, replied image)
+    # Collect image inputs (replied image FIRST, then attachments, then URLs)
     image_urls: List[str] = []
+    
+    # 1. Replied Image (Priority 0 - The Base)
+    if ref_msg and ref_msg.attachments:
+        for a in ref_msg.attachments:
+            if a.content_type and a.content_type.startswith("image/"):
+                b64 = await image_url_to_base64(a.url)
+                if b64:
+                    image_urls.append(b64)
+    # Also check replied-to embeds? (Optional but good for completeness)
+    if ref_msg and ref_msg.embeds:
+        for e in ref_msg.embeds:
+            if e.image and e.image.url:
+                b64 = await image_url_to_base64(e.image.url)
+                if b64:
+                    image_urls.append(b64)
+
+    # 2. Attachments in current message
     if message.attachments:
         for a in message.attachments:
             if a.content_type and a.content_type.startswith("image/"):
@@ -481,25 +498,28 @@ async def on_message(message: discord.Message):
                 if b64:
                     image_urls.append(b64)
 
-    if not image_urls:
-        matches = re.findall(
-            r"https?://[^\s]+(?:\.(?:png|jpg|jpeg|webp|gif)|cdn\.discordapp\.com/attachments/[^\s]+)",
-            message.content,
-        )
-        for raw_url in matches:
-            if "cdn.discordapp.com" in raw_url:
-                b64 = await image_url_to_base64(raw_url)
-                if b64:
-                    image_urls.append(b64)
-            else:
-                image_urls.append(raw_url)
-
-    if not image_urls and ref_msg and ref_msg.attachments:
-        for a in ref_msg.attachments:
-            if a.content_type and a.content_type.startswith("image/"):
-                b64 = await image_url_to_base64(a.url)
-                if b64:
-                    image_urls.append(b64)
+    # 3. URLs in current message
+    matches = re.findall(
+        r"https?://[^\s]+(?:\.(?:png|jpg|jpeg|webp|gif)|cdn\.discordapp\.com/attachments/[^\s]+)",
+        message.content,
+    )
+    for raw_url in matches:
+        if "cdn.discordapp.com" in raw_url:
+            b64 = await image_url_to_base64(raw_url)
+            if b64:
+                image_urls.append(b64)
+        else:
+            image_urls.append(raw_url)
+            
+    # Remove duplicates while preserving order
+    # (Simple logic: if b64 strings are identical, dedup. URLs dedup by string)
+    seen = set()
+    unique_urls = []
+    for u in image_urls:
+        if u not in seen:
+            unique_urls.append(u)
+            seen.add(u)
+    image_urls = unique_urls
 
     # Any URL (for summarize)
     general_url_match = re.search(r"https?://[^\s]+", message.content)
@@ -549,7 +569,7 @@ async def on_message(message: discord.Message):
                 message,
                 action_label="Editing",
                 emoji="🔧",
-                coro=edit_image_with_prompt(image_urls[0], prompt),
+                coro=edit_image_with_prompt(image_urls, prompt),
                 duration_estimate=duration_estimate,
                 summarizer=(lambda: "Applying edits… refining…") if STREAM_OK else None,
             )
