@@ -27,6 +27,7 @@ lxml = "^5.1.0"
 readability-lxml = "^0.8.1"
 lxml_html_clean = "^0.1.1"
 youtube-transcript-api = "^0.6.1"
+google-genai = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 debugpy = "^1.6.2"

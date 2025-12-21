@@ -2,43 +2,57 @@
 import os
 import sys
 import logging
-from gemini_utils import generate_gemini_image
+from io import BytesIO
+from gemini_utils import generate_gemini_image, edit_gemini_image
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
 def test_generation():
-    print("Testing Gemini Image Generation...")
-    
-    # Check for API Key
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
-        print("❌ GEMINI_API_KEY not found in environment variables.")
-        print("Please set it before running this script: $env:GEMINI_API_KEY='your_key'")
-        return
-
+    print("--- Testing 'gemini imagine' ---")
     prompt = "a cyberpunk cat sitting on a neon rooftop"
     print(f"Prompt: {prompt}")
-    
-    auth_redacted = key[:5] + "..." + key[-5:]
-    print(f"Key: {auth_redacted}")
 
     try:
         result = generate_gemini_image(prompt)
-        
         if result:
-            print("✅ Image generated successfully!")
-            size = result.getbuffer().nbytes
-            print(f"Image size: {size} bytes")
-            
-            with open("test_gemini_output.png", "wb") as f:
+            print("✅ Generation successful!")
+            with open("test_gemini_gen.png", "wb") as f:
                 f.write(result.getvalue())
-            print("Saved to test_gemini_output.png")
+            print("Saved to test_gemini_gen.png")
         else:
-            print("❌ Image generation failed (returned None). Check logs.")
+            print("❌ Generation failed (returned None).")
+    except Exception as e:
+        print(f"❌ Exception: {e}")
+
+def test_editing():
+    print("\n--- Testing 'gemini edit' ---")
+    if not os.path.exists("test_gemini_gen.png"):
+        print("⚠️ Skipping edit test (no input image from generation step).")
+        return
+
+    prompt = "make the cat orange"
+    print(f"Prompt: {prompt}")
+    
+    try:
+        with open("test_gemini_gen.png", "rb") as f:
+            img_bytes = BytesIO(f.read())
+            
+        result = edit_gemini_image(img_bytes, prompt)
+        if result:
+            print("✅ Edit successful!")
+            with open("test_gemini_edit.png", "wb") as f:
+                f.write(result.getvalue())
+            print("Saved to test_gemini_edit.png")
+        else:
+            print("❌ Edit failed (returned None).")
             
     except Exception as e:
-        print(f"❌ Exception occurred: {e}")
+        print(f"❌ Exception: {e}")
 
 if __name__ == "__main__":
-    test_generation()
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("❌ GEMINI_API_KEY not found.")
+    else:
+        test_generation()
+        test_editing()

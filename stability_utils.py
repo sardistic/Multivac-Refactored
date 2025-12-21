@@ -43,7 +43,7 @@ if STABILITY_KEY:
         _STABILITY_AVAILABLE = False
 
 
-from gemini_utils import generate_gemini_image
+from gemini_utils import generate_gemini_image, edit_gemini_image
 
 # -- CORE IMAGE FUNCTIONS ------------------------------------------------------
 
@@ -71,7 +71,6 @@ async def handle_image_generation(message, prompt: str, reply_msg=None) -> Optio
         # 2) Gemini
         if prompt.lower().startswith("gemini imagine"):
             image_prompt = prompt[14:].strip() 
-            # Note: width/height ignored or approximated inside generate_gemini_image
             img = generate_gemini_image(image_prompt, width, height)
             if img:
                 return img
@@ -164,10 +163,12 @@ async def generate_gpt_image(prompt: str) -> Optional[BytesIO]:
 
 async def edit_image_with_prompt(image_url: str, prompt: str) -> Optional[BytesIO]:
     """
-    Edit an image with a text prompt using OpenAI Images API.
-    Accepts a data URL or an HTTP(S) URL.
+    Edit an image with a text prompt.
+    - If prompt starts with 'gemini edit', uses Gemini SDK.
+    - Else uses OpenAI Images API.
     """
     try:
+        # 1) Fetch image bytes first
         if image_url.startswith("data:image/"):
             image_b64 = image_url.split(",", 1)[1]
             image_bytes = base64.b64decode(image_b64)
@@ -177,6 +178,14 @@ async def edit_image_with_prompt(image_url: str, prompt: str) -> Optional[BytesI
             resp.raise_for_status()
             image_bytes = resp.content
 
+        # 2) Gemini Edit
+        if prompt.lower().startswith("gemini edit"):
+            edit_prompt = prompt[11:].strip()
+            # We need a BytesIO for the SDK utils
+            buf = BytesIO(image_bytes)
+            return edit_gemini_image(buf, edit_prompt)
+
+        # 3) OpenAI Edit (Fallback/Default)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
             temp_file.write(image_bytes)
             temp_file.flush()
@@ -197,10 +206,9 @@ async def edit_image_with_prompt(image_url: str, prompt: str) -> Optional[BytesI
         return BytesIO(base64.b64decode(edited_b64))
 
     except Exception:
-        logging.exception("Error editing GPT image")
+        logging.exception("Error editing image")
         return None
     finally:
-        # Best-effort cleanup; tempfile is delete=False to satisfy API file needs
         try:
             if 'temp_path' in locals() and os.path.exists(temp_path):
                 os.unlink(temp_path)
