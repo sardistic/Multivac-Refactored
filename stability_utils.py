@@ -71,6 +71,38 @@ async def handle_image_generation(message, prompt: str, reply_msg=None) -> Optio
         # 2) Gemini
         if prompt.lower().startswith("gemini imagine"):
             image_prompt = prompt[14:].strip() 
+            
+            # Check for attachments (Reference Images)
+            if message and message.attachments:
+                logging.info(f"Found {len(message.attachments)} attachments for Gemini reference generation.")
+                ref_images = []
+                headers = {"User-Agent": "Mozilla/5.0"}
+                
+                for att in message.attachments:
+                    if att.content_type and att.content_type.startswith("image/"):
+                        try:
+                            # We can use att.url or save directly. 
+                            # Since we need BytesIO, let's download.
+                            # Discord.py attachments have .read() but that's async? 
+                            # 'message' here is the discord.Message object.
+                            # safely sync download via requests for now to keep utils simple/sync-ish logic 
+                            # (though handle_image_generation is async, so we could await att.read())
+                            
+                            # let's try requests for robustness if att.read() isn't available in this context easily without import
+                            r = requests.get(att.url, headers=headers, timeout=20)
+                            if r.status_code == 200:
+                                ref_images.append(BytesIO(r.content))
+                        except Exception as e:
+                            logging.error(f"Failed to download attachment {att.url}: {e}")
+
+                if ref_images:
+                    from gemini_utils import generate_gemini_with_references
+                    img = generate_gemini_with_references(image_prompt, ref_images)
+                    if img:
+                        return img
+                    # If failed, fall through to normal generation or fallback
+            
+            # Normal generation (no attachments or ref-gen failed)
             img = generate_gemini_image(image_prompt, width, height)
             if img:
                 return img
