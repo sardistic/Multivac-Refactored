@@ -1,0 +1,23 @@
+Based on the code provided in the document, here are the commands and functionalities of the Discord bot:
+
+*Doesn't currently work* /history: This command retrieves the conversation history between the bot and the user. It fetches the messages from the database and sends them back to the user in the Discord channel.
+
+/gpt4 [prompt]: This command generates a response from the GPT-4 model based on the provided prompt. The prompt is passed to the generate_openai_response function, which generates a response and sends it back to the user in the Discord channel.
+
+@bot [weather/forecast] [location]: If the bot is mentioned in a message and the message contains the keywords 'weather' or 'forecast', the bot will fetch the current weather data and forecast for the specified location. The bot uses the OpenWeather API to fetch the weather data and forecast, and it generates a response based on this data.
+
+@bot imagine [prompt]: If the bot is mentioned in a message and the message starts with 'imagine', the bot will generate an image based on the provided prompt. The bot uses the Stability API to generate the image, and it sends the generated image back to the user in the Discord channel.
+
+**currently not paid tokens available**@bot stable imagine [prompt]: If the bot is mentioned in a message and the message starts with 'stable imagine', the bot will generate an image based on the provided prompt. The bot uses the Stability API to generate the image, and it sends the generated image back to the user in the Discord channel.
+
+Please note that the bot also handles general messages that do not start with a command. If the bot is mentioned in a message and the message does not start with a command, the bot will generate a response from the GPT-4 model based on the message content. The message content is passed to the generate_openai_response function, which generates a response and sends it back to the user in the Discord channel.
+
+
+
+The bot maintains conversation context by storing the conversation history in a SQLite database. Each conversation is identified by a unique conversation_id, which is a combination of the guild ID and the channel ID. This allows the bot to keep track of the conversation history for each channel in each guild.
+
+When a user sends a message, the bot appends the user's message to the conversation history and then generates a response from the GPT-4 model based on this history. The bot then appends the generated response to the conversation history before sending the response back to the user in the Discord channel. This allows the bot to maintain a coherent context for the conversation, as the GPT-4 model generates responses based on the entire conversation history.
+
+The bot does not share context between different users. Each user has their own conversation history, which is stored in a separate table in the SQLite database. The table name is user_{user_id}_history, where {user_id} is the ID of the user. This allows the bot to maintain separate conversation contexts for each user.
+
+However, please note that the conversation context is shared between all channels in a guild. This means that if a user sends a message in one channel and then sends another message in a different channel, the bot will consider these messages as part of the same conversation. If you want to maintain separate conversation contexts for each channel, you would need to modify the conversation_id to include the channel ID as well as the guild ID.

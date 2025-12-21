@@ -1,0 +1,124 @@
+import sys
+import logging
+import discord
+import re
+from discord.ext import commands
+from config import DISCORD_TOKEN
+from openai_utils import generate_openai_response, create_user_table
+from stability_utils import handle_image_generation
+from weather_utils import get_location_details, get_weather_data
+from stock_utils import handle_stock_command
+
+if '--verbose' in sys.argv:
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.DEBUG)
+
+intents = discord.Intents.default()
+intents.messages = True
+intents.message_content = True
+bot = commands.Bot(command_prefix='/', intents=intents)
+
+
+@bot.event
+async def on_ready():
+    await bot.change_presence(activity=discord.Activity(
+        type=discord.ActivityType.watching, name="Usage Graphs Go BRRR"))
+
+
+@bot.event
+async def on_message(message):
+    print("Entered on_message")
+
+    if message.author == bot.user:
+        return
+
+    if message.content.startswith(bot.command_prefix):
+        await bot.process_commands(message)
+        return
+
+    mentioned = bot.user.mentioned_in(message) and not message.mention_everyone
+    prompt = re.sub(f"<@!?{bot.user.id}>", "", message.content).strip()
+
+    conversation_id = f"{message.guild.id}-{message.channel.id}"
+    user_id = message.author.id
+    create_user_table(user_id)
+
+    if mentioned:
+        if prompt.lower().startswith(("stock", "quote")):
+            print("Handling stock command")
+            await handle_stock_command(message, prompt.split(' ')[1:])
+            return
+
+        weather_keywords = ['weather', 'forecast']
+        if any(keyword in prompt.lower() for keyword in weather_keywords):
+            location = re.sub('|'.join(weather_keywords), '', prompt, flags=re.IGNORECASE).strip()
+            async with message.channel.typing():
+                location_details = await get_location_details(location)
+                if location_details:
+                    address, lat, lng = location_details
+                    current_weather_data, forecast_data = await get_weather_data(lat, lng)
+
+                    is_24hr_request = re.search(r'\b(24[-\s]?hour|today)\b', prompt.lower())
+                    is_week_request = re.search(r'\b(week|7[-\s]?day)\b', prompt.lower())
+
+                    if is_24hr_request:
+                        hourly_forecast = forecast_data['hourly'][:24]
+                        weather_descriptions = [hour['weather'][0]['description'] for hour in hourly_forecast]
+                        temperatures_c = [hour['temp'] for hour in hourly_forecast]
+                        temperatures_f = [(c * 9 / 5) + 32 for c in temperatures_c]
+                        weather_prompt = (
+                            f"Here is a 24-hour weather forecast for {address}. Weather descriptions: {', '.join(weather_descriptions)}. "
+                            f"Temperatures: {', '.join([f'{f}F({c}C)' for f, c in zip(temperatures_f, temperatures_c)])}."
+                        )
+
+                    elif is_week_request:
+                        daily_forecast = forecast_data['daily'][:7]
+                        daily_descriptions = [day['weather'][0]['description'] for day in daily_forecast]
+                        daily_temps_c = [day['temp']['day'] for day in daily_forecast]
+                        daily_temps_f = [(c * 9 / 5) + 32 for c in daily_temps_c]
+                        weather_prompt = (
+                            f"Here is a 7-day weather forecast for {address}. Daily weather descriptions: {', '.join(daily_descriptions)}. "
+                            f"Daily temperatures: {', '.join([f'{f}F({c}C)' for f, c in zip(daily_temps_f, daily_temps_c)])}."
+                        )
+                    else:
+                        if 'weather' not in current_weather_data or not current_weather_data['weather']:
+                            current_weather_data['weather'] = [{'description': 'unknown'}]
+                        desc = current_weather_data['weather'][0]['description']
+                        temp_f = current_weather_data['main']['temp']
+                        temp_c = (temp_f - 32) * 5 / 9
+                        feels_like_f = current_weather_data['main']['feels_like']
+                        feels_like_c = (feels_like_f - 32) * 5 / 9
+                        humidity = current_weather_data['main']['humidity']
+                        wind = current_weather_data['wind']['speed']
+                        clouds = current_weather_data['clouds']['all']
+
+                        weather_prompt = (
+                            f"describe the following weather information in less than two sentences, location {address} is {desc} "
+                            f"temperature of {temp_f}°F ({temp_c}°C). heat index {feels_like_f}°F ({feels_like_c}°C). "
+                            f"humidity {humidity}%. Wind speed {wind} mph. The sky {clouds}%"
+                        )
+
+                    response = await generate_openai_response(weather_prompt, conversation_id, user_id)
+                else:
+                    response = "INSUFFICIENT DATA FOR MEANINGFUL ANSWER. I'm sorry, I couldn't find the location you're looking for."
+
+            await message.channel.send(response)
+            return
+
+        if prompt.lower().startswith(("imagine", "stable imagine")):
+            async with message.channel.typing():
+                await handle_image_generation(message, prompt)
+            return
+
+        try:
+            async with message.channel.typing():
+                response = await generate_openai_response(prompt, conversation_id, user_id)
+            if response.strip():
+                await message.channel.send(response)
+            else:
+                await message.channel.send("INSUFFICIENT DATA FOR MEANINGFUL ANSWER. I'm sorry, I couldn't generate a response.")
+        except Exception as e:
+            await message.channel.send(f"Error: {str(e)}")
+
+bot.run(DISCORD_TOKEN)

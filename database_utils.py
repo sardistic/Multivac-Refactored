@@ -1,0 +1,167 @@
+# database_utils.py
+
+import sqlite3
+import json
+from datetime import datetime
+
+# === Database Connections ===
+log_conn = sqlite3.connect('conversation_history.db', check_same_thread=False)
+log_cursor = log_conn.cursor()
+
+# === Logs Table ===
+def initialize_logs_table():
+    log_cursor.execute('''
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id TEXT,
+            user_id TEXT,
+            user_message TEXT,
+            bot_response TEXT,
+            timestamp TEXT
+        )
+    ''')
+    log_conn.commit()
+
+def log_message(conversation_id, user_id, user_msg, bot_msg):
+    timestamp = datetime.utcnow().isoformat()
+    log_cursor.execute('''
+        INSERT INTO logs (conversation_id, user_id, user_message, bot_response, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (conversation_id, str(user_id), user_msg, bot_msg, timestamp))
+    log_conn.commit()
+
+def fetch_conversation(conversation_id):
+    log_cursor.execute("SELECT user_message, bot_response FROM logs WHERE conversation_id = ?", (conversation_id,))
+    return log_cursor.fetchall()
+
+# === User Locations ===
+def create_user_location_table():
+    conn = sqlite3.connect('user_locations.db')
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS user_locations (
+                user_id INTEGER PRIMARY KEY,
+                location TEXT);""")
+    conn.commit()
+
+def insert_or_update_user_location(user_id, location):
+    conn = sqlite3.connect('user_locations.db')
+    c = conn.cursor()
+    c.execute("""INSERT OR REPLACE INTO user_locations
+                (user_id, location) VALUES (?, ?);""", (user_id, location))
+    conn.commit()
+
+def fetch_user_location(user_id):
+    conn = sqlite3.connect('user_locations.db')
+    c = conn.cursor()
+    c.execute("SELECT location FROM user_locations WHERE user_id = ?;", (user_id,))
+    result = c.fetchone()
+    return result[0] if result else None
+
+# === Memory Consent (if you use it elsewhere) ===
+def create_memory_consent_table():
+    log_cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_memory_consent (
+            user_id TEXT PRIMARY KEY,
+            opted_in INTEGER DEFAULT 0
+        )
+    ''')
+    log_conn.commit()
+
+def set_memory_consent(user_id, consent: bool):
+    log_cursor.execute('''
+        INSERT OR REPLACE INTO user_memory_consent (user_id, opted_in)
+        VALUES (?, ?)
+    ''', (str(user_id), int(consent)))
+    log_conn.commit()
+
+def has_opted_in_memory(user_id):
+    log_cursor.execute('SELECT opted_in FROM user_memory_consent WHERE user_id = ?', (str(user_id),))
+    row = log_cursor.fetchone()
+    return row and row[0] == 1
+
+# === Elasticsearch Index Hook (Optional) ===
+try:
+    from elasticsearch import Elasticsearch
+
+    es = Elasticsearch(
+        "https://localhost:9200",
+        basic_auth=("elastic", "ZzxpijeG=eR=eqfe1=Be"),
+        verify_certs=False
+    )
+
+    def ensure_index():
+        try:
+            if not es.indices.exists(index="discord_chat_memory"):
+                es.indices.create(index="discord_chat_memory", body={
+                    "mappings": {
+                        "properties": {
+                            "user_id": {"type": "keyword"},
+                            "channel_id": {"type": "keyword"},
+                            "guild_id": {"type": "keyword"},
+                            "content": {"type": "text"},
+                            "timestamp": {"type": "date"}
+                        }
+                    }
+                })
+        except Exception as e:
+            print(f"[WARNING] Failed to ensure ES index: {e}")
+
+    def index_user_message(user_id, channel_id, guild_id, content, timestamp):
+        try:
+            doc = {
+                "user_id": str(user_id),
+                "channel_id": str(channel_id),
+                "guild_id": str(guild_id),
+                "content": content,
+                "timestamp": timestamp
+            }
+            es.index(index="discord_chat_memory", document=doc)
+        except Exception as e:
+            print(f"[ERROR] Failed to index message: {e}")
+
+    ensure_index()
+
+except ImportError:
+    def index_user_message(*args, **kwargs):
+        pass
+
+# === Message Expansions (truncate/expand store) ===
+def init_message_expansions():
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS message_expansions (
+                message_id TEXT PRIMARY KEY,
+                full_text  TEXT NOT NULL,
+                expanded   INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        conn.commit()
+
+def save_message_expansion(message_id: int, full_text: str, expanded: bool = False):
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        c.execute("""
+            INSERT OR REPLACE INTO message_expansions (message_id, full_text, expanded)
+            VALUES (?, ?, ?)
+        """, (str(message_id), full_text, 1 if expanded else 0))
+        conn.commit()
+
+def get_message_expansion(message_id: int):
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        c.execute("SELECT full_text, expanded FROM message_expansions WHERE message_id = ?", (str(message_id),))
+        row = c.fetchone()
+        return {"full_text": row[0], "expanded": bool(row[1])} if row else None
+
+def set_message_expanded(message_id: int, expanded: bool):
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        c.execute("UPDATE message_expansions SET expanded=? WHERE message_id=?", (1 if expanded else 0, str(message_id)))
+        conn.commit()
+
+# === Initialize Tables ===
+initialize_logs_table()
+create_user_location_table()
+create_memory_consent_table()
+init_message_expansions()
