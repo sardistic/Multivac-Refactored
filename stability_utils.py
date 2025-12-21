@@ -74,7 +74,11 @@ async def handle_image_generation(message, prompt: str, reply_msg=None) -> Optio
             img = generate_gemini_image(image_prompt, width, height)
             if img:
                 return img
+            
             logging.warning("Gemini generation failed; falling back to GPT image.")
+            if message:
+                await message.channel.send("⚠️ **Gemini generation failed** (likely rate limit or error). Falling back to OpenAI... 🧠")
+            
             return await generate_gpt_image(image_prompt)
 
         # Default path: GPT image
