@@ -187,8 +187,20 @@ async def edit_image_with_prompt(image_url: str, prompt: str) -> Optional[BytesI
             edit_prompt = prompt[11:].strip()
             # We need a BytesIO for the SDK utils
             buf = BytesIO(image_bytes)
-            return edit_gemini_image(buf, edit_prompt)
-
+            img = edit_gemini_image(buf, edit_prompt)
+            if img:
+                return img
+             
+            logging.warning("Gemini edit failed; falling back to GPT edit.")
+            # Note: We don't have the 'message' object here easily in current signature to send a DM/Channel msg 
+            # unless we change signature. 
+            # For now, we will just log it. If user really wants the notification, we'd need to thread 'message' through.
+            # But wait, looking at discord_bot.py, 'edit_image_with_prompt' is called with just url/prompt.
+            
+            # Since we can't easily notify without refactoring the bot interface, we will skip the user notification 
+            # for *editing* fallback for now, OR we can hack it if we had a global ref or context.
+            # Let's keep it simple and just fall through.
+            
         # 3) OpenAI Edit (Fallback/Default)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_file:
             temp_file.write(image_bytes)

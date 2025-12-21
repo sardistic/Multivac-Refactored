@@ -94,7 +94,7 @@ def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
         input_image = PILImage.open(image_bytes)
 
         # Gemini 2.5 Flash Image / 2.0 Flash Exp often support image input
-        model = "gemini-2.0-flash-exp" 
+        model = "gemini-2.5-flash-image" 
         
         # Construct the prompt with image
         # Note: This is Technically "multimodal generation", closest to "edit" 
