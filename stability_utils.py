@@ -295,18 +295,22 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
                 clean_prompt = re.sub(r"https?://\S+", "", original_prompt).strip()
                 
                 # Structured Prompting for "Style Transfer" / Edit behavior
-                # We need to encourage transformation, otherwise it just describes the base image.
+                # We need to encourage transformation.
+                # STRATEGY CHANGE: Put Style First, Subject Last.
                 structured_prompt = (
                     f"User Request: {clean_prompt}\n"
-                    "TASK: COMPLETELY RE-DRAW the subject from the FIRST image using the ART STYLE of the subsequent images.\n"
-                    "1. Identify the subject and pose from the first image.\n"
-                    "2. Identify the artistic medium, linework, and color palette from the style reference images.\n"
-                    "3. GENERATE A NEW IMAGE that combines that subject with that style.\n"
-                    "CRITICAL: The output must look like a drawing/rendering from the style reference. Do not just filter the original."
+                    "TASK: Create a NEW IMAGE.\n"
+                    "INPUTS:\n"
+                    "- The PREVIOUS images are STYLE REFERENCES.\n"
+                    "- The FINAL image is the SUBJECT REFERENCE.\n"
+                    "INSTRUCTIONS:\n"
+                    "1. Analyze the ART STYLE of the FIRST image(s) (colors, medium, strokes).\n"
+                    "2. Analyze the SUBJECT/POSE of the LAST image.\n"
+                    "3. DRAW ONLY THE SUBJECT from the last image, but completely transformed into the STYLE of the first image(s).\n"
                 )
                 
-                # Include base image first
-                all_inputs = [base_image_bytes] + ref_bytes
+                # REORDER: Style Images First, Base Image Last
+                all_inputs = ref_bytes + [base_image_bytes]
                 img = generate_gemini_with_references(structured_prompt, all_inputs)
             else:
                 # Single image "edit" (Instruction based)
