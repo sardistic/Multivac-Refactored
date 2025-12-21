@@ -36,30 +36,44 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
         aspect_ratio = "9:16"
 
     try:
-        # "imagen-3.0-generate-002" is the dedicated image generation model.
-        model = "imagen-3.0-generate-002" 
-
+    # User requested: gemini-2.5-flash-image
+    # And used client.models.generate_content in their example.
+    model = "gemini-2.5-flash-image"
+    
+    try:
         logger.info(f"Generating image with model: {model}")
-        response = client.models.generate_image(
+        response = client.models.generate_content(
             model=model,
-            prompt=prompt,
-            config=types.GenerateImageConfig(
-                aspect_ratio=aspect_ratio,
-                sample_count=1,
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                response_mime_type="image/png"  # Hint for image output if supported, or just let it default
             )
         )
         
-        if response.generated_images:
-            img = response.generated_images[0]
-            if img.image:
-                buf = BytesIO()
-                img.image.save(buf, format="PNG")
-                buf.seek(0)
-                return buf
-            else:
-                logger.warning(f"Response has generated_images but no 'image' field: {response}")
-        else:
-             logger.warning(f"Response returned no generated_images: {response}")
+        # Parse response for image
+        # User snippet:
+        # for part in response.parts:
+        #    if part.inline_data: ... image ...
+        
+        if response.parts:
+            for part in response.parts:
+                # Check for inline data (common for generated images in Gemini models)
+                if part.inline_data:
+                    buf = BytesIO(part.inline_data.data)
+                    return buf
+                
+                # Check for 'as_image()' method (SDK helper)
+                if hasattr(part, "as_image"):
+                    try:
+                        img = part.as_image()
+                        buf = BytesIO()
+                        img.save(buf, format="PNG")
+                        buf.seek(0)
+                        return buf
+                    except Exception:
+                        pass
+                        
+        logger.warning(f"Response returned no image parts: {response}")
 
     except Exception as e:
         logger.exception(f"Gemini generation failed (model={model}): {e}")
