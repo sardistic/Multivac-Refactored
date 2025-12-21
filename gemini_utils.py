@@ -36,11 +36,10 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
         aspect_ratio = "9:16"
 
     try:
-    # User requested: gemini-2.5-flash-image
-    # And used client.models.generate_content in their example.
-    model = "gemini-2.5-flash-image"
-    
-    try:
+        # User requested: gemini-2.5-flash-image
+        # And used client.models.generate_content in their example.
+        model = "gemini-2.5-flash-image"
+        
         logger.info(f"Generating image with model: {model}")
         response = client.models.generate_content(
             model=model,
@@ -51,10 +50,6 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
         )
         
         # Parse response for image
-        # User snippet:
-        # for part in response.parts:
-        #    if part.inline_data: ... image ...
-        
         if response.parts:
             for part in response.parts:
                 # Check for inline data (common for generated images in Gemini models)
@@ -77,9 +72,6 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
 
     except Exception as e:
         logger.exception(f"Gemini generation failed (model={model}): {e}")
-
-    except Exception as e:
-        logger.exception(f"Gemini generation failed: {e}")
 
     return None
 
