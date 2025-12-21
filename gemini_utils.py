@@ -35,6 +35,7 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
     elif height > width:
         aspect_ratio = "9:16"
 
+    try:
         # User requested: gemini-2.5-flash-image
         # And used client.models.generate_content in their example.
         model = "gemini-2.5-flash-image"
