@@ -113,6 +113,10 @@ def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
             # Let's try that pattern from their snippet.
         )
 
+        if not response.parts:
+            logger.warning(f"Gemini edit returned no parts. Response: {response}")
+            return None
+
         for part in response.parts:
             if part.inline_data: 
                 # Decode
