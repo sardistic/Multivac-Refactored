@@ -17,10 +17,10 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
         logger.warning("GEMINI_API_KEY not set; cannot generate images.")
         return None
 
-    # Endpoint for Imagen 3 (check documentation for latest model string if needed)
-    # The user linked: https://ai.google.dev/gemini-api/docs/image-generation
-    # Example model: "imagen-3.0-generate-001"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key={GEMINI_API_KEY}"
+    # Endpoint for Imagen 3
+    # Based on recent docs/issues, likely "imagen-3.0-generate-002"
+    model_name = "imagen-3.0-generate-002"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predict?key={GEMINI_API_KEY}"
     
     headers = {
         "Content-Type": "application/json"
