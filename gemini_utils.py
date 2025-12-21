@@ -44,9 +44,10 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
         response = client.models.generate_content(
             model=model,
             contents=[prompt],
-            config=types.GenerateContentConfig(
-                response_mime_type="image/png"  # Hint for image output if supported, or just let it default
-            )
+            # config=types.GenerateContentConfig(
+            #    response_mime_type="image/png" 
+            # ) 
+            # "image/png" caused 400 INVALID_ARGUMENT. Removing config to let defaults handle it.
         )
         
         # Parse response for image
