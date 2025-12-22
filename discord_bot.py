@@ -714,19 +714,18 @@ async def on_message(message: discord.Message):
                         temp = current.get("main", {}).get("temp", "?")
                         cond = (current.get("weather") or [{}])[0].get("description", "unknown")
                         
-                        # Construct prompt
+                        # Construct prompt - REFINED for data prominence and WIDESCREEN
                         widget_prompt = (
-                            f"A futuristic, high-end 3D weather widget floating in mid-air. "
-                            f"Location: {loc['name']}. "
-                            f"Temperature: {temp}°{'F' if units=='imperial' else 'C'}. "
-                            f"Condition: {cond}. "
-                            f"The background is a beautiful, hyper-realistic, cinematic shot of {loc['name']} "
-                            f"reflecting the current weather ({cond}). "
-                            f"The widget displays the text '{loc['name']}', '{round(float(temp))}°', and '{cond.capitalize()}' clearly. "
-                            f"Glassmorphism style, UI design, 8k resolution, weather app interface."
+                            f"A professional, high-end 3D weather widget layout in a WIDESCREEN 16:9 cinematic format. "
+                            f"THE PRIMARY FOCUS is the weather data: '{round(float(temp))}°' and '{loc['name']}' in HUGE, BOLD, HIGH-CONTRAST typography. "
+                            f"Condition: '{cond.capitalize()}' with a large, vibrant weather icon. "
+                            f"The data is prominently displayed on the left or center with extreme clarity. "
+                            f"The background is a cinematic, expansive widescreen shot of {loc['name']} "
+                            f"reflecting current {cond} skies. "
+                            f"Premium Apple/Glassmorphism UI design, clean wide layout, super crisp 8k text rendering."
                         )
-                        logger.info(f"Generating weather widget for {loc['name']}: {widget_prompt}")
-                        return await asyncio.to_thread(generate_gemini_image, widget_prompt)
+                        logger.info(f"Generating widescreen weather widget for {loc['name']}: {widget_prompt}")
+                        return await asyncio.to_thread(generate_gemini_image, widget_prompt, 1600, 900)
                     except Exception as e:
                         logger.error(f"Weather widget failed: {e}")
                         return None
