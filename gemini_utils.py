@@ -234,7 +234,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         return None, []
 
     try:
-        model = "gemini-3-flash-preview"
+        model = "gemini-2.0-flash-exp"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
         # Build contents from context + current prompt
@@ -267,29 +267,23 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
         # Config for code execution
         tools_list = []
+        
+        # 1. Custom Functions
+        tools_list.append(types.Tool(function_declarations=[search_elasticsearch_resource]))
+        
+        # 2. Code Execution
         if enable_code_execution:
-            code_tool = None
             try:
                 if hasattr(types, "ToolCodeExecution"):
-                    code_tool = types.Tool(code_execution=types.ToolCodeExecution())
+                    tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
                 elif hasattr(types, "CodeExecution"):
-                    code_tool = types.Tool(code_execution=types.CodeExecution())
-                else:
-                     code_tool = types.Tool(code_execution={})
+                    tools_list.append(types.Tool(code_execution=types.CodeExecution()))
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
-            
-            if code_tool:
-                tools_list = [code_tool]
         
-        # Add Google Search Tool (always available for grounding)
+        # 3. Google Search
         try:
-             # Create the search tool configuration
-             # Note: API now requests 'google_search' instead of 'google_search_retrieval'
-             search_tool = types.Tool(
-                 google_search=types.GoogleSearch()
-             )
-             tools_list.append(search_tool)
+             tools_list.append(types.Tool(google_search=types.GoogleSearch()))
         except Exception as e:
              logger.warning(f"Failed to init google_search tool: {e}")
 
@@ -298,10 +292,11 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             system_instruction=(
                 "You are Multivac, a helpful AI assistant. "
                 "You have access to the recent conversation history provided in the context. "
-                "You can perform SEARCH on local resources (Elasticsearch) using the 'search_elasticsearch_resource' tool. "
-                "Use it to pull historical data, logs, or archives when asked about past events not in immediate history."
+                "You can search your memory or other resources using the 'search_elasticsearch_resource' tool. "
+                "If a user asks about something older than the current context, use the tool. "
+                "If needed, use 'code_execution' for data analysis or file generation."
             ),
-            tools=tools_list + [search_elasticsearch_resource], 
+            tools=tools_list,
             safety_settings=[
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
