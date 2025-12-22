@@ -1,0 +1,77 @@
+# Task Checklist
+
+- [x] Add `google-genai` to `pyproject.toml`
+- [x] Rewrite `gemini_utils.py` to use `google.genai` SDK
+    - [x] Implement `generate_gemini_image`
+    - [x] Implement `edit_gemini_image`
+- [x] Update `stability_utils.py` to route "gemini edit" and "gemini imagine" correctly
+- [x] Update `verification_script.py`
+- [x] Deploy to GitHub
+- [x] Verify integration (Working, failed gracefully on Rate Limit)
+- [x] Add user notification on fallback (Generation only)
+- [x] Fix crash on empty response parts (edit)
+- [x] Implement Reference Image Support (Multimodal)
+    - [x] Update `gemini_utils.py`: `generate_with_references`
+    - [x] Update `stability_utils.py`: Handle attachments and URLs in `gemini imagine`
+    - [x] Update `stability_utils.py`: Handle replied-to message images
+- [x] Fix Image Priority for Edit
+    - [x] Update `discord_bot.py` to prioritize Replied Image > Attachments
+    - [x] Update `stability_utils.py` to accept multiple images for Edit
+    - [x] Refine Edit Prompt Structure (Fix "Style Takeover" issue)
+    - [x] Tune Prompt for Aggressive Style Transfer (Fix "Base Takeover" issue)
+    - [x] Reorder Inputs (Fix "Identical Output" issue)
+    - [x] Update SDK calls to use `GenerateContentConfig` (Fix "Text Mode" fallback)
+        - [x] Add `image_config` to `generate_gemini_with_references`
+        - [x] Correct `image_size` parameter (Fix "400 Invalid Argument")
+        - [x] Enforce strict `["IMAGE"]` modality (Fix "Identity Output")
+        - [x] Disable Safety Filters Globally (Fix "Safety Blocking" on all paths)
+            - [x] Switch to Dict-based config for robustness
+        - [x] Boost Style Transfer Strength (Fix "Weak Styling")
+- [x] Implement Gemini Chat Support
+    - [x] Update `gemini_utils.py`: Add `generate_gemini_text`
+    - [x] Update `discord_bot.py`: Add `gemini_chat` intent / handling
+    - [x] Verify Text Generation
+- [x] Integrate Gemini Memory & Models
+    - [x] DB Schema: Add `model` field to `memory_utils.py`
+    - [x] Update `gemini_utils.py`:
+        - [x] Upgrade text model to `gemini-3-flash-preview`
+        - [x] Upgrade image model to `gemini-3-pro-image-preview`
+        - [x] Accept `context` in `generate_gemini_text`
+    - [x] Update `discord_bot.py`:
+        - [x] Pass `model` tag to `index_message`
+        - [x] Fetch and pass memory window to Gemini Chat
+    - [x] Verify Memory (Context retention)
+    - [x] Verify Model Tags in DB
+- [x] Implement Multimodal Gemini Chat (Image Understanding)
+    - [x] Update `gemini_utils.py`: `generate_gemini_text` to accept `images`
+    - [x] Update `discord_bot.py`: Decode `image_urls` and pass to Gemini
+    - [x] Verify Image Understanding (Flash Preview)
+- [x] Implement Gemini Code Execution
+    - [x] Update `gemini_utils.py`: Enable `code_execution` tool
+    - [x] Verify Math/Logic (Fibonacci test)
+- [x] Implement Streaming Code Execution
+    - [x] Update `gemini_utils.py`: Use `generate_content_stream` + `status_tracker`
+    - [x] Update `discord_bot.py`: Use `summarizer` to show live thinking code
+- [x] Refine Code Execution Trigger & Display
+    - [x] Update `discord_bot.py`: Check for `gemini code` trigger
+    - [x] Update `gemini_utils.py`: Conditionally enable `code_execution`
+    - [x] Verify Explicit Trigger (No code on regular chat)
+- [x] Bugfix: `gemini imagine` incorrectly routing to chat
+- [x] Bugfix: `gemini imagine` incorrectly routing to chat
+- [x] Bugfix: Fix Expand/Collapse for >2000 char messages (Send as file)
+- [x] Support Code Execution Artifacts (Plots/Images)
+- [x] Integrate Google Search Tool
+- [x] Implement Weather Widget Image (Real-time data visualization)
+- [x] Refine Weather Widget Prompt (Make data more prominent & Widescreen)
+- [x] Incorporate more weather data (Humidity, Wind, etc.) into widget image
+- [x] Correct Time and Night/Day logic in widget prompt
+- [x] Implement Deep Info Enrichment (High/Low, UV, Sun times) into widget layout
+- [x] Extreme Data Enrichment (Visibility, Pressure, Cloudiness, Rain Chance)
+- [x] Implement Multi-modal File Support (Native Gemini Parts for attachments)
+- [x] Fix "Analyze This" Replied Context (Robust data injection)
+- [x] Implement Smart Preview Summaries (Skip code blocks for preview)
+- [x] Implement Elasticsearch "Resource" Tool (Semantic/Native ES search for Gemini)
+- [x] **Verification & Polish** <!-- id: 5 -->
+    - [x] **Debug 404 Error:** Identify correct model ID (`gemini-2.0-flash`) and fix SDK client initialization. <!-- id: 6 -->
+    - [x] **Fix Tool Incompatibility:** Separate `CodeExecution` and `GoogleSearch` logic to prevent 400 errors. <!-- id: 7 -->
+    - [x] **Run final verification:** Ensure code execution and search work independently. <!-- id: 8 -->
