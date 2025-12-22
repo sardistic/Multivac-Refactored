@@ -131,12 +131,7 @@ def is_probably_image(url: str) -> bool:
     mime, _ = mimetypes.guess_type(path)
     return bool(mime and mime.startswith("image/"))
 
-def make_preview(full_text: str, max_lines: int = LINE_TRUNCATE_AT):
-    lines = full_text.splitlines()
-    if len(lines) > max_lines:
-        preview = "\n".join(lines[:max_lines]).rstrip()
-        return preview + "…", True
-    return full_text, False
+def make_preview(full_text: str, max_lines: int = LINE_TRUNCATE_AT):\n    lines = full_text.splitlines()\n    if len(lines) > max_lines:\n        preview = "\n".join(lines[:max_lines]).rstrip()\n        \n        # Check for unclosed code blocks\n        # Count occurrences of triple backticks in the preview\n        code_fence_count = preview.count("```")\n        if code_fence_count % 2 != 0:\n            # Odd number means one is open. Close it.\n            preview += "\n```"\n            \n        return preview + "…", True\n    return full_text, False
 
 async def send_or_edit_with_truncation(
     full_text: str, *, channel: Optional[discord.abc.Messageable] = None,
