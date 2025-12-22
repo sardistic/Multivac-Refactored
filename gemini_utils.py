@@ -236,8 +236,8 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         # Config for tools
-        # We use gemini-1.5-flash-latest for maximum tool-calling stability
-        model = "gemini-1.5-flash-latest"
+        # As per https://ai.google.dev/gemini-api/docs/code-execution
+        model = "gemini-1.5-flash"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
         # Build contents from context + current prompt
@@ -313,7 +313,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
              logger.warning(f"Failed to init google_search tool: {e}")
 
         config = types.GenerateContentConfig(
-            response_modalities=["TEXT", "IMAGE"],
+            response_modalities=["TEXT"],
             system_instruction=(
                 "You are Multivac, a helpful AI assistant. "
                 "You can search historical logs or memory using 'search_elasticsearch_resource'. "

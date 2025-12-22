@@ -768,7 +768,7 @@ async def on_message(message: discord.Message):
                         content=response,
                         timestamp=_now_iso(),
                         reply_to_id=str(message.id),
-                        model="gemini-1.5-flash-latest"
+                        model="gemini-1.5-flash"
                     )
                 except Exception:
                     pass
