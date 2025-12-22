@@ -171,9 +171,10 @@ def make_preview(full_text: str, max_lines: int = LINE_TRUNCATE_AT):
 
 async def send_or_edit_with_truncation(
     full_text: str, *, channel: Optional[discord.abc.Messageable] = None,
-    target_msg: Optional[discord.Message] = None, reply_to: Optional[discord.Message] = None
+    target_msg: Optional[discord.Message] = None, reply_to: Optional[discord.Message] = None,
+    extra_files: Optional[List[discord.File]] = None
 ):
-    """Send or edit a message with 2-line preview and reactions to expand/collapse."""
+    """Send or edit a message with 2-line preview and reactions. Supports attaching extra files."""
     if not isinstance(full_text, str):
         full_text = str(full_text)
 
@@ -197,13 +198,26 @@ async def send_or_edit_with_truncation(
             return sent
     else:
         if target_msg:
-            await target_msg.edit(content=full_text)
+            if extra_files:
+                # Can't attach files to existing msg easily in one go if not replacing content entirely?
+                # Actually edit(attachments=...) works.
+                # But here we want to APPEND files.
+                # Simplest: send files as reply if target_msg exists.
+                try:
+                    await target_msg.edit(content=full_text)
+                    await target_msg.reply(files=extra_files) 
+                except Exception:
+                    # Fallback if edit fails (e.g. too long), send new msg
+                    await channel.send(full_text, reference=reply_to, files=extra_files)
+            else:
+                await target_msg.edit(content=full_text)
+            
             with contextlib.suppress(Exception):
                 await target_msg.clear_reactions()
             save_message_expansion(target_msg.id, full_text, expanded=True)
             return target_msg
         else:
-            return await channel.send(full_text, reference=reply_to)
+            return await channel.send(full_text, reference=reply_to, files=extra_files)
 
 async def live_status_with_progress(
     message: discord.Message, *, action_label: str, emoji: str, coro, duration_estimate: int, summarizer=None
@@ -733,26 +747,26 @@ async def on_message(message: discord.Message):
                 else:
                     text_resp, artifacts = response, []
 
-                if text_resp:
-                    await send_or_edit_with_truncation(text_resp, target_msg=status_msg)
-                
-                # Send artifacts (images/plots)
+                # Prepare artifacts (images/plots/audio)
+                files_to_send = []
                 if artifacts:
                     import io
                     import mimetypes
-                    files = []
                     for i, (data, mime) in enumerate(artifacts):
-                        ext = mimetypes.guess_extension(mime) or ".png"
+                        # Detect extension (wav/png/etc)
+                        ext = mimetypes.guess_extension(mime) or ".bin"
+                        # Force .wav for audio/wav to be safe
+                        if "wav" in mime: ext = ".wav"
+                        
                         f = io.BytesIO(data)
-                        files.append(discord.File(f, filename=f"artifact_{i}{ext}"))
-                    
-                    if files:
-                        try:
-                            # Send as reply to status_msg
-                            await status_msg.reply(files=files)
-                        except Exception as e:
-                            logger.error(f"Failed to send artifacts: {e}")
-                            await status_msg.reply("⚠️ Failed to upload generated artifacts.")
+                        files_to_send.append(discord.File(f, filename=f"artifact_{i}{ext}"))
+
+                if text_resp:
+                    # Pass text AND files to the helper so they stay attached even if text becomes a file
+                    await send_or_edit_with_truncation(text_resp, target_msg=status_msg, extra_files=files_to_send)
+                elif files_to_send:
+                    # If no text but we have files, send them
+                    await status_msg.reply(files=files_to_send)
                 
                 # For indexing, use text_resp
                 response = text_resp or "" # normalize for index_message below
