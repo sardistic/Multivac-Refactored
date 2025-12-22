@@ -209,13 +209,14 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
 
     return None
 
-def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, images: Optional[List[bytes]] = None, status_tracker: Optional[Dict[str, str]] = None, enable_code_execution: bool = False) -> Optional[str]:
+def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, images: Optional[List[bytes]] = None, status_tracker: Optional[Dict[str, str]] = None, enable_code_execution: bool = False) -> Tuple[Optional[str], List[Tuple[bytes, str]]]:
     """
     Generate text using Gemini (Chat). Supports context history, images, streaming, and optional code execution.
+    Returns: (text_response, list_of_images_as_bytes_and_mime)
     """
     client = _get_client()
     if not client:
-        return None
+        return None, []
 
     try:
         model = "gemini-3-flash-preview"
@@ -267,7 +268,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                 tools_list = [code_tool]
 
         config = types.GenerateContentConfig(
-            response_modalities=["TEXT"],
+            response_modalities=["TEXT", "IMAGE"], # Explicitly allow IMAGE for code artifacts
             system_instruction="You are Multivac, a helpful AI assistant. You have access to the recent conversation history provided in the context. Use it to answer questions about what was previously said.",
             tools=tools_list, 
             safety_settings=[
@@ -280,6 +281,8 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
         # Full text accumulator
         final_text = []
+        # Artifact accumulator
+        generated_artifacts = [] # List[(bytes, mime_type)]
 
         # Stream State
         accumulated_code_block = ""
@@ -307,8 +310,13 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                              accumulated_code_block = ""
                          
                          final_text.append(part.text)
+                    
+                     # 2. Inline Data (Images/Plots)
+                     if part.inline_data:
+                         logger.info(f"Received inline data: mime={part.inline_data.mime_type}, size={len(part.inline_data.data)}")
+                         generated_artifacts.append((part.inline_data.data, part.inline_data.mime_type))
                      
-                     # 2. Executable Code (The "Thinking" part)
+                     # 3. Executable Code (The "Thinking" part)
                      if part.executable_code:
                          code_chunk = part.executable_code.code
                          if part.executable_code.language:
@@ -325,7 +333,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                                  snippet = "..." 
                              status_tracker["text"] = f"Writing Code...\n```{current_lang}\n{snippet}\n```"
 
-                     # 3. Execution Result
+                     # 4. Execution Result
                      if part.code_execution_result:
                          # Flush any accumulated code first
                          if accumulated_code_block:
@@ -349,12 +357,14 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
              block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
              final_text.append(block)
 
-        if final_text:
-            return "".join(final_text)
+        if final_text or generated_artifacts:
+            # Join text, ensure string
+            full_text = "".join(final_text) if final_text else None
+            return full_text, generated_artifacts
             
         logger.warning(f"Gemini text generation returned no text in stream.")
 
     except Exception as e:
         logger.exception(f"Gemini text generation failed: {e}")
 
-    return None
+    return None, []

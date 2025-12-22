@@ -637,7 +637,35 @@ async def on_message(message: discord.Message):
             )
             
             if response:
-                await send_or_edit_with_truncation(response, target_msg=status_msg)
+                # Unpack tuple from gemini_utils (text, artifacts)
+                if isinstance(response, tuple):
+                    text_resp, artifacts = response
+                else:
+                    text_resp, artifacts = response, []
+
+                if text_resp:
+                    await send_or_edit_with_truncation(text_resp, target_msg=status_msg)
+                
+                # Send artifacts (images/plots)
+                if artifacts:
+                    import io
+                    import mimetypes
+                    files = []
+                    for i, (data, mime) in enumerate(artifacts):
+                        ext = mimetypes.guess_extension(mime) or ".png"
+                        f = io.BytesIO(data)
+                        files.append(discord.File(f, filename=f"artifact_{i}{ext}"))
+                    
+                    if files:
+                        try:
+                            # Send as reply to status_msg
+                            await status_msg.reply(files=files)
+                        except Exception as e:
+                            logger.error(f"Failed to send artifacts: {e}")
+                            await status_msg.reply("⚠️ Failed to upload generated artifacts.")
+                
+                # For indexing, use text_resp
+                response = text_resp or "" # normalize for index_message below
                 
                 # Index the Gemini response with model tag
                 try:
@@ -759,10 +787,37 @@ async def on_message(message: discord.Message):
                 duration_estimate=duration_estimate,
                 summarizer=(lambda: "Looking at visual elements… noting layout/text…") if STREAM_OK else None,
             )
+            
             if response:
-                await send_or_edit_with_truncation(response, target_msg=status_msg)
+                # Unpack tuple from gemini_utils (text, artifacts)
+                # If old version or error returned just None, handle gracefully
+                if isinstance(response, tuple):
+                    text_resp, artifacts = response
+                else:
+                    text_resp, artifacts = response, []
+
+                if text_resp and text_resp.strip():
+                    await send_or_edit_with_truncation(text_resp, target_msg=status_msg)
+                
+                # Send artifacts (images/plots)
+                if artifacts:
+                    import io
+                    import mimetypes
+                    files = []
+                    for i, (data, mime) in enumerate(artifacts):
+                        ext = mimetypes.guess_extension(mime) or ".png"
+                        f = io.BytesIO(data)
+                        files.append(discord.File(f, filename=f"artifact_{i}{ext}"))
+                    
+                    if files:
+                        try:
+                            # Send as reply to status_msg
+                            await status_msg.reply(files=files)
+                        except Exception as e:
+                            logger.error(f"Failed to send artifacts: {e}")
+                            await status_msg.reply("⚠️ Failed to upload generated artifacts.")
             else:
-                await status_msg.edit(content="❌ Description failed.")
+                await status_msg.edit(content="❌ Generation failed.")
             return
 
         # STOCK
