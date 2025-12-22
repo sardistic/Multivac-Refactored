@@ -299,14 +299,16 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
                 # STRATEGY CHANGE: Put Style First, Subject Last.
                 structured_prompt = (
                     f"User Request: {clean_prompt}\n"
-                    "TASK: Create a NEW IMAGE.\n"
+                    "TASK: COMPLETELY RE-DRAW the subject using the STYLE of the reference images.\n"
                     "INPUTS:\n"
-                    "- The PREVIOUS images are STYLE REFERENCES.\n"
-                    "- The FINAL image is the SUBJECT REFERENCE.\n"
+                    "- The FIRST image(s) are STYLE REFERENCES (Colors, Texture, Medium).\n"
+                    "- The LAST image is the SUBJECT REFERENCE (Pose, Structure).\n"
                     "INSTRUCTIONS:\n"
-                    "1. Analyze the ART STYLE of the FIRST image(s) (colors, medium, strokes).\n"
-                    "2. Analyze the SUBJECT/POSE of the LAST image.\n"
-                    "3. DRAW ONLY THE SUBJECT from the last image, but completely transformed into the STYLE of the first image(s).\n"
+                    "1. IGNORE the colors and texture of the LAST image (Subject).\n"
+                    "2. Use the colors, shading, and artistic medium from the FIRST image(s) (Style) EXCLUSIVELY.\n"
+                    "3. KEEP the pose and composition of the subject, but REDRAW it as if it belongs in the world of the style reference.\n"
+                    "4. If the style is 'Pixel Art', make it Pixel Art. If it's 'Oil Painting', make it Oil Painting.\n"
+                    "5. Output ONLY the new image.\n"
                 )
                 
                 # REORDER: Style Images First, Base Image Last
