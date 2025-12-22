@@ -133,15 +133,37 @@ def is_probably_image(url: str) -> bool:
     return bool(mime and mime.startswith("image/"))
 
 def make_preview(full_text: str, max_lines: int = LINE_TRUNCATE_AT):
+    """
+    Generate a 2-line preview. 
+    If this is a Gemini code-execution response, we skip the 'Thinking' and 'Result' 
+    quote blocks to find the actual summary text for the preview.
+    """
     lines = full_text.splitlines()
+    
+    # 1. Try to find 'smart' summary lines (lines not starting with '> ')
+    # if the message contains code execution blocks.
+    if "> 🐍 **Thinking (Code Execution)**" in full_text:
+        summary_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped: continue
+            if stripped.startswith(">"): continue # Skip Thinking/Result/Quotes
+            
+            summary_lines.append(line)
+            if len(summary_lines) >= max_lines:
+                break
+        
+        if summary_lines:
+            preview = "\n".join(summary_lines).rstrip()
+            return preview + "… (Summary)", True
+
+    # 2. Fallback: Standard line-based truncation
     if len(lines) > max_lines:
         preview = "\n".join(lines[:max_lines]).rstrip()
         
         # Check for unclosed code blocks
-        # Count occurrences of triple backticks in the preview
         code_fence_count = preview.count("```")
         if code_fence_count % 2 != 0:
-            # Odd number means one is open. Close it.
             preview += "\n```"
             
         return preview + "…", True
