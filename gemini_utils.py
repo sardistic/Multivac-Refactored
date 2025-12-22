@@ -246,10 +246,27 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         ))
 
         # Config for text generation
+        # Attempting to use ToolCodeExecution (search results suggest this name)
+        # If this fails, we catch it to prevent crashing.
+        code_tool = None
+        try:
+            if hasattr(types, "ToolCodeExecution"):
+                code_tool = types.Tool(code_execution=types.ToolCodeExecution())
+            elif hasattr(types, "CodeExecution"):
+                code_tool = types.Tool(code_execution=types.CodeExecution())
+            else:
+                 # Fallback: Try passing empty dict if supported, or log warning
+                 # For now, let's try assuming it might be just `code_execution={}` in Tool
+                 code_tool = types.Tool(code_execution={})
+        except Exception as e:
+            logger.warning(f"Failed to init code_execution tool: {e}")
+
+        tools_list = [code_tool] if code_tool else []
+
         config = types.GenerateContentConfig(
             response_modalities=["TEXT"],
             system_instruction="You are Multivac, a helpful AI assistant. You have access to the recent conversation history provided in the context. Use it to answer questions about what was previously said.",
-            tools=[types.Tool(code_execution=types.CodeExecution())], # Enable Code Execution
+            tools=tools_list, 
             safety_settings=[
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
