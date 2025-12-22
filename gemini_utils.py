@@ -25,35 +25,7 @@ def _get_client():
     # Try v1beta first as it has the most features
     return genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
 
-def _debug_env_once():
-    # Helper to log environment details to debug 404/AttributeErrors
-    # FORCED to always run for now until fixed
-    # if hasattr(_debug_env_once, "done"): return
-    # _debug_env_once.done = True
-    
-    try:
-        if not SDK_AVAILABLE: return
-        
-        logger.info("--- DEBUG: SDK TYPES ---")
-        # Log code/tool related types
-        ac = [x for x in dir(types) if "Code" in x or "Tool" in x]
-        logger.info(f"Available types: {ac}")
-        
-        logger.info("--- DEBUG: LIST MODELS ---")
-        client = _get_client()
-        if client:
-            # Try to list models
-            try:
-                # Use standard list method
-                for m in client.models.list():
-                    # Safely log what we find
-                    methods = getattr(m, "supported_generation_methods", "unknown")
-                    logger.info(f"Model: {m.name} | Methods: {methods}")
-            except Exception as e:
-                logger.error(f"Failed to list models: {e}")
-                
-    except Exception as e:
-        logger.error(f"Debug env failed: {e}")
+
 
 def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) -> Optional[BytesIO]:
     """
@@ -270,12 +242,9 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         # Config for tools
-        # Back to standard flash
-        model = "gemini-1.5-flash"
+        # Using gemini-2.0-flash as it is explicitly available in the user's environment logs
+        model = "gemini-2.0-flash"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
-
-        # Trigger debug always
-        _debug_env_once()
 
         # Build contents from context + current prompt
         contents = []
@@ -335,13 +304,11 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         # 2. Add Code Execution (if enabled)
         if enable_code_execution:
             try:
-                # Tools at indices [0] error suggests we need the right wrapper
-                # Logs showed ToolCodeExecution exists in types
+                # Use ToolCodeExecution as confirmed by logs
                 if hasattr(types, "ToolCodeExecution"):
                      tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
                 else:
-                     # Fallback
-                     tools_list.append(types.Tool(code_execution=types.CodeExecution()))
+                     logger.warning("CodeExecution enabled but ToolCodeExecution type missing.")
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
         
@@ -456,8 +423,6 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     except Exception as e:
         logger.error(f"Gemini text generation failed: {e}")
-        # If we failed, try to list models again to be sure
-        _debug_env_once()
         return None, []
 
     return None, []
