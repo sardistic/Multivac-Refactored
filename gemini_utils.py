@@ -249,6 +249,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         config = types.GenerateContentConfig(
             response_modalities=["TEXT"],
             system_instruction="You are Multivac, a helpful AI assistant. You have access to the recent conversation history provided in the context. Use it to answer questions about what was previously said.",
+            tools=[types.Tool(code_execution=types.CodeExecution())], # Enable Code Execution
             safety_settings=[
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
