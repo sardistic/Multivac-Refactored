@@ -236,8 +236,8 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         # Config for tools
-        # We use gemini-1.5-flash for maximum tool-calling stability
-        model = "gemini-1.5-flash"
+        # We use gemini-1.5-flash-latest for maximum tool-calling stability
+        model = "gemini-1.5-flash-latest"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
         # Build contents from context + current prompt
