@@ -151,6 +151,7 @@ def ensure_index():
                 "conversation_key": {"type": "keyword"},
                 "reply_to_id": {"type": "keyword", "null_value": "NULL"},
                 "role": {"type": "keyword"},
+                "model": {"type": "keyword"}, # New field for model tagging
                 "content": {"type": "text"},
                 "timestamp": {"type": "date"},
                 "ts": {"type": "date"},
@@ -159,6 +160,15 @@ def ensure_index():
     }
     client.indices.create(index=OPENSEARCH_INDEX, body=body)  # type: ignore[attr-defined]
     logger.info("[ES] created index %s", OPENSEARCH_INDEX)
+
+    # Attempt to update mapping for existing index (best-effort)
+    try:
+        client.indices.put_mapping(
+            index=OPENSEARCH_INDEX,
+            body={"properties": {"model": {"type": "keyword"}}}
+        )
+    except Exception:
+        pass # Ignore if already exists or fails
 
 # ------------------------------------------------------------
 # Indexing
@@ -173,6 +183,7 @@ def index_message(
     content: str,
     timestamp: Optional[str] = None,
     reply_to_id: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> Optional[str]:
     """
     Index a single Discord message. Uses message_id as the ES _id to dedupe.
@@ -192,6 +203,7 @@ def index_message(
         "conversation_key": ckey,
         "reply_to_id": str(reply_to_id) if reply_to_id else None,
         "role": str(role),
+        "model": str(model) if model else None,
         "content": content or "",
         "timestamp": ts,
         "ts": ts,
@@ -201,7 +213,7 @@ def index_message(
         # ES 8.x prefers 'document=' (body still works but is deprecated)
         resp = client.index(index=OPENSEARCH_INDEX, id=str(message_id), document=doc, refresh=False)
         _id = resp.get("_id")
-        logger.debug("[ES] indexed id=%s ckey=%s role=%s", _id, ckey, role)
+        logger.debug("[ES] indexed id=%s ckey=%s role=%s model=%s", _id, ckey, role, model)
         return _id
     except ApiError as e:
         logger.warning("[ES] index_message API error: %r", e)

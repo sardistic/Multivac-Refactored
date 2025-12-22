@@ -1,7 +1,7 @@
 import logging
 import base64
 from io import BytesIO
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from config import GEMINI_API_KEY
 
 try:
@@ -38,7 +38,7 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
     try:
         # User requested: gemini-2.5-flash-image
         # And used client.models.generate_content in their example.
-        model = "gemini-2.5-flash-image"
+        model = "gemini-3-pro-image-preview"
         
         logger.info(f"Generating image with model: {model}")
         
@@ -102,8 +102,8 @@ def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
         # Load bytes into PIL Image
         input_image = PILImage.open(image_bytes)
 
-        # Gemini 2.5 Flash Image
-        model = "gemini-2.5-flash-image" 
+        # Gemini 3 Pro Image Preview
+        model = "gemini-3-pro-image-preview" 
         
         # Use config to enforce image output
         config = types.GenerateContentConfig(
@@ -159,8 +159,8 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
         for img_bytes in reference_images:
             pil_images.append(PILImage.open(img_bytes))
 
-        # Use gemini-2.5-flash-image for multimodal generation
-        model = "gemini-2.5-flash-image"
+        # Use gemini-3-pro-image-preview for multimodal generation
+        model = "gemini-3-pro-image-preview"
         
         contents = [prompt] + pil_images
         
@@ -209,17 +209,33 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
 
     return None
 
-def generate_gemini_text(prompt: str) -> Optional[str]:
+def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
     """
-    Generate text using Gemini (Chat).
+    Generate text using Gemini (Chat). Supports context history.
     """
     client = _get_client()
     if not client:
         return None
 
     try:
-        model = "gemini-2.0-flash-exp"
+        model = "gemini-3-flash-preview"
         logger.info(f"Generating text with model: {model}")
+
+        # Build contents from context + current prompt
+        contents = []
+        if context:
+            for msg in context:
+                role = "user" if msg.get("role") == "user" else "model"
+                contents.append(types.Content(
+                    role=role,
+                    parts=[types.Part(text=msg.get("content"))]
+                ))
+        
+        # Add current prompt
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=prompt)]
+        ))
 
         # Config for text generation
         config = types.GenerateContentConfig(
@@ -234,7 +250,7 @@ def generate_gemini_text(prompt: str) -> Optional[str]:
 
         response = client.models.generate_content(
             model=model,
-            contents=[prompt],
+            contents=contents,
             config=config
         )
 

@@ -551,17 +551,41 @@ async def on_message(message: discord.Message):
             # Strip 'gemini' prefix if present to clean up prompt
             clean_prompt = re.sub(r"^gemini\s*", "", prompt, flags=re.IGNORECASE).strip()
             
+            # Fetch Memory used by Gemini
+            context_msgs = build_message_window(
+                guild_id=message.guild.id if message.guild else "DM",
+                channel_id=message.channel.id,
+                user_id=message.author.id,
+                limit_msgs=20 
+            )
+
             status_msg, response = await live_status_with_progress(
                 message,
                 action_label="Thinking (Gemini)",
                 emoji="✨",
-                coro=asyncio.to_thread(generate_gemini_text, clean_prompt), # Run in thread to not block
+                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs), # Run in thread to not block
                 duration_estimate=6,
                 summarizer=None,
             )
             
             if response:
                 await send_or_edit_with_truncation(response, target_msg=status_msg)
+                
+                # Index the Gemini response with model tag
+                try:
+                    index_message(
+                        message_id=str(status_msg.id) if status_msg else str(message.id) + "-gemini",
+                        guild_id=str(message.guild.id) if message.guild else "DM",
+                        channel_id=str(message.channel.id),
+                        user_id=str(message.author.id),
+                        role="assistant",
+                        content=response,
+                        timestamp=_now_iso(),
+                        reply_to_id=str(message.id),
+                        model="gemini-3-flash-preview"
+                    )
+                except Exception:
+                    pass
             else:
                 await status_msg.edit(content="❌ Gemini returned no response.")
             return
