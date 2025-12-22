@@ -326,19 +326,38 @@ async def on_reaction_add(reaction, user):
 
     if emoji == EXPAND_EMOJI and not rec["expanded"]:
         full = rec["full_text"]
-        with contextlib.suppress(Exception):
-            await msg.edit(content=f"{full}\n\n(react {COLLAPSE_EMOJI} to collapse)")
-        set_message_expanded(msg.id, True)
-        with contextlib.suppress(Exception):
-            await msg.clear_reaction(EXPAND_EMOJI)
-        with contextlib.suppress(Exception):
-            await msg.add_reaction(COLLAPSE_EMOJI)
+        footer = f"\n\n(react {COLLAPSE_EMOJI} to collapse)"
+        
+        if len(full) + len(footer) > 2000:
+            # Too big for one message -> Send as file
+            import io
+            try:
+                f = io.BytesIO(full.encode("utf-8"))
+                await msg.reply(
+                    "⚠️ Response too long to expand inline. Sending as file.",
+                    file=discord.File(f, filename="response.md")
+                )
+                # We do NOT mark as expanded because we didn't actually expand the original message.
+                # Just remove the user's reaction so they can try again if they really want the file again?
+                # Or maybe we leave it.
+                await msg.remove_reaction(emoji, user)
+            except Exception as e:
+                logger.error(f"Failed to send long response file: {e}")
+        else:
+            with contextlib.suppress(Exception):
+                await msg.edit(content=f"{full}{footer}")
+            set_message_expanded(msg.id, True)
+            with contextlib.suppress(Exception):
+                await msg.clear_reaction(EXPAND_EMOJI)
+            with contextlib.suppress(Exception):
+                await msg.add_reaction(COLLAPSE_EMOJI)
 
     elif emoji == COLLAPSE_EMOJI and rec["expanded"]:
         full = rec["full_text"]
         preview, _ = make_preview(full, LINE_TRUNCATE_AT)
+        footer = f"\n\n(react {EXPAND_EMOJI} to expand)"
         with contextlib.suppress(Exception):
-            await msg.edit(content=f"{preview}\n\n(react {EXPAND_EMOJI} to expand)")
+            await msg.edit(content=f"{preview}{footer}")
         set_message_expanded(msg.id, False)
         with contextlib.suppress(Exception):
             await msg.clear_reaction(COLLAPSE_EMOJI)
