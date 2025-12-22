@@ -292,12 +292,15 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                  if part.executable_code:
                      code = part.executable_code.code
                      lang = part.executable_code.language.lower()
-                     final_text.append(f"\n```{lang}\n{code}\n```")
+                     # Stylized "Thinking" block
+                     final_text.append(f"\n> 🐍 **Thinking (Code Execution)**\n> ```{lang}\n{code}\n> ```")
                  
                  if part.code_execution_result:
                      outcome = part.code_execution_result.outcome
-                     output = part.code_execution_result.output
-                     final_text.append(f"\n**Output** ({outcome}):\n```\n{output}\n```")
+                     output = part.code_execution_result.output.strip()
+                     icon = "✅" if outcome == "OUTCOME_OK" else "❌"
+                     # Stylized "Result" block
+                     final_text.append(f"> {icon} **Result**\n> ```text\n{output}\n> ```\n")
 
         if final_text:
             return "".join(final_text)
