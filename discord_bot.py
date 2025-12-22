@@ -189,9 +189,21 @@ async def send_or_edit_with_truncation(
                 await target_msg.clear_reactions()
             with contextlib.suppress(Exception):
                 await target_msg.add_reaction(EXPAND_EMOJI)
+            
+            # CRITICAL FIX: If we have extra files (images/audio), we MUST send them!
+            # Since we truncated the text to a preview, we can't easily attach to *this* message 
+            # without confusing the expansion logic or getting overwritten later.
+            # Best approach: Reply with the artifacts so they are visible immediately.
+            if extra_files:
+                try:
+                    await target_msg.reply(files=extra_files)
+                except Exception as e:
+                    logger.error(f"Failed to reply with artifacts on truncation: {e}")
+
             return target_msg
         else:
-            sent = await channel.send(content, reference=reply_to)
+            # New message case - just attach files to the preview message
+            sent = await channel.send(content, reference=reply_to, files=extra_files)
             save_message_expansion(sent.id, full_text, expanded=False)
             with contextlib.suppress(Exception):
                 await sent.add_reaction(EXPAND_EMOJI)
@@ -347,7 +359,7 @@ async def on_ready():
         activity=discord.Activity(type=discord.ActivityType.watching, name="Graphs Go BRRR 📈")
     )
     logger.info("Bot is online and ready!")
-    logger.info("Startup: Gemini Tools Patch Loaded (Scipy+Artifacts) v2")
+    logger.info("Startup: Gemini Tools Patch Loaded (Scipy+Artifacts) v3")
 
 @bot.event
 async def on_reaction_add(reaction, user):
