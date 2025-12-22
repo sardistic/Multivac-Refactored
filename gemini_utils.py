@@ -209,9 +209,9 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
 
     return None
 
-def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, images: Optional[List[bytes]] = None, status_tracker: Optional[Dict[str, str]] = None) -> Optional[str]:
+def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, images: Optional[List[bytes]] = None, status_tracker: Optional[Dict[str, str]] = None, enable_code_execution: bool = False) -> Optional[str]:
     """
-    Generate text using Gemini (Chat). Supports context history, images, and streaming status.
+    Generate text using Gemini (Chat). Supports context history, images, streaming, and optional code execution.
     """
     client = _get_client()
     if not client:
@@ -219,7 +219,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         model = "gemini-3-flash-preview"
-        logger.info(f"Generating text with model: {model} (images={len(images) if images else 0})")
+        logger.info(f"Generating text with model: {model} (images={len(images) if images else 0}, code={enable_code_execution})")
 
         # Build contents from context + current prompt
         contents = []
@@ -246,18 +246,21 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         ))
 
         # Config for code execution
-        code_tool = None
-        try:
-            if hasattr(types, "ToolCodeExecution"):
-                code_tool = types.Tool(code_execution=types.ToolCodeExecution())
-            elif hasattr(types, "CodeExecution"):
-                code_tool = types.Tool(code_execution=types.CodeExecution())
-            else:
-                 code_tool = types.Tool(code_execution={})
-        except Exception as e:
-            logger.warning(f"Failed to init code_execution tool: {e}")
-
-        tools_list = [code_tool] if code_tool else []
+        tools_list = []
+        if enable_code_execution:
+            code_tool = None
+            try:
+                if hasattr(types, "ToolCodeExecution"):
+                    code_tool = types.Tool(code_execution=types.ToolCodeExecution())
+                elif hasattr(types, "CodeExecution"):
+                    code_tool = types.Tool(code_execution=types.CodeExecution())
+                else:
+                     code_tool = types.Tool(code_execution={})
+            except Exception as e:
+                logger.warning(f"Failed to init code_execution tool: {e}")
+            
+            if code_tool:
+                tools_list = [code_tool]
 
         config = types.GenerateContentConfig(
             response_modalities=["TEXT"],

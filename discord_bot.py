@@ -585,6 +585,15 @@ async def on_message(message: discord.Message):
                     except Exception as e:
                         logger.error(f"Failed to decode image data URI for Gemini: {e}")
 
+            # Explicit Code Execution Trigger
+            enable_code_execution = False
+            # Check if user said "gemini code <prompt>"
+            # 'clean_prompt' currently has "code <prompt>" if original was "gemini code <prompt>"
+            # because we stripped "gemini " earlier.
+            if clean_prompt.lower().startswith("code "):
+                enable_code_execution = True
+                clean_prompt = clean_prompt[5:].strip() # Remove "code "
+            
             # Status Tracking for Live Code Execution
             status_tracker = {"text": ""}
             
@@ -595,7 +604,7 @@ async def on_message(message: discord.Message):
                 message,
                 action_label="Thinking (Gemini)",
                 emoji="✨",
-                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs, images=gemini_image_inputs, status_tracker=status_tracker), 
+                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs, images=gemini_image_inputs, status_tracker=status_tracker, enable_code_execution=enable_code_execution), 
                 duration_estimate=6,
                 summarizer=_live_code_summarizer,
             )
