@@ -4,6 +4,7 @@ import json
 from io import BytesIO
 from typing import Optional, List, Dict, Any, Tuple
 from config import GEMINI_API_KEY
+import memory_utils
 
 try:
     from google import genai
@@ -231,7 +232,14 @@ def search_elasticsearch_resource(query_string: str, index: str = "discord_chat_
     except Exception as e:
         return f"Error fetching ES resource: {e}"
 
-def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, extra_parts: Optional[List[Any]] = None, status_tracker: Optional[Dict[str, str]] = None, enable_code_execution: bool = False) -> Tuple[Optional[str], List[Tuple[bytes, str]]]:
+def generate_gemini_text(
+    prompt: str, 
+    context: Optional[List[Dict[str, str]]] = None, 
+    extra_parts: Optional[List[Any]] = None, 
+    status_tracker: Optional[Dict[str, str]] = None, 
+    enable_code_execution: bool = False,
+    search_ids: Optional[Dict[str, Any]] = None
+) -> Tuple[Optional[str], List[Tuple[bytes, str]]]:
     """
     Generate text using Gemini (Chat). Supports context history, multiple parts (images, text, documents), streaming, and optional code execution.
     Returns: (text_response, list_of_images_as_bytes_and_mime)
@@ -246,8 +254,39 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         model = "gemini-2.0-flash"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
+        # RAG context injection
+        rag_context = ""
+        if search_ids:
+            clean_prompt = prompt.lower()
+            trigger_words = ["first thing", "first message", "earliest", "beginning", "start", "history", "what did i say", "previous message", "recall", "remember"]
+            if any(k in clean_prompt for k in trigger_words):
+                try:
+                    logger.info(f"RAG: Triggered for prompt: '{prompt}'")
+                    found_text = memory_utils.search_history_for_context(
+                        guild_id=search_ids.get("guild_id"),
+                        channel_id=search_ids.get("channel_id"),
+                        user_id=search_ids.get("user_id"),
+                        query_text=prompt,
+                        limit=10, 
+                        oldest_first=any(k in clean_prompt for k in ["first", "earliest", "start", "beginning"])
+                    )
+                    if found_text:
+                        rag_context = (
+                            f"\n\n[SYSTEM: MEMORY RECALL]"
+                            f"\nThe user is asking about past events. Here is the relevant conversation history retrieved from the database:"
+                            f"\n{found_text}\n"
+                            f"[END MEMORY RECALL]\n"
+                            f"Use the above information to answer the user's question accurately.\n"
+                        )
+                except Exception as e:
+                    logger.warning(f"RAG search failed: {e}")
+
         # Build contents from context + current prompt
         contents = []
+
+        # If RAG context exists, prepend to prompt
+        final_prompt_text = (rag_context + prompt) if rag_context else prompt
+
         if context:
             for msg in context:
                 role = "user" if msg.get("role") == "user" else "model"
@@ -257,7 +296,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                 ))
         
         # Current message parts
-        current_parts = [types.Part(text=prompt)]
+        current_parts = [types.Part(text=final_prompt_text)]
         
         # Add extra parts (images, text files, etc.)
         if extra_parts:

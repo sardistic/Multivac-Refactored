@@ -448,6 +448,69 @@ def fetch_recent_page(
     next_after = hits[-1].get("sort") if hits else None
     return (docs, next_after)
 
+def search_history_for_context(
+    guild_id: str | int, 
+    channel_id: str | int, 
+    user_id: str | int, 
+    query_text: str,
+    limit: int = 5,
+    oldest_first: bool = False
+) -> str:
+    """
+    Search memory for context injection (RAG).
+    Returns a formatted string of found messages.
+    """
+    ckey = conversation_key(guild_id, channel_id, user_id)
+    
+    # Simple query: match content AND conversation
+    # Start with basic bool/filter
+    query = {
+        "bool": {
+            "filter": [{"term": {"conversation_key.keyword": ckey}}],
+            "must": []
+        }
+    }
+    
+    # If query_text is specific, add match. 
+    # If it's generic ("history", "first"), we might just rely on sort.
+    # But usually we want to find *relevant* history.
+    # For "first thing i said", we want oldest messages. Sorting handles that.
+    # We won't filter by content if the query implies "everything/start".
+    
+    # Heuristic: If query implies specific content search, add 'match'.
+    # Otherwise just return sorted list.
+    skip_content_filter = any(k in query_text.lower() for k in ["first message", "first thing", "history", "beginning", "start"])
+    
+    if not skip_content_filter and query_text.strip():
+        # Clean query text of trigger words
+        cleaned = query_text.replace("search", "").replace("history", "").strip()
+        if cleaned:
+             query["bool"]["must"].append({"match": {"content": cleaned}})
+    
+    sort_order = "asc" if oldest_first else "desc"
+    
+    resp = _search_raw(
+        query,
+        size=limit,
+        source=["role", "content", "timestamp"],
+        sort=[{"timestamp": {"order": sort_order}}]
+    )
+    
+    hits = resp.get("hits", {}).get("hits", [])
+    if not hits:
+        return ""
+    
+    lines = []
+    for h in hits:
+        src = h.get("_source", {})
+        role = src.get("role", "unknown")
+        content = src.get("content", "").strip()
+        ts = src.get("timestamp", "")
+        if content:
+            lines.append(f"[{ts}] {role}: {content}")
+            
+    return "\n".join(lines)
+
 def fetch_matches_recent(
     *,
     guild_id: str | int,

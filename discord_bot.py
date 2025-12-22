@@ -744,11 +744,26 @@ async def on_message(message: discord.Message):
             def _live_code_summarizer():
                 return status_tracker["text"] or "Using Gemini 1.5 Flash..."
             
+            # Prepare search_ids for RAG
+            search_ids = {
+                "guild_id": str(message.guild.id) if message.guild else "DM",
+                "channel_id": str(message.channel.id),
+                "user_id": str(message.author.id)
+            }
+
             status_msg, response = await live_status_with_progress(
                 message,
                 action_label="Thinking (Gemini)",
                 emoji="✨",
-                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs, extra_parts=gemini_parts, status_tracker=status_tracker, enable_code_execution=enable_code_execution), 
+                coro=asyncio.to_thread(
+                    generate_gemini_text, 
+                    clean_prompt, 
+                    context=context_msgs, 
+                    extra_parts=gemini_parts, 
+                    status_tracker=status_tracker, 
+                    enable_code_execution=enable_code_execution,
+                    search_ids=search_ids
+                ), 
                 duration_estimate=6,
                 summarizer=_live_code_summarizer,
             )
@@ -1070,6 +1085,49 @@ async def on_message(message: discord.Message):
             )
             msgs.extend(history_msgs)
             # 4) Current user message last
+            # 4) RAG: Proactive Memory Injection (Universal)
+            # Check if user is asking for history/first message
+            clean_prompt = raw_prompt.lower()
+            trigger_words = ["first thing", "first message", "earliest", "beginning", "start", "history", "what did i say", "previous message", "recall", "remember"]
+            if any(k in clean_prompt for k in trigger_words):
+                try:
+                    # We need to import search_history_for_context from memory_utils
+                    # It is already imported at the top of the file? No, let's check.
+                    # Actually, memory_utils imports might need updating if not present.
+                    # But assuming it's imported or I can access it via memory_utils module object if imported as whole.
+                    # Looking at imports: `from memory_utils import index_message, build_message_window, build_timeline_prompt_block`
+                    # I need to add search_history_for_context to imports OR just import memory_utils.
+                    # Let's assume I fix imports separately or use a local import for safety if strictly needed, 
+                    # but cleaner to rely on the module. 
+                    # WAIT: The file imports specific functions from memory_utils. I should check if I can import the module.
+                    # The file does: `from memory_utils import ...`
+                    # I will use a local import inside the function to avoid touching top-level imports riskily, 
+                    # or better: I'll assume I update the top level import in a separate chunk? 
+                    # No, I'll do a local import for now to keep changes localized and safe.
+                    from memory_utils import search_history_for_context
+
+                    found_text = search_history_for_context(
+                        guild_id=message.guild.id if message.guild else "DM",
+                        channel_id=message.channel.id,
+                        user_id=user_id,
+                        query_text=raw_prompt,
+                        limit=10,
+                        oldest_first=any(k in clean_prompt for k in ["first", "earliest", "start", "beginning"])
+                    )
+                    if found_text:
+                        msgs.append({
+                            "role": "system", 
+                            "content": (
+                                f"[SYSTEM: MEMORY RECALL]\n"
+                                f"The user is asking about past events. Here is the relevant conversation history retrieved from the database:\n"
+                                f"{found_text}\n"
+                                f"[END MEMORY RECALL]"
+                            )
+                        })
+                except Exception as e:
+                    logger.warning(f"Universal RAG search failed: {e}")
+
+            # 5) Current user message last
             msgs.append({"role": "user", "content": raw_prompt})
             return msgs
 
