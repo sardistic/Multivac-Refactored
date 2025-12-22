@@ -209,9 +209,9 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
 
     return None
 
-def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None) -> Optional[str]:
+def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, images: Optional[List[bytes]] = None) -> Optional[str]:
     """
-    Generate text using Gemini (Chat). Supports context history.
+    Generate text using Gemini (Chat). Supports context history and images.
     """
     client = _get_client()
     if not client:
@@ -219,7 +219,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         model = "gemini-3-flash-preview"
-        logger.info(f"Generating text with model: {model}")
+        logger.info(f"Generating text with model: {model} (images={len(images) if images else 0})")
 
         # Build contents from context + current prompt
         contents = []
@@ -231,10 +231,18 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                     parts=[types.Part(text=msg.get("content"))]
                 ))
         
-        # Add current prompt
+        # Current message parts
+        current_parts = [types.Part(text=prompt)]
+        
+        # Add images if present
+        if images:
+            for img_bytes in images:
+                current_parts.append(types.Part.from_bytes(data=img_bytes, mime_type="image/png"))
+
+        # Add current prompt content
         contents.append(types.Content(
             role="user",
-            parts=[types.Part(text=prompt)]
+            parts=current_parts
         ))
 
         # Config for text generation

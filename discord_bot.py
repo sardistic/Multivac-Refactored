@@ -559,11 +559,24 @@ async def on_message(message: discord.Message):
                 limit_msgs=20 
             )
 
+            # Collect Image Bytes
+            gemini_image_inputs = []
+            if image_urls:
+                import base64
+                for url in image_urls:
+                    # image_urls contains data URIs (data:image/png;base64,...) from earlier logic
+                    try:
+                        if url.startswith("data:image/"):
+                            header, encoded = url.split(",", 1)
+                            gemini_image_inputs.append(base64.b64decode(encoded))
+                    except Exception as e:
+                        logger.error(f"Failed to decode image data URI for Gemini: {e}")
+
             status_msg, response = await live_status_with_progress(
                 message,
                 action_label="Thinking (Gemini)",
                 emoji="✨",
-                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs), # Run in thread to not block
+                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs, images=gemini_image_inputs), 
                 duration_estimate=6,
                 summarizer=None,
             )
