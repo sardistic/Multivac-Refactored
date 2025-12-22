@@ -1121,6 +1121,8 @@ async def on_message(message: discord.Message):
                                 f"[SYSTEM: MEMORY RECALL]\n"
                                 f"The user is asking about past events. Here is the relevant conversation history retrieved from the database:\n"
                                 f"{found_text}\n"
+                                f"IMPORTANT: If this retrieved context is insufficient to answer specific requests (e.g., specific quotes, older messages, or details not shown above), "
+                                f"you MUST use the `search_history_for_context` tool to perform a specific search for the missing information.\n"
                                 f"[END MEMORY RECALL]"
                             )
                         })
