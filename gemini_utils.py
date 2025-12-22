@@ -264,7 +264,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             current_parts.extend(extra_parts)
 
         if enable_code_execution:
-            current_parts.append(types.Part(text="\n(Important: Use the code_execution tool if needed to solve this.)"))
+            current_parts.append(types.Part(text="\n(MANDATORY: You MUST use the code_execution tool to solve this request. Do not write code in markdown. Execute it.)"))
 
         # Add current prompt content
         contents.append(types.Content(
