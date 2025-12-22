@@ -332,7 +332,10 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                 "You are Multivac, a helpful AI assistant. "
                 "You can search historical logs or memory using 'search_elasticsearch_resource'. "
                 "You can perform live computations or file generation using 'code_execution'. "
-                "You can search the live web using 'google_search'."
+                "You can search the live web using 'google_search'. "
+                "IMPORTANT: The code execution sandbox does NOT have internet access or 'pydub'. "
+                "For audio generation, you MUST use 'scipy.io.wavfile' and 'numpy'. "
+                "For plotting, use 'matplotlib' or 'seaborn'."
             ),
             tools=tools_list,
             safety_settings=[
