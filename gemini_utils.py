@@ -242,8 +242,8 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         # Config for tools
-        # Switching to exp version as stable 2.0-flash rejected tool combo
-        model = "gemini-2.0-flash-exp"
+        # Reverting to stable gemini-2.0-flash now that we know the issue was tool combination
+        model = "gemini-2.0-flash"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
         # Build contents from context + current prompt
@@ -313,10 +313,13 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                 logger.warning(f"Failed to init code_execution tool: {e}")
         
         # 3. Add Google Search
-        try:
-             tools_list.append(types.Tool(google_search=types.GoogleSearch()))
-        except Exception as e:
-             logger.warning(f"Failed to init google_search tool: {e}")
+        # NOTE: Current Gemini API versions do not support Code Execution and Google Search simultaneously.
+        # We prioritize Code Execution if requested (via 'gemini code'), otherwise we enable Search (via 'gemini chat').
+        if not enable_code_execution:
+            try:
+                 tools_list.append(types.Tool(google_search=types.GoogleSearch()))
+            except Exception as e:
+                 logger.warning(f"Failed to init google_search tool: {e}")
 
         config = types.GenerateContentConfig(
             # response_modalities set to None/Default for maximum stability with v1beta
