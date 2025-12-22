@@ -50,3 +50,4 @@
 - **Model Stability:** Switched to `gemini-2.0-flash` after verifying environment availability, permanently resolving `404 NOT_FOUND` errors for the `v1beta` API.
 - **Artifact Reliability:** Patched `discord_bot.py` to attach generated files (audio, plots) even when the text response is truncated to a file, solving the "missing WAV" issue.
 - **Sandbox Compliance:** Updated system prompts to enforce `scipy`/`numpy` usage over `pydub`, ensuring audio code executes successfully in the restricted environment.
+- **Memory Recall:** Hardened system prompts to explicitly demand use of `search_elasticsearch_resource` for historical queries ("first message", "history"), preventing the model from guessing based on recent context.

@@ -75,3 +75,6 @@
     - [x] **Debug 404 Error:** Identify correct model ID (`gemini-2.0-flash`) and fix SDK client initialization. <!-- id: 6 -->
     - [x] **Fix Tool Incompatibility:** Separate `CodeExecution` and `GoogleSearch` logic to prevent 400 errors. <!-- id: 7 -->
     - [x] **Run final verification:** Ensure code execution and search work independently. <!-- id: 8 -->
+    - [x] **Fix Missing Artifacts:** Patch truncation logic in `discord_bot.py`
+    - [x] **Fix Sandbox Audio:** Update prompts for `scipy` over `pydub`
+    - [x] **Improve Memory:** Enforce explicit historical search tool usage
