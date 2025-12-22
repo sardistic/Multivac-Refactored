@@ -298,8 +298,12 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
         tools_list = []
         
-        # 1. Add Custom Function via correct Tool wrapper
-        tools_list.append(types.Tool(function_declarations=[es_tool_spec]))
+        # 1. Add Custom Function (Elasticsearch)
+        # NOTE: Gemini 2.0 Flash (v1beta) throws "Tool use with function calling is unsupported"
+        # if we mix Server-side Code Execution with Client-side Function Declarations.
+        # We must mutually exclude them.
+        if not enable_code_execution:
+            tools_list.append(types.Tool(function_declarations=[es_tool_spec]))
         
         # 2. Add Code Execution (if enabled)
         if enable_code_execution:
