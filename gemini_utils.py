@@ -208,3 +208,42 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
         logger.exception(f"Gemini ref-gen failed: {e}")
 
     return None
+
+def generate_gemini_text(prompt: str) -> Optional[str]:
+    """
+    Generate text using Gemini (Chat).
+    """
+    client = _get_client()
+    if not client:
+        return None
+
+    try:
+        model = "gemini-2.0-flash-exp"
+        logger.info(f"Generating text with model: {model}")
+
+        # Config for text generation
+        config = types.GenerateContentConfig(
+            response_modalities=["TEXT"],
+            safety_settings=[
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            ]
+        )
+
+        response = client.models.generate_content(
+            model=model,
+            contents=[prompt],
+            config=config
+        )
+
+        if response.text:
+            return response.text
+            
+        logger.warning(f"Gemini text generation returned no text: {response}")
+
+    except Exception as e:
+        logger.exception(f"Gemini text generation failed: {e}")
+
+    return None

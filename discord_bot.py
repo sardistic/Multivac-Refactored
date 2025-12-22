@@ -536,7 +536,6 @@ async def on_message(message: discord.Message):
             "get_stock": 5,
         }.get(intent, 12)
 
-        # WEATHER
         if intent == "get_weather":
             response = await handle_weather_request(
                 message, bot.user.id, get_location_details, get_weather_data,  # util fns
@@ -544,6 +543,27 @@ async def on_message(message: discord.Message):
             )
             if response:
                 await send_or_edit_with_truncation(response, channel=message.channel, reply_to=message)
+            return
+
+        # GEMINI CHAT
+        if intent == "gemini_chat":
+            from gemini_utils import generate_gemini_text
+            # Strip 'gemini' prefix if present to clean up prompt
+            clean_prompt = re.sub(r"^gemini\s*", "", prompt, flags=re.IGNORECASE).strip()
+            
+            status_msg, response = await live_status_with_progress(
+                message,
+                action_label="Thinking (Gemini)",
+                emoji="✨",
+                coro=asyncio.to_thread(generate_gemini_text, clean_prompt), # Run in thread to not block
+                duration_estimate=6,
+                summarizer=None,
+            )
+            
+            if response:
+                await send_or_edit_with_truncation(response, target_msg=status_msg)
+            else:
+                await status_msg.edit(content="❌ Gemini returned no response.")
             return
 
         # IMAGE GENERATION
