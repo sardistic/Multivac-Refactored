@@ -271,13 +271,23 @@ def generate_gemini_text(
                         oldest_first=any(k in clean_prompt for k in ["first", "earliest", "start", "beginning"])
                     )
                     if found_text:
-                        rag_context = (
-                            f"\n\n[SYSTEM: MEMORY RECALL]"
                             f"\nThe user is asking about past events. Here is the relevant conversation history retrieved from the database:"
                             f"\n{found_text}\n"
+                            f"IMPORTANT: If this retrieved context is insufficient to answer specific requests (e.g., specific quotes, older messages, or details not shown above), "
+                            f"you MUST use the `search_elasticsearch_resource` tool to perform a specific search for the missing information.\n"
                             f"[END MEMORY RECALL]\n"
                             f"Use the above information to answer the user's question accurately.\n"
                         )
+                    else:
+                         # Found nothing, but user *asked* for history.
+                         # We must prime the model to NOT give up, but to try searching itself.
+                         rag_context = (
+                            f"\n\n[SYSTEM: MEMORY RECALL]"
+                            f"\nProactive database search returned NO direct matches for the user's specific query criteria (time range or keywords)."
+                            f"\nHowever, the user is explicitly asking for history."
+                            f"\nCRITICAL: Do NOT just say 'I don't recall'. You MUST use the `search_elasticsearch_resource` tool now with broader or different terms (e.g., ignore time, or search just keywords) to find the answer."
+                            f"\n[END MEMORY RECALL]\n"
+                         )
                 except Exception as e:
                     logger.warning(f"RAG search failed: {e}")
 
