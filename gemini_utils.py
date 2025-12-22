@@ -17,9 +17,13 @@ except ImportError:
 logger = logging.getLogger("gemini_utils")
 
 def _get_client():
+    import os
     if not SDK_AVAILABLE or not GEMINI_API_KEY:
         return None
-    return genai.Client(api_key=GEMINI_API_KEY)
+    
+    # Use GEMINI_API_KEY explicitly. 
+    # The SDK internally might prioritize GOOGLE_API_KEY if found in environment.
+    return genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
 
 def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) -> Optional[BytesIO]:
     """
@@ -298,7 +302,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         # 2. Add Code Execution (if enabled)
         if enable_code_execution:
             try:
-                tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
+                tools_list.append(types.Tool(code_execution=types.CodeExecution()))
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
         
