@@ -321,7 +321,6 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                 "You can search the live web using 'google_search'."
             ),
             tools=tools_list,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable_manual_calling=False),
             safety_settings=[
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
