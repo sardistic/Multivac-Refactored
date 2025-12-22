@@ -225,11 +225,12 @@ def index_message(
 # ------------------------------------------------------------
 # Low-level search
 # ------------------------------------------------------------
-def _search_raw(query: Dict[str, Any], *, size: int = 24, source: Optional[List[str]] = None, sort=None) -> Dict[str, Any]:
+def _search_raw(query: Dict[str, Any], *, index: Optional[str] = None, size: int = 24, source: Optional[List[str]] = None, sort=None) -> Dict[str, Any]:
     client = es or init_es_client()
     if client is None:
         return {"hits": {"total": {"value": 0}, "hits": []}}
 
+    target_index = index or OPENSEARCH_INDEX
     body: Dict[str, Any] = {"query": query, "size": int(size)}
     if sort is not None:
         body["sort"] = sort
@@ -237,15 +238,15 @@ def _search_raw(query: Dict[str, Any], *, size: int = 24, source: Optional[List[
         body["_source"] = source
 
     try:
-        logger.debug("es.search > %r", body)
+        logger.debug("es.search [%s] > %r", target_index, body)
     except Exception:
         pass
 
     # ES 8.x allows body=; also supports query= but we keep body for parity with existing code.
-    resp = client.search(index=OPENSEARCH_INDEX, body=body)  # type: ignore[attr-defined]
+    resp = client.search(index=target_index, body=body)  # type: ignore[attr-defined]
 
     try:
-        logger.debug("es.search < %r", resp)
+        logger.debug("es.search [%s] < %r", target_index, resp)
     except Exception:
         pass
 

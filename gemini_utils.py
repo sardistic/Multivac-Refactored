@@ -209,6 +209,21 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
 
     return None
 
+def search_elasticsearch_resource(query_string: str, index: str = "discord_chat_memory", max_results: int = 10) -> str:
+    """
+    Query the internal Elasticsearch data store (Resources).
+    Use this to pull historical logs, messages, or structured data directly into your context.
+    'query_string' follows Lucene syntax. 'index' is the ES index name.
+    """
+    from memory_utils import _search_raw
+    try:
+        # Map query_string to a simple ES query_string query
+        resp = _search_raw({"query_string": {"query": query_string}}, index=index, size=max_results)
+        # We return it as a string so Gemini can read it
+        return json.dumps(resp, default=str)
+    except Exception as e:
+        return f"Error fetching ES resource: {e}"
+
 def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, extra_parts: Optional[List[Any]] = None, status_tracker: Optional[Dict[str, str]] = None, enable_code_execution: bool = False) -> Tuple[Optional[str], List[Tuple[bytes, str]]]:
     """
     Generate text using Gemini (Chat). Supports context history, multiple parts (images, text, documents), streaming, and optional code execution.
@@ -280,8 +295,13 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
         config = types.GenerateContentConfig(
             response_modalities=["TEXT", "IMAGE"], # Explicitly allow IMAGE for code artifacts
-            system_instruction="You are Multivac, a helpful AI assistant. You have access to the recent conversation history provided in the context. Use it to answer questions about what was previously said.",
-            tools=tools_list, 
+            system_instruction=(
+                "You are Multivac, a helpful AI assistant. "
+                "You have access to the recent conversation history provided in the context. "
+                "You can perform SEARCH on local resources (Elasticsearch) using the 'search_elasticsearch_resource' tool. "
+                "Use it to pull historical data, logs, or archives when asked about past events not in immediate history."
+            ),
+            tools=tools_list + [search_elasticsearch_resource], 
             safety_settings=[
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
