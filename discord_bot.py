@@ -741,9 +741,9 @@ async def on_message(message: discord.Message):
                 )
                 
                 if image_data:
-                    import io
-                    f = io.BytesIO(image_data)
-                    await status_msg.reply(file=discord.File(f, filename="weather_widget.png"))
+                    # image_data is already a BytesIO object from generate_gemini_image
+                    image_data.seek(0)
+                    await status_msg.reply(file=discord.File(image_data, filename="weather_widget.png"))
                     await status_msg.edit(content=f"✅ Weather Widget for **{loc_query}**")
                 else:
                     await status_msg.edit(content="❌ Failed to generate weather widget.")
