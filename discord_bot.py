@@ -347,6 +347,7 @@ async def on_ready():
         activity=discord.Activity(type=discord.ActivityType.watching, name="Graphs Go BRRR 📈")
     )
     logger.info("Bot is online and ready!")
+    logger.info("Startup: Gemini Tools Patch Loaded (Scipy+Artifacts) v2")
 
 @bot.event
 async def on_reaction_add(reaction, user):
