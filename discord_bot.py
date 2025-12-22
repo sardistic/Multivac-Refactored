@@ -553,6 +553,49 @@ async def on_message(message: discord.Message):
             unique_urls.append(u)
             seen.add(u)
     image_urls = unique_urls
+    
+    # 4. Text Attachments (Collect content to include in prompt)
+    text_content_to_append = ""
+    
+    # 4.1 Collect from replied message (Priority context)
+    if ref_msg and ref_msg.attachments:
+        for a in ref_msg.attachments:
+            if a.content_type and a.content_type.startswith("image/"):
+                continue
+            text_exts = (".txt", ".md", ".py", ".js", ".ts", ".json", ".csv", ".c", ".cpp", ".h", ".java", ".go", ".rs", ".sql", ".yaml", ".yml", ".html", ".css")
+            if (a.content_type and (a.content_type.startswith("text/") or "/json" in a.content_type)) or a.filename.lower().endswith(text_exts):
+                try:
+                    logger.info(f"Reading replied text attachment: {a.filename}")
+                    bytes_data = await a.read()
+                    try:
+                        content = bytes_data.decode("utf-8")
+                    except UnicodeDecodeError:
+                        content = bytes_data.decode("latin-1")
+                    if len(content) > 100_000:
+                        content = content[:100_000] + "\n... [TRUNCATED] ..."
+                    text_content_to_append += f"\n\n--- REPLIED FILE: {a.filename} ---\n{content}\n--- END OF FILE ---\n"
+                except Exception as e:
+                    logger.error(f"Failed to read replied text attachment: {e}")
+
+    # 4.2 Collect from current message
+    if message.attachments:
+        for a in message.attachments:
+            if a.content_type and a.content_type.startswith("image/"):
+                continue
+            text_exts = (".txt", ".md", ".py", ".js", ".ts", ".json", ".csv", ".c", ".cpp", ".h", ".java", ".go", ".rs", ".sql", ".yaml", ".yml", ".html", ".css")
+            if (a.content_type and (a.content_type.startswith("text/") or "/json" in a.content_type)) or a.filename.lower().endswith(text_exts):
+                try:
+                    logger.info(f"Reading text attachment: {a.filename}")
+                    bytes_data = await a.read()
+                    try:
+                        content = bytes_data.decode("utf-8")
+                    except UnicodeDecodeError:
+                        content = bytes_data.decode("latin-1")
+                    if len(content) > 100_000:
+                        content = content[:100_000] + "\n... [TRUNCATED] ..."
+                    text_content_to_append += f"\n\n--- FILE: {a.filename} ---\n{content}\n--- END OF FILE ---\n"
+                except Exception as e:
+                    logger.error(f"Failed to read text attachment {a.filename}: {e}")
 
     # Any URL (for summarize)
     general_url_match = re.search(r"https?://[^\s]+", message.content)
@@ -620,6 +663,10 @@ async def on_message(message: discord.Message):
             if clean_prompt.lower().startswith("code "):
                 enable_code_execution = True
                 clean_prompt = clean_prompt[5:].strip() # Remove "code "
+            
+            # Append text attachments to the prompt
+            if text_content_to_append:
+                clean_prompt += f"\n\n{text_content_to_append}"
             
             # Status Tracking for Live Code Execution
             status_tracker = {"text": ""}
