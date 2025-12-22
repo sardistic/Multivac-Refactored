@@ -45,7 +45,9 @@ def _debug_env_once():
             # Try to list models
             try:
                 for m in client.models.list():
-                    logger.info(f"Model: {m.name} | Methods: {m.supported_generation_methods}")
+                    # Safely log what we find
+                    methods = getattr(m, "supported_generation_methods", "unknown")
+                    logger.info(f"Model: {m.name} | Methods: {methods}")
             except Exception as e:
                 logger.error(f"Failed to list models: {e}")
                 
@@ -267,8 +269,8 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         # Config for tools
-        # As per https://ai.google.dev/gemini-api/docs/code-execution
-        model = "gemini-1.5-flash"
+        # Trying specific version to resolve 404
+        model = "gemini-1.5-flash-002"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
         # Trigger debug once
@@ -332,13 +334,13 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         # 2. Add Code Execution (if enabled)
         if enable_code_execution:
             try:
-                # Try multiple ways to init code execution depending on SDK version
-                if hasattr(types, "CodeExecution"):
-                    tools_list.append(types.Tool(code_execution=types.CodeExecution()))
-                elif hasattr(types, "ToolCodeExecution"):
-                    tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
+                # Tools at indices [0] error suggests we need the right wrapper
+                # Logs showed ToolCodeExecution exists in types
+                if hasattr(types, "ToolCodeExecution"):
+                     tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
                 else:
-                    logger.warning("No known CodeExecution type found in SDK.")
+                     # Fallback
+                     tools_list.append(types.Tool(code_execution=types.CodeExecution()))
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
         
