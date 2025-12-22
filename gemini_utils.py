@@ -298,11 +298,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         # 2. Add Code Execution (if enabled)
         if enable_code_execution:
             try:
-                # Some SDK versions use different naming for the Tool field
-                if hasattr(types, "ToolCodeExecution"):
-                    tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
-                else:
-                    tools_list.append(types.Tool(code_execution=types.CodeExecution()))
+                tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
         
@@ -313,7 +309,8 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
              logger.warning(f"Failed to init google_search tool: {e}")
 
         config = types.GenerateContentConfig(
-            response_modalities=["TEXT"],
+            # response_modalities set to None/Default for maximum stability with v1beta
+            # response_modalities=["TEXT"], 
             system_instruction=(
                 "You are Multivac, a helpful AI assistant. "
                 "You can search historical logs or memory using 'search_elasticsearch_resource'. "
