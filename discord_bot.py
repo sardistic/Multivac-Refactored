@@ -717,11 +717,16 @@ async def on_message(message: discord.Message):
                         humidity = main.get("humidity", "?")
                         temp_min = main.get("temp_min", "?")
                         temp_max = main.get("temp_max", "?")
+                        pressure = main.get("pressure", "?")
                         wind_speed = wind.get("speed", "?")
+                        visibility = current.get("visibility", "?")
+                        clouds = current.get("clouds", {}).get("all", "?")
                         cond = (current.get("weather") or [{}])[0].get("description", "unknown")
                         
-                        forecast_cur = data.get("forecast", {}).get("current", {})
+                        forecast_data = data.get("forecast", {})
+                        forecast_cur = forecast_data.get("current", {})
                         uvi = forecast_cur.get("uvi", "?")
+                        pop = forecast_data.get("daily", [{}])[0].get("pop", 0) * 100
                         
                         sys_data = current.get("sys", {})
                         sunrise_raw = sys_data.get("sunrise")
@@ -736,23 +741,30 @@ async def on_message(message: discord.Message):
                         sr_str = datetime.datetime.utcfromtimestamp(sunrise_raw + tz_offset).strftime("%I:%M %p") if sunrise_raw else "?"
                         ss_str = datetime.datetime.utcfromtimestamp(sunset_raw + tz_offset).strftime("%I:%M %p") if sunset_raw else "?"
                         
-                        # Construct prompt - DEEP ENRICHMENT
+                        # Visibility conversion
+                        if isinstance(visibility, (int, float)):
+                            vis_str = f"{round(visibility / 1609.34, 1)} mi" if units == "imperial" else f"{round(visibility / 1000, 1)} km"
+                        else:
+                            vis_str = "?"
+
+                        # Construct prompt - EXTREME ENRICHMENT
                         widget_prompt = (
-                            f"A professional, data-maximalist 3D weather dashboard layout in a WIDESCREEN 16:9 cinematic format. "
-                            f"Current Local Time: {time_str}. \n"
-                            f"THE PRIMARY FOCUS is the main weather block: '{round(float(temp))}°', '{loc['name']}', and '{cond.capitalize()}' in HUGE, BOLD, HIGH-CONTRAST typography. \n"
-                            f"RICH DATA GRID SECTION (extremely clear and legible): \n"
-                            f"- Low: {round(float(temp_min))}° | High: {round(float(temp_max))}° \n"
-                            f"- Feels Like: {round(float(feels_like))}° \n"
-                            f"- Humidity: {humidity}% | UV Index: {uvi} \n"
-                            f"- Wind: {wind_speed} {'mph' if units=='imperial' else 'm/s'} \n"
+                            f"A professional, high-density data-maximalist 3D weather station dashboard layout in a WIDESCREEN 16:9 cinematic format. "
+                            f"THE PRIMARY FOCUS is the hero weather block: Large '{round(float(temp))}°' and '{loc['name']}' in HUGE, BOLD, HIGH-CONTRAST typography. \n"
+                            f"COMPREHENSIVE DATA GRID (crisp, clear, modern labels): \n"
+                            f"- Today's Range: {round(float(temp_min))}° - {round(float(temp_max))}° \n"
+                            f"- Feels Like: {round(float(feels_like))}° | Humidity: {humidity}% \n"
+                            f"- Rain Chance: {round(pop)}% | UV Index: {uvi} \n"
+                            f"- Pressure: {pressure} hPa | Visibility: {vis_str} \n"
+                            f"- Wind: {wind_speed} {'mph' if units=='imperial' else 'm/s'} | Clouds: {clouds}% \n"
                             f"- Sunrise: {sr_str} | Sunset: {ss_str} \n"
-                            f"The data is organized into a clean, modern grid overlaying the background. "
+                            f"- Local Time: {time_str} \n"
+                            f"The layout is a modern tech interface with transparent elements. "
                             f"The background is a cinematic, expansive widescreen shot of {loc['name']} "
-                            f"reflecting the current {cond} skies and { 'nighttime' if local_dt.hour < 6 or local_dt.hour > 18 else 'daytime' } lighting. "
-                            f"Premium Apple Health / iOS 17 Weather app aesthetic, glassmorphism, 8k crisp text rendering."
+                            f"reflecting current {cond} skies and { 'nighttime' if local_dt.hour < 6 or local_dt.hour > 18 else 'daytime' } lighting. "
+                            f"Premium Apple / SF Pro typography / iOS 17 Weather app aesthetic, 8k hyper-detailed text."
                         )
-                        logger.info(f"Generating enriched weather widget: {widget_prompt}")
+                        logger.info(f"Generating extreme weather widget: {widget_prompt}")
                         return await asyncio.to_thread(generate_gemini_image, widget_prompt, 1600, 900)
                     except Exception as e:
                         logger.error(f"Weather widget failed: {e}")
