@@ -209,9 +209,9 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
 
     return None
 
-def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, images: Optional[List[bytes]] = None) -> Optional[str]:
+def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, images: Optional[List[bytes]] = None, status_tracker: Optional[Dict[str, str]] = None) -> Optional[str]:
     """
-    Generate text using Gemini (Chat). Supports context history and images.
+    Generate text using Gemini (Chat). Supports context history, images, and streaming status.
     """
     client = _get_client()
     if not client:
@@ -245,9 +245,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             parts=current_parts
         ))
 
-        # Config for text generation
-        # Attempting to use ToolCodeExecution (search results suggest this name)
-        # If this fails, we catch it to prevent crashing.
+        # Config for code execution
         code_tool = None
         try:
             if hasattr(types, "ToolCodeExecution"):
@@ -255,8 +253,6 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             elif hasattr(types, "CodeExecution"):
                 code_tool = types.Tool(code_execution=types.CodeExecution())
             else:
-                 # Fallback: Try passing empty dict if supported, or log warning
-                 # For now, let's try assuming it might be just `code_execution={}` in Tool
                  code_tool = types.Tool(code_execution={})
         except Exception as e:
             logger.warning(f"Failed to init code_execution tool: {e}")
@@ -275,37 +271,55 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             ]
         )
 
-        response = client.models.generate_content(
+        # Full text accumulator
+        final_text = []
+
+        # STREAMING REQUEST
+        # We iterate over chunks to update status_tracker with code
+        response_stream = client.models.generate_content_stream(
             model=model,
             contents=contents,
             config=config
         )
 
-        # Parse full response including Code Execution parts
-        final_text = []
+        for chunk in response_stream:
+             # Process each chunk
+             if chunk.candidates:
+                 for part in chunk.candidates[0].content.parts:
+                     # 1. Text Parts
+                     if part.text:
+                         final_text.append(part.text)
+                     
+                     # 2. Executable Code (The "Thinking" part)
+                     if part.executable_code:
+                         code = part.executable_code.code
+                         lang = part.executable_code.language.lower()
+                         
+                         # Format block
+                         block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{lang}\n{code}\n> ```"
+                         final_text.append(block)
+                         
+                         # Update shared status if provided (for Discord progress)
+                         if status_tracker is not None:
+                             status_tracker["text"] = f"Writing Code...\n```{lang}\n{code}\n```"
 
-        if response.candidates:
-             for part in response.candidates[0].content.parts:
-                 if part.text:
-                     final_text.append(part.text)
-                 
-                 if part.executable_code:
-                     code = part.executable_code.code
-                     lang = part.executable_code.language.lower()
-                     # Stylized "Thinking" block
-                     final_text.append(f"\n> 🐍 **Thinking (Code Execution)**\n> ```{lang}\n{code}\n> ```")
-                 
-                 if part.code_execution_result:
-                     outcome = part.code_execution_result.outcome
-                     output = part.code_execution_result.output.strip()
-                     icon = "✅" if outcome == "OUTCOME_OK" else "❌"
-                     # Stylized "Result" block
-                     final_text.append(f"> {icon} **Result**\n> ```text\n{output}\n> ```\n")
+                     # 3. Execution Result
+                     if part.code_execution_result:
+                         outcome = part.code_execution_result.outcome
+                         output = part.code_execution_result.output.strip()
+                         icon = "✅" if outcome == "OUTCOME_OK" else "❌"
+                         
+                         # Format block
+                         block = f"> {icon} **Result**\n> ```text\n{output}\n> ```\n"
+                         final_text.append(block)
+                         
+                         if status_tracker is not None:
+                             status_tracker["text"] = f"Executed Config: {outcome}\nOutput length: {len(output)}"
 
         if final_text:
             return "".join(final_text)
             
-        logger.warning(f"Gemini text generation returned no text: {response}")
+        logger.warning(f"Gemini text generation returned no text in stream.")
 
     except Exception as e:
         logger.exception(f"Gemini text generation failed: {e}")

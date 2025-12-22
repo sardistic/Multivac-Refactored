@@ -469,7 +469,13 @@ async def on_message(message: discord.Message):
     # If not configured, we do NOT send “No results found” — we let the model’s web_search tool handle it.
 
     # Intent
-    intent = await classify_intent(raw_prompt)
+    # Fix for "gemini imagine" being grabbed by chat intent
+    if raw_prompt.lower().strip().startswith("gemini imagine"):
+        intent = "generate_image"
+        # We don't strip "gemini" here because stability_utils expects it? 
+        # Actually stability_utils checks if content.startswith("gemini").
+    else:
+        intent = await classify_intent(raw_prompt)
     logger.debug(f"Intent classified as: {intent}")
 
     # Collect image inputs (replied image FIRST, then attachments, then URLs)
@@ -572,13 +578,19 @@ async def on_message(message: discord.Message):
                     except Exception as e:
                         logger.error(f"Failed to decode image data URI for Gemini: {e}")
 
+            # Status Tracking for Live Code Execution
+            status_tracker = {"text": ""}
+            
+            def _live_code_summarizer():
+                return status_tracker["text"] or "Using Gemini 3..."
+
             status_msg, response = await live_status_with_progress(
                 message,
                 action_label="Thinking (Gemini)",
                 emoji="✨",
-                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs, images=gemini_image_inputs), 
+                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs, images=gemini_image_inputs, status_tracker=status_tracker), 
                 duration_estimate=6,
-                summarizer=None,
+                summarizer=_live_code_summarizer,
             )
             
             if response:
