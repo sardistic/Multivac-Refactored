@@ -342,67 +342,66 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         # STREAMING REQUEST
         # We iterate over chunks to update status_tracker with code
         # And build the final text cleanly (merging code chunks)
-        try:
-            response_stream = client.models.generate_content_stream(
-                model=model,
-                contents=contents,
-                config=config
-            )
-            
-            for chunk in response_stream:
-             # Process each chunk
-             if chunk.candidates:
-                 for part in chunk.candidates[0].content.parts:
-                     # 1. Text Parts
-                     if part.text:
-                         # If we had accumulated code, flush it first
-                         if accumulated_code_block:
-                             block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
-                             final_text.append(block)
-                             accumulated_code_block = ""
-                         
-                         final_text.append(part.text)
+        response_stream = client.models.generate_content_stream(
+            model=model,
+            contents=contents,
+            config=config
+        )
+        
+        for chunk in response_stream:
+            # Process each chunk
+            if chunk.candidates:
+                for part in chunk.candidates[0].content.parts:
+                    # 1. Text Parts
+                    if part.text:
+                        # If we had accumulated code, flush it first
+                        if accumulated_code_block:
+                            block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
+                            final_text.append(block)
+                            accumulated_code_block = ""
+                        
+                        final_text.append(part.text)
+                   
+                    # 2. Inline Data (Images/Plots)
+                    if part.inline_data:
+                        logger.info(f"Received inline data: mime={part.inline_data.mime_type}, size={len(part.inline_data.data)}")
+                        generated_artifacts.append((part.inline_data.data, part.inline_data.mime_type))
                     
-                     # 2. Inline Data (Images/Plots)
-                     if part.inline_data:
-                         logger.info(f"Received inline data: mime={part.inline_data.mime_type}, size={len(part.inline_data.data)}")
-                         generated_artifacts.append((part.inline_data.data, part.inline_data.mime_type))
-                     
-                     # 3. Executable Code (The "Thinking" part)
-                     if part.executable_code:
-                         code_chunk = part.executable_code.code
-                         if part.executable_code.language:
-                             current_lang = part.executable_code.language.lower()
-                         
-                         accumulated_code_block += code_chunk
-                         
-                         # Update shared status for Progress Bar (Show last few lines)
-                         if status_tracker is not None:
-                             # Show last 6 lines of code
-                             snippet = "\n".join(accumulated_code_block.splitlines()[-6:])
-                             # If snippet is empty (just newlines), show something
-                             if not snippet.strip():
-                                 snippet = "..." 
-                             status_tracker["text"] = f"Writing Code...\n```{current_lang}\n{snippet}\n```"
+                    # 3. Executable Code (The "Thinking" part)
+                    if part.executable_code:
+                        code_chunk = part.executable_code.code
+                        if part.executable_code.language:
+                            current_lang = part.executable_code.language.lower()
+                        
+                        accumulated_code_block += code_chunk
+                        
+                        # Update shared status for Progress Bar (Show last few lines)
+                        if status_tracker is not None:
+                            # Show last 6 lines of code
+                            snippet = "\n".join(accumulated_code_block.splitlines()[-6:])
+                            # If snippet is empty (just newlines), show something
+                            if not snippet.strip():
+                                snippet = "..." 
+                            status_tracker["text"] = f"Writing Code...\n```{current_lang}\n{snippet}\n```"
 
-                     # 4. Execution Result
-                     if part.code_execution_result:
-                         # Flush any accumulated code first
-                         if accumulated_code_block:
-                             block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
-                             final_text.append(block)
-                             accumulated_code_block = ""
+                    # 4. Execution Result
+                    if part.code_execution_result:
+                        # Flush any accumulated code first
+                        if accumulated_code_block:
+                            block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
+                            final_text.append(block)
+                            accumulated_code_block = ""
 
-                         outcome = part.code_execution_result.outcome
-                         output = part.code_execution_result.output.strip()
-                         icon = "✅" if outcome == "OUTCOME_OK" else "❌"
-                         
-                         # Format block
-                         block = f"> {icon} **Result**\n> ```text\n{output}\n> ```\n"
-                         final_text.append(block)
-                         
-                         if status_tracker is not None:
-                             status_tracker["text"] = f"Executed: {outcome}\nResult: {output[:50]}..."
+                        outcome = part.code_execution_result.outcome
+                        output = part.code_execution_result.output.strip()
+                        icon = "✅" if outcome == "OUTCOME_OK" else "❌"
+                        
+                        # Format block
+                        block = f"> {icon} **Result**\n> ```text\n{output}\n> ```\n"
+                        final_text.append(block)
+                        
+                        if status_tracker is not None:
+                            status_tracker["text"] = f"Executed: {outcome}\nResult: {output[:50]}..."
         
         # Flush any remaining code at end of stream
         if accumulated_code_block:
