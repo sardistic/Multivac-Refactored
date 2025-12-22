@@ -281,8 +281,26 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             config=config
         )
 
-        if response.text:
-            return response.text
+        # Parse full response including Code Execution parts
+        final_text = []
+
+        if response.candidates:
+             for part in response.candidates[0].content.parts:
+                 if part.text:
+                     final_text.append(part.text)
+                 
+                 if part.executable_code:
+                     code = part.executable_code.code
+                     lang = part.executable_code.language.lower()
+                     final_text.append(f"\n```{lang}\n{code}\n```")
+                 
+                 if part.code_execution_result:
+                     outcome = part.code_execution_result.outcome
+                     output = part.code_execution_result.output
+                     final_text.append(f"\n**Output** ({outcome}):\n```\n{output}\n```")
+
+        if final_text:
+            return "".join(final_text)
             
         logger.warning(f"Gemini text generation returned no text: {response}")
 
