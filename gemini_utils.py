@@ -209,9 +209,9 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
 
     return None
 
-def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, images: Optional[List[bytes]] = None, status_tracker: Optional[Dict[str, str]] = None, enable_code_execution: bool = False) -> Tuple[Optional[str], List[Tuple[bytes, str]]]:
+def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = None, extra_parts: Optional[List[Any]] = None, status_tracker: Optional[Dict[str, str]] = None, enable_code_execution: bool = False) -> Tuple[Optional[str], List[Tuple[bytes, str]]]:
     """
-    Generate text using Gemini (Chat). Supports context history, images, streaming, and optional code execution.
+    Generate text using Gemini (Chat). Supports context history, multiple parts (images, text, documents), streaming, and optional code execution.
     Returns: (text_response, list_of_images_as_bytes_and_mime)
     """
     client = _get_client()
@@ -220,7 +220,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         model = "gemini-3-flash-preview"
-        logger.info(f"Generating text with model: {model} (images={len(images) if images else 0}, code={enable_code_execution})")
+        logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
         # Build contents from context + current prompt
         contents = []
@@ -235,10 +235,10 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         # Current message parts
         current_parts = [types.Part(text=prompt)]
         
-        # Add images if present
-        if images:
-            for img_bytes in images:
-                current_parts.append(types.Part.from_bytes(data=img_bytes, mime_type="image/png"))
+        # Add extra parts (images, text files, etc.)
+        if extra_parts:
+            # extra_parts should be a list of types.Part
+            current_parts.extend(extra_parts)
 
         if enable_code_execution:
             # Force/Encourage usage

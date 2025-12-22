@@ -50,7 +50,8 @@ from openai_utils import (
 
 # Optional features (your existing utilities)
 from stability_utils import handle_image_generation, edit_image_with_prompt
-from gemini_utils import generate_gemini_image
+from gemini_utils import generate_gemini_text, generate_gemini_image
+from google.genai import types
 from weather_utils import get_location_details, get_weather_data, handle_weather_request, format_weather_response
 from url_utils import fetch_url_content, extract_main_text, reduce_text_length
 from progress import start_progress_bar
@@ -554,48 +555,88 @@ async def on_message(message: discord.Message):
             seen.add(u)
     image_urls = unique_urls
     
-    # 4. Text Attachments (Collect content to include in prompt)
-    text_content_to_append = ""
+    # 4. Gemini Parts (Images and Text/Docs)
+    gemini_parts = []
     
-    # 4.1 Collect from replied message (Priority context)
-    if ref_msg and ref_msg.attachments:
-        for a in ref_msg.attachments:
-            if a.content_type and a.content_type.startswith("image/"):
-                continue
-            text_exts = (".txt", ".md", ".py", ".js", ".ts", ".json", ".csv", ".c", ".cpp", ".h", ".java", ".go", ".rs", ".sql", ".yaml", ".yml", ".html", ".css")
-            if (a.content_type and (a.content_type.startswith("text/") or "/json" in a.content_type)) or a.filename.lower().endswith(text_exts):
+    # 4.1 Collect from REPLIED message
+    if ref_msg:
+        if ref_msg.attachments:
+            for a in ref_msg.attachments:
                 try:
-                    logger.info(f"Reading replied text attachment: {a.filename}")
-                    bytes_data = await a.read()
-                    try:
-                        content = bytes_data.decode("utf-8")
-                    except UnicodeDecodeError:
-                        content = bytes_data.decode("latin-1")
-                    if len(content) > 100_000:
-                        content = content[:100_000] + "\n... [TRUNCATED] ..."
-                    text_content_to_append += f"\n\n--- REPLIED FILE: {a.filename} ---\n{content}\n--- END OF FILE ---\n"
+                    data = await a.read()
+                    mime = a.content_type or mimetypes.guess_type(a.filename)[0] or "application/octet-stream"
+                    
+                    # Handle Images
+                    if mime.startswith("image/"):
+                        gemini_parts.append(types.Part.from_bytes(data=data, mime_type=mime))
+                        logger.info(f"Added replied image part: {a.filename}")
+                    # Handle Text/Docs
+                    else:
+                        text_exts = (".txt", ".md", ".py", ".js", ".ts", ".json", ".csv", ".c", ".cpp", ".h", ".java", ".go", ".rs", ".sql", ".yaml", ".yml", ".html", ".css")
+                        if mime.startswith("text/") or "/json" in mime or a.filename.lower().endswith(text_exts):
+                            # For text files, we can just pass the text string for better grounding
+                            try:
+                                content = data.decode("utf-8")
+                            except UnicodeDecodeError:
+                                content = data.decode("latin-1")
+                            
+                            if len(content) > 150_000:
+                                content = content[:150_000] + "\n... [TRUNCATED] ..."
+                            
+                            full_text = f"--- REPLIED FILE: {a.filename} ---\n{content}\n"
+                            gemini_parts.append(types.Part(text=full_text))
+                            logger.info(f"Added replied text part: {a.filename}")
                 except Exception as e:
-                    logger.error(f"Failed to read replied text attachment: {e}")
+                    logger.error(f"Failed to process replied attachment: {e}")
 
-    # 4.2 Collect from current message
+    # 4.2 Collect from CURRENT message
     if message.attachments:
         for a in message.attachments:
-            if a.content_type and a.content_type.startswith("image/"):
-                continue
-            text_exts = (".txt", ".md", ".py", ".js", ".ts", ".json", ".csv", ".c", ".cpp", ".h", ".java", ".go", ".rs", ".sql", ".yaml", ".yml", ".html", ".css")
-            if (a.content_type and (a.content_type.startswith("text/") or "/json" in a.content_type)) or a.filename.lower().endswith(text_exts):
-                try:
-                    logger.info(f"Reading text attachment: {a.filename}")
-                    bytes_data = await a.read()
-                    try:
-                        content = bytes_data.decode("utf-8")
-                    except UnicodeDecodeError:
-                        content = bytes_data.decode("latin-1")
-                    if len(content) > 100_000:
-                        content = content[:100_000] + "\n... [TRUNCATED] ..."
-                    text_content_to_append += f"\n\n--- FILE: {a.filename} ---\n{content}\n--- END OF FILE ---\n"
-                except Exception as e:
-                    logger.error(f"Failed to read text attachment {a.filename}: {e}")
+            try:
+                data = await a.read()
+                mime = a.content_type or mimetypes.guess_type(a.filename)[0] or "application/octet-stream"
+                
+                # Handle Images
+                if mime.startswith("image/"):
+                    # Only add if not already present in image_urls list?
+                    # Actually, we rely on gemini_parts now for Gemini.
+                    gemini_parts.append(types.Part.from_bytes(data=data, mime_type=mime))
+                    logger.info(f"Added attachment image part: {a.filename}")
+                # Handle Text/Docs
+                else:
+                    text_exts = (".txt", ".md", ".py", ".js", ".ts", ".json", ".csv", ".c", ".cpp", ".h", ".java", ".go", ".rs", ".sql", ".yaml", ".yml", ".html", ".css")
+                    if mime.startswith("text/") or "/json" in mime or a.filename.lower().endswith(text_exts):
+                        try:
+                            content = data.decode("utf-8")
+                        except UnicodeDecodeError:
+                            content = data.decode("latin-1")
+                        
+                        if len(content) > 150_000:
+                            content = content[:150_000] + "\n... [TRUNCATED] ..."
+                        
+                        full_text = f"--- FILE: {a.filename} ---\n{content}\n"
+                        gemini_parts.append(types.Part(text=full_text))
+                        logger.info(f"Added attachment text part: {a.filename}")
+            except Exception as e:
+                logger.error(f"Failed to process attachment: {e}")
+
+    # 4.3 Collect image_urls (URLs or base64 data URIs)
+    # Convert any unique_urls to Parts
+    for url in unique_urls:
+        if url.startswith("data:image/"):
+            try:
+                import base64
+                header, encoded = url.split(",", 1)
+                mime = header.split(":", 1)[1].split(";", 1)[0]
+                gemini_parts.append(types.Part.from_bytes(data=base64.b64decode(encoded), mime_type=mime))
+            except Exception as e:
+                logger.error(f"Failed to decode data URI: {e}")
+        else:
+            # It's a raw URL. Gemini GenAI SDK doesn't always handle raw URLs in Parts easily without uploading.
+            # We already handled base64-ing them in image_urls if they were attachments.
+            # If it's a web URL, we might need a Part(uri=url) but only if it's GCS.
+            # For now, we'll ignore raw web URLs or let the model's search tool handle them.
+            pass
 
     # Any URL (for summarize)
     general_url_match = re.search(r"https?://[^\s]+", message.content)
@@ -642,43 +683,23 @@ async def on_message(message: discord.Message):
                 if not (m.get("role") == "user" and "gemini imagine" in m.get("content", "").lower())
             ]
 
-            # Collect Image Bytes
-            gemini_image_inputs = []
-            if image_urls:
-                import base64
-                for url in image_urls:
-                    # image_urls contains data URIs (data:image/png;base64,...) from earlier logic
-                    try:
-                        if url.startswith("data:image/"):
-                            header, encoded = url.split(",", 1)
-                            gemini_image_inputs.append(base64.b64decode(encoded))
-                    except Exception as e:
-                        logger.error(f"Failed to decode image data URI for Gemini: {e}")
-
             # Explicit Code Execution Trigger
             enable_code_execution = False
-            # Check if user said "gemini code <prompt>"
-            # 'clean_prompt' currently has "code <prompt>" if original was "gemini code <prompt>"
-            # because we stripped "gemini " earlier.
             if clean_prompt.lower().startswith("code "):
                 enable_code_execution = True
                 clean_prompt = clean_prompt[5:].strip() # Remove "code "
-            
-            # Append text attachments to the prompt
-            if text_content_to_append:
-                clean_prompt += f"\n\n{text_content_to_append}"
             
             # Status Tracking for Live Code Execution
             status_tracker = {"text": ""}
             
             def _live_code_summarizer():
                 return status_tracker["text"] or "Using Gemini 3..."
-
+            
             status_msg, response = await live_status_with_progress(
                 message,
                 action_label="Thinking (Gemini)",
                 emoji="✨",
-                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs, images=gemini_image_inputs, status_tracker=status_tracker, enable_code_execution=enable_code_execution), 
+                coro=asyncio.to_thread(generate_gemini_text, clean_prompt, context=context_msgs, extra_parts=gemini_parts, status_tracker=status_tracker, enable_code_execution=enable_code_execution), 
                 duration_estimate=6,
                 summarizer=_live_code_summarizer,
             )
