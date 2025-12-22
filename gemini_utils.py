@@ -271,6 +271,8 @@ def generate_gemini_text(
                         oldest_first=any(k in clean_prompt for k in ["first", "earliest", "start", "beginning"])
                     )
                     if found_text:
+                        rag_context = (
+                            f"\n\n[SYSTEM: MEMORY RECALL]"
                             f"\nThe user is asking about past events. Here is the relevant conversation history retrieved from the database:"
                             f"\n{found_text}\n"
                             f"IMPORTANT: If this retrieved context is insufficient to answer specific requests (e.g., specific quotes, older messages, or details not shown above), "
