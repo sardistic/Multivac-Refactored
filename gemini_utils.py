@@ -239,6 +239,10 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             for img_bytes in images:
                 current_parts.append(types.Part.from_bytes(data=img_bytes, mime_type="image/png"))
 
+        if enable_code_execution:
+            # Force/Encourage usage
+            current_parts.append(types.Part(text="\n(Important: Use the code_execution tool to solve this.)"))
+
         # Add current prompt content
         contents.append(types.Content(
             role="user",
@@ -277,6 +281,9 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         # Full text accumulator
         final_text = []
 
+        # Stream State
+        accumulated_code = ""
+
         # STREAMING REQUEST
         # We iterate over chunks to update status_tracker with code
         response_stream = client.models.generate_content_stream(
@@ -295,16 +302,26 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                      
                      # 2. Executable Code (The "Thinking" part)
                      if part.executable_code:
-                         code = part.executable_code.code
+                         code_chunk = part.executable_code.code
                          lang = part.executable_code.language.lower()
                          
-                         # Format block
-                         block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{lang}\n{code}\n> ```"
+                         accumulated_code += code_chunk
+                         
+                         # Format block for final output (we might want just the final block, but here we append?)
+                         # Actually for final text we want the full code once done? 
+                         # Stream provides chunks. We should append to final_text differently or reconstruct?
+                         # Providing "live" blocks to final text might be messy if chunks are small.
+                         # Better: Don't append to final_text yet?
+                         # Actually, standard behavior is to append. Discord messages are edited.
+                         
+                         block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{lang}\n{code_chunk}\n> ```"
                          final_text.append(block)
                          
-                         # Update shared status if provided (for Discord progress)
+                         # Update shared status for Progress Bar (Show last few lines)
                          if status_tracker is not None:
-                             status_tracker["text"] = f"Writing Code...\n```{lang}\n{code}\n```"
+                             # Show last 6 lines of code
+                             snippet = "\n".join(accumulated_code.splitlines()[-6:])
+                             status_tracker["text"] = f"Writing Code...\n```{lang}\n{snippet}\n```"
 
                      # 3. Execution Result
                      if part.code_execution_result:
@@ -317,7 +334,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
                          final_text.append(block)
                          
                          if status_tracker is not None:
-                             status_tracker["text"] = f"Executed Config: {outcome}\nOutput length: {len(output)}"
+                             status_tracker["text"] = f"Executed: {outcome}\nResult: {output[:50]}..."
 
         if final_text:
             return "".join(final_text)
