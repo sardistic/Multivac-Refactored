@@ -27,9 +27,9 @@ def _get_client():
 
 def _debug_env_once():
     # Helper to log environment details to debug 404/AttributeErrors
-    # naming underscore to imply internal use
-    if hasattr(_debug_env_once, "done"): return
-    _debug_env_once.done = True
+    # FORCED to always run for now until fixed
+    # if hasattr(_debug_env_once, "done"): return
+    # _debug_env_once.done = True
     
     try:
         if not SDK_AVAILABLE: return
@@ -44,6 +44,7 @@ def _debug_env_once():
         if client:
             # Try to list models
             try:
+                # Use standard list method
                 for m in client.models.list():
                     # Safely log what we find
                     methods = getattr(m, "supported_generation_methods", "unknown")
@@ -269,11 +270,11 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
 
     try:
         # Config for tools
-        # Trying specific version to resolve 404
-        model = "gemini-1.5-flash-002"
+        # Back to standard flash
+        model = "gemini-1.5-flash"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
-        # Trigger debug once
+        # Trigger debug always
         _debug_env_once()
 
         # Build contents from context + current prompt
@@ -454,6 +455,9 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         logger.warning(f"Gemini text generation returned no text in stream.")
 
     except Exception as e:
-        logger.exception(f"Gemini text generation failed: {e}")
+        logger.error(f"Gemini text generation failed: {e}")
+        # If we failed, try to list models again to be sure
+        _debug_env_once()
+        return None, []
 
     return None, []
