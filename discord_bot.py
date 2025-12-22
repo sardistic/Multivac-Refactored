@@ -715,7 +715,7 @@ async def on_message(message: discord.Message):
             status_tracker = {"text": ""}
             
             def _live_code_summarizer():
-                return status_tracker["text"] or "Using Gemini 3..."
+                return status_tracker["text"] or "Using Gemini 1.5 Flash..."
             
             status_msg, response = await live_status_with_progress(
                 message,
@@ -768,7 +768,7 @@ async def on_message(message: discord.Message):
                         content=response,
                         timestamp=_now_iso(),
                         reply_to_id=str(message.id),
-                        model="gemini-3-flash-preview"
+                        model="gemini-1.5-flash"
                     )
                 except Exception:
                     pass

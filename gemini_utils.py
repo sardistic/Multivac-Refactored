@@ -1,5 +1,6 @@
 import logging
 import base64
+import json
 from io import BytesIO
 from typing import Optional, List, Dict, Any, Tuple
 from config import GEMINI_API_KEY
@@ -234,7 +235,9 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         return None, []
 
     try:
-        model = "gemini-2.0-flash-exp"
+        # Config for tools
+        # We use gemini-1.5-flash for maximum tool-calling stability
+        model = "gemini-1.5-flash"
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
         # Build contents from context + current prompt
@@ -252,12 +255,10 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         
         # Add extra parts (images, text files, etc.)
         if extra_parts:
-            # extra_parts should be a list of types.Part
             current_parts.extend(extra_parts)
 
         if enable_code_execution:
-            # Force/Encourage usage
-            current_parts.append(types.Part(text="\n(Important: Use the code_execution tool to solve this.)"))
+            current_parts.append(types.Part(text="\n(Important: Use the code_execution tool if needed to solve this.)"))
 
         # Add current prompt content
         contents.append(types.Content(
@@ -265,38 +266,62 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             parts=current_parts
         ))
 
-        # Config for tools
+        # ---- Define Tools Manually to avoid SDK validation bugs ----
+        es_tool_spec = types.FunctionDeclaration(
+            name="search_elasticsearch_resource",
+            description="Query the internal Elasticsearch data store (Resources). Used to retrieve documents, archives, or logs not in current context.",
+            parameters=types.Schema(
+                type="OBJECT",
+                properties={
+                    "query_string": types.Schema(
+                        type="STRING", 
+                        description="Lucene query syntax, e.g. 'error AND service:auth'"
+                    ),
+                    "index": types.Schema(
+                        type="STRING", 
+                        description="ES index name. Default is 'discord_chat_memory'."
+                    ),
+                    "max_results": types.Schema(
+                        type="INTEGER", 
+                        description="Number of docs to return."
+                    )
+                },
+                required=["query_string"]
+            )
+        )
+
         tools_list = []
         
-        # 1. Custom Functions (Native AFC handles these if passed directly)
-        tools_list.append(search_elasticsearch_resource)
+        # 1. Add Custom Function via correct Tool wrapper
+        tools_list.append(types.Tool(function_declarations=[es_tool_spec]))
         
-        # 2. Code Execution (Built-in tool)
+        # 2. Add Code Execution (if enabled)
         if enable_code_execution:
             try:
+                # Some SDK versions use different naming for the Tool field
                 if hasattr(types, "ToolCodeExecution"):
                     tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
-                elif hasattr(types, "CodeExecution"):
+                else:
                     tools_list.append(types.Tool(code_execution=types.CodeExecution()))
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
         
-        # 3. Google Search (Built-in tool)
+        # 3. Add Google Search
         try:
              tools_list.append(types.Tool(google_search=types.GoogleSearch()))
         except Exception as e:
              logger.warning(f"Failed to init google_search tool: {e}")
 
         config = types.GenerateContentConfig(
-            response_modalities=["TEXT", "IMAGE"], # Explicitly allow IMAGE for code artifacts
+            response_modalities=["TEXT", "IMAGE"],
             system_instruction=(
                 "You are Multivac, a helpful AI assistant. "
-                "You have access to the recent conversation history provided in the context. "
-                "You can search your memory or other resources using the 'search_elasticsearch_resource' tool. "
-                "If a user asks about something older than the current context, use the tool. "
-                "If needed, use 'code_execution' for data analysis or file generation."
+                "You can search historical logs or memory using 'search_elasticsearch_resource'. "
+                "You can perform live computations or file generation using 'code_execution'. "
+                "You can search the live web using 'google_search'."
             ),
             tools=tools_list,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable_manual_calling=False),
             safety_settings=[
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
@@ -309,7 +334,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         final_text = []
         # Artifact accumulator
         generated_artifacts = [] # List[(bytes, mime_type)]
-
+        
         # Stream State
         accumulated_code_block = ""
         current_lang = "python" # default
@@ -317,13 +342,14 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
         # STREAMING REQUEST
         # We iterate over chunks to update status_tracker with code
         # And build the final text cleanly (merging code chunks)
-        response_stream = client.models.generate_content_stream(
-            model=model,
-            contents=contents,
-            config=config
-        )
-
-        for chunk in response_stream:
+        try:
+            response_stream = client.models.generate_content_stream(
+                model=model,
+                contents=contents,
+                config=config
+            )
+            
+            for chunk in response_stream:
              # Process each chunk
              if chunk.candidates:
                  for part in chunk.candidates[0].content.parts:
