@@ -1164,6 +1164,7 @@ async def on_message(message: discord.Message):
                 content=response or "",
                 timestamp=_now_iso(),
                 reply_to_id=str(message.id),
+                model="gpt-4o",  # Explicitly tag the model for consistent indexing
             )
         except Exception:
             pass
