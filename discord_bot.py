@@ -707,24 +707,40 @@ async def on_message(message: discord.Message):
                         units = "imperial" if "US" in loc.get("name", "") else "metric"
                         data = await get_weather_data(loc["lat"], loc["lon"], units=units)
                         
-                        # Format a nice string for the prompt
-                        # We use format_weather_response to get the narrative, then extract key bits
-                        # Actually simpler: just pull from data directly
+                        # Extract extra metrics
                         current = data.get("current", {})
-                        temp = current.get("main", {}).get("temp", "?")
+                        main = current.get("main", {})
+                        wind = current.get("wind", {})
+                        
+                        temp = main.get("temp", "?")
+                        feels_like = main.get("feels_like", "?")
+                        humidity = main.get("humidity", "?")
+                        wind_speed = wind.get("speed", "?")
                         cond = (current.get("weather") or [{}])[0].get("description", "unknown")
                         
-                        # Construct prompt - REFINED for data prominence and WIDESCREEN
+                        # Calculate local time
+                        import datetime
+                        tz_offset = current.get("timezone", 0) # seconds from UTC
+                        local_dt = datetime.datetime.utcnow() + datetime.timedelta(seconds=tz_offset)
+                        time_str = local_dt.strftime("%I:%M %p")
+                        
+                        # Construct prompt - ENRICHED with more data
                         widget_prompt = (
                             f"A professional, high-end 3D weather widget layout in a WIDESCREEN 16:9 cinematic format. "
+                            f"Current Local Time: {time_str}. \n"
                             f"THE PRIMARY FOCUS is the weather data: '{round(float(temp))}°' and '{loc['name']}' in HUGE, BOLD, HIGH-CONTRAST typography. "
-                            f"Condition: '{cond.capitalize()}' with a large, vibrant weather icon. "
-                            f"The data is prominently displayed on the left or center with extreme clarity. "
+                            f"Condition: '{cond.capitalize()}' with a large, vibrant weather icon. \n"
+                            f"ADDITIONAL DATA (clearly visible in the layout): \n"
+                            f"- Feels Like: {round(float(feels_like))}° \n"
+                            f"- Humidity: {humidity}% \n"
+                            f"- Wind: {wind_speed} {'mph' if units=='imperial' else 'm/s'} \n"
+                            f"- Local Time: {time_str} \n"
+                            f"The data is prominently displayed with modern, high-end typography (e.g., SF Pro or Inter). "
                             f"The background is a cinematic, expansive widescreen shot of {loc['name']} "
-                            f"reflecting current {cond} skies. "
+                            f"reflecting the current {cond} skies and { 'nighttime' if local_dt.hour < 6 or local_dt.hour > 18 else 'daytime' } light. "
                             f"Premium Apple/Glassmorphism UI design, clean wide layout, super crisp 8k text rendering."
                         )
-                        logger.info(f"Generating widescreen weather widget for {loc['name']}: {widget_prompt}")
+                        logger.info(f"Generating enriched weather widget: {widget_prompt}")
                         return await asyncio.to_thread(generate_gemini_image, widget_prompt, 1600, 900)
                     except Exception as e:
                         logger.error(f"Weather widget failed: {e}")
