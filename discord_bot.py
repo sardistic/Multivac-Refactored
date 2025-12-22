@@ -1126,6 +1126,19 @@ async def on_message(message: discord.Message):
                                 f"[END MEMORY RECALL]"
                             )
                         })
+                    else:
+                        # Found nothing, but user *asked* for history.
+                        # We must prime the model to NOT give up, but to try searching itself.
+                        msgs.append({
+                            "role": "system", 
+                            "content": (
+                                f"[SYSTEM: MEMORY RECALL]\n"
+                                f"Proactive database search returned NO direct matches for the user's specific query criteria (time range or keywords).\n"
+                                f"However, the user is explicitly asking for history.\n"
+                                f"CRITICAL: Do NOT just say 'I don't recall'. You MUST use the `search_history_for_context` tool now with broader or different terms (e.g., ignore time, or search just keywords) to find the answer.\n"
+                                f"[END MEMORY RECALL]"
+                            )
+                        })
                 except Exception as e:
                     logger.warning(f"Universal RAG search failed: {e}")
 

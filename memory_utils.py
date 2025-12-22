@@ -479,14 +479,16 @@ def _parse_relative_time_search(query: str) -> Optional[Dict[str, Any]]:
         # "2 months ago" -> probably means around that time, maybe +/- 3 days?
         # "2 minutes ago" -> +/- 30 seconds?
         
-        if "month" in unit or "year" in unit:
-            window = timedelta(days=5)
+        if "month" in unit:
+            window = timedelta(days=10)
+        elif "year" in unit:
+            window = timedelta(days=30)
         elif "week" in unit:
-             window = timedelta(days=2)
+             window = timedelta(days=4)
         elif "day" in unit:
-             window = timedelta(hours=12)
+             window = timedelta(days=1)
         else:
-             window = timedelta(minutes=5)
+             window = timedelta(minutes=15)
              
         start_ts = (target_time - window).isoformat()
         end_ts = (target_time + window).isoformat()
