@@ -564,6 +564,13 @@ async def on_message(message: discord.Message):
                 user_id=message.author.id,
                 limit_msgs=20 
             )
+            
+            # Filter out "gemini imagine" prompts from context to prevent confusion/hallucination
+            # (The model sometimes answers the previous imagine prompt instead of the current one)
+            context_msgs = [
+                m for m in context_msgs 
+                if not (m.get("role") == "user" and "gemini imagine" in m.get("content", "").lower())
+            ]
 
             # Collect Image Bytes
             gemini_image_inputs = []
