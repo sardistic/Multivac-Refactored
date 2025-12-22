@@ -50,8 +50,8 @@ from openai_utils import (
 
 # Optional features (your existing utilities)
 from stability_utils import handle_image_generation, edit_image_with_prompt
-from weather_utils import get_location_details, get_weather_data, handle_weather_request
-from stock_utils import handle_stock_command
+from gemini_utils import generate_gemini_image
+from weather_utils import get_location_details, get_weather_data, handle_weather_request, format_weather_response
 from url_utils import fetch_url_content, extract_main_text, reduce_text_length
 from progress import start_progress_bar
 from database_utils import save_message_expansion, get_message_expansion, set_message_expanded
@@ -688,6 +688,68 @@ async def on_message(message: discord.Message):
 
         # IMAGE GENERATION
         if intent == "generate_image":
+            # ---------------------------------------------------------
+            # SPECIAL: Weather Widget Generator
+            # "imagine weather <location>"
+            # ---------------------------------------------------------
+            weather_match = re.search(r"imagine\s+weather\s+(.*)", prompt, flags=re.IGNORECASE)
+            if weather_match:
+                loc_query = weather_match.group(1).strip()
+                if not loc_query:
+                    await status_msg.edit(content="❌ Please specify a location, e.g. `imagine weather Tokyo`.")
+                    return
+
+                async def _generate_weather_widget():
+                    # 1. Fetch Real-Time Data through weather_utils
+                    try:
+                        loc = await get_location_details(loc_query)
+                        # Default to metric for international flavor, or guess
+                        units = "imperial" if "US" in loc.get("name", "") else "metric"
+                        data = await get_weather_data(loc["lat"], loc["lon"], units=units)
+                        
+                        # Format a nice string for the prompt
+                        # We use format_weather_response to get the narrative, then extract key bits
+                        # Actually simpler: just pull from data directly
+                        current = data.get("current", {})
+                        temp = current.get("main", {}).get("temp", "?")
+                        cond = (current.get("weather") or [{}])[0].get("description", "unknown")
+                        
+                        # Construct prompt
+                        widget_prompt = (
+                            f"A futuristic, high-end 3D weather widget floating in mid-air. "
+                            f"Location: {loc['name']}. "
+                            f"Temperature: {temp}°{'F' if units=='imperial' else 'C'}. "
+                            f"Condition: {cond}. "
+                            f"The background is a beautiful, hyper-realistic, cinematic shot of {loc['name']} "
+                            f"reflecting the current weather ({cond}). "
+                            f"The widget displays the text '{loc['name']}', '{round(float(temp))}°', and '{cond.capitalize()}' clearly. "
+                            f"Glassmorphism style, UI design, 8k resolution, weather app interface."
+                        )
+                        logger.info(f"Generating weather widget for {loc['name']}: {widget_prompt}")
+                        return await generate_gemini_image(widget_prompt)
+                    except Exception as e:
+                        logger.error(f"Weather widget failed: {e}")
+                        return None
+
+                status_msg, image_data = await live_status_with_progress(
+                    message,
+                    action_label="Building Widget",
+                    emoji="🌦️",
+                    coro=_generate_weather_widget(),
+                    duration_estimate=15,
+                    summarizer=(lambda: "Fetching live data... Rendering widget...") if STREAM_OK else None,
+                )
+                
+                if image_data:
+                    import io
+                    f = io.BytesIO(image_data)
+                    await status_msg.reply(file=discord.File(f, filename="weather_widget.png"))
+                    await status_msg.edit(content=f"✅ Weather Widget for **{loc_query}**")
+                else:
+                    await status_msg.edit(content="❌ Failed to generate weather widget.")
+                return
+            
+            # Standard Image Gen
             status_msg, image_data = await live_status_with_progress(
                 message,
                 action_label="Generating",

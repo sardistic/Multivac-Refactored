@@ -1,7 +1,7 @@
 import logging
 import base64
 from io import BytesIO
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from config import GEMINI_API_KEY
 
 try:
