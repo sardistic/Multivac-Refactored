@@ -266,6 +266,21 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             
             if code_tool:
                 tools_list = [code_tool]
+        
+        # Add Google Search Tool (always available for grounding)
+        try:
+             # Create the search tool configuration
+             search_tool = types.Tool(
+                 google_search_retrieval=types.GoogleSearchRetrieval(
+                     dynamic_retrieval_config=types.DynamicRetrievalConfig(
+                         mode=types.DynamicRetrievalConfigMode.MODE_DYNAMIC,
+                         dynamic_threshold=0.7, # Default confidence threshold
+                     )
+                 )
+             )
+             tools_list.append(search_tool)
+        except Exception as e:
+             logger.warning(f"Failed to init google_search_retrieval tool: {e}")
 
         config = types.GenerateContentConfig(
             response_modalities=["TEXT", "IMAGE"], # Explicitly allow IMAGE for code artifacts
