@@ -265,13 +265,13 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             parts=current_parts
         ))
 
-        # Config for code execution
+        # Config for tools
         tools_list = []
         
-        # 1. Custom Functions
-        tools_list.append(types.Tool(function_declarations=[search_elasticsearch_resource]))
+        # 1. Custom Functions (Native AFC handles these if passed directly)
+        tools_list.append(search_elasticsearch_resource)
         
-        # 2. Code Execution
+        # 2. Code Execution (Built-in tool)
         if enable_code_execution:
             try:
                 if hasattr(types, "ToolCodeExecution"):
@@ -281,7 +281,7 @@ def generate_gemini_text(prompt: str, context: Optional[List[Dict[str, str]]] = 
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
         
-        # 3. Google Search
+        # 3. Google Search (Built-in tool)
         try:
              tools_list.append(types.Tool(google_search=types.GoogleSearch()))
         except Exception as e:
