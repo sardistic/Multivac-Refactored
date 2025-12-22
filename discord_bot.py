@@ -726,7 +726,7 @@ async def on_message(message: discord.Message):
                             f"Glassmorphism style, UI design, 8k resolution, weather app interface."
                         )
                         logger.info(f"Generating weather widget for {loc['name']}: {widget_prompt}")
-                        return await generate_gemini_image(widget_prompt)
+                        return await asyncio.to_thread(generate_gemini_image, widget_prompt)
                     except Exception as e:
                         logger.error(f"Weather widget failed: {e}")
                         return None
