@@ -715,8 +715,17 @@ async def on_message(message: discord.Message):
                         temp = main.get("temp", "?")
                         feels_like = main.get("feels_like", "?")
                         humidity = main.get("humidity", "?")
+                        temp_min = main.get("temp_min", "?")
+                        temp_max = main.get("temp_max", "?")
                         wind_speed = wind.get("speed", "?")
                         cond = (current.get("weather") or [{}])[0].get("description", "unknown")
+                        
+                        forecast_cur = data.get("forecast", {}).get("current", {})
+                        uvi = forecast_cur.get("uvi", "?")
+                        
+                        sys_data = current.get("sys", {})
+                        sunrise_raw = sys_data.get("sunrise")
+                        sunset_raw = sys_data.get("sunset")
                         
                         # Calculate local time
                         import datetime
@@ -724,21 +733,24 @@ async def on_message(message: discord.Message):
                         local_dt = datetime.datetime.utcnow() + datetime.timedelta(seconds=tz_offset)
                         time_str = local_dt.strftime("%I:%M %p")
                         
-                        # Construct prompt - ENRICHED with more data
+                        sr_str = datetime.datetime.utcfromtimestamp(sunrise_raw + tz_offset).strftime("%I:%M %p") if sunrise_raw else "?"
+                        ss_str = datetime.datetime.utcfromtimestamp(sunset_raw + tz_offset).strftime("%I:%M %p") if sunset_raw else "?"
+                        
+                        # Construct prompt - DEEP ENRICHMENT
                         widget_prompt = (
-                            f"A professional, high-end 3D weather widget layout in a WIDESCREEN 16:9 cinematic format. "
+                            f"A professional, data-maximalist 3D weather dashboard layout in a WIDESCREEN 16:9 cinematic format. "
                             f"Current Local Time: {time_str}. \n"
-                            f"THE PRIMARY FOCUS is the weather data: '{round(float(temp))}°' and '{loc['name']}' in HUGE, BOLD, HIGH-CONTRAST typography. "
-                            f"Condition: '{cond.capitalize()}' with a large, vibrant weather icon. \n"
-                            f"ADDITIONAL DATA (clearly visible in the layout): \n"
+                            f"THE PRIMARY FOCUS is the main weather block: '{round(float(temp))}°', '{loc['name']}', and '{cond.capitalize()}' in HUGE, BOLD, HIGH-CONTRAST typography. \n"
+                            f"RICH DATA GRID SECTION (extremely clear and legible): \n"
+                            f"- Low: {round(float(temp_min))}° | High: {round(float(temp_max))}° \n"
                             f"- Feels Like: {round(float(feels_like))}° \n"
-                            f"- Humidity: {humidity}% \n"
+                            f"- Humidity: {humidity}% | UV Index: {uvi} \n"
                             f"- Wind: {wind_speed} {'mph' if units=='imperial' else 'm/s'} \n"
-                            f"- Local Time: {time_str} \n"
-                            f"The data is prominently displayed with modern, high-end typography (e.g., SF Pro or Inter). "
+                            f"- Sunrise: {sr_str} | Sunset: {ss_str} \n"
+                            f"The data is organized into a clean, modern grid overlaying the background. "
                             f"The background is a cinematic, expansive widescreen shot of {loc['name']} "
-                            f"reflecting the current {cond} skies and { 'nighttime' if local_dt.hour < 6 or local_dt.hour > 18 else 'daytime' } light. "
-                            f"Premium Apple/Glassmorphism UI design, clean wide layout, super crisp 8k text rendering."
+                            f"reflecting the current {cond} skies and { 'nighttime' if local_dt.hour < 6 or local_dt.hour > 18 else 'daytime' } lighting. "
+                            f"Premium Apple Health / iOS 17 Weather app aesthetic, glassmorphism, 8k crisp text rendering."
                         )
                         logger.info(f"Generating enriched weather widget: {widget_prompt}")
                         return await asyncio.to_thread(generate_gemini_image, widget_prompt, 1600, 900)
