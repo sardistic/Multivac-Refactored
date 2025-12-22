@@ -14,7 +14,8 @@ from __future__ import annotations
 import os
 import sys
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from elasticsearch import Elasticsearch  # type: ignore
@@ -448,6 +449,52 @@ def fetch_recent_page(
     next_after = hits[-1].get("sort") if hits else None
     return (docs, next_after)
 
+def _parse_relative_time_search(query: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse queries like "2 months ago", "yesterday", "last week" into an ES range query.
+    Returns a dict like {"gte": "now-2d", "lte": "now-1d"} or similar.
+    """
+    q = query.lower()
+    now = datetime.now(timezone.utc)
+    
+    # regex for "X [unit] ago"
+    match = re.search(r'(\d+)\s+(sec|second|min|minute|hour|hr|day|week|month|year)s?\s+ago', q)
+    if match:
+        val = int(match.group(1))
+        unit = match.group(2)
+        
+        # Determine delta
+        if "sec" in unit: delta = timedelta(seconds=val)
+        elif "min" in unit: delta = timedelta(minutes=val)
+        elif "hour" in unit or "hr" in unit: delta = timedelta(hours=val)
+        elif "day" in unit: delta = timedelta(days=val)
+        elif "week" in unit: delta = timedelta(weeks=val)
+        elif "month" in unit: delta = timedelta(days=val * 30) # approx
+        elif "year" in unit: delta = timedelta(days=val * 365) # approx
+        else: return None
+        
+        target_time = now - delta
+        
+        # Define a window. if unit is large, window is larger.
+        # "2 months ago" -> probably means around that time, maybe +/- 3 days?
+        # "2 minutes ago" -> +/- 30 seconds?
+        
+        if "month" in unit or "year" in unit:
+            window = timedelta(days=5)
+        elif "week" in unit:
+             window = timedelta(days=2)
+        elif "day" in unit:
+             window = timedelta(hours=12)
+        else:
+             window = timedelta(minutes=5)
+             
+        start_ts = (target_time - window).isoformat()
+        end_ts = (target_time + window).isoformat()
+        
+        return {"gte": start_ts, "lte": end_ts}
+
+    return None
+
 def search_history_for_context(
     guild_id: str | int, 
     channel_id: str | int, 
@@ -462,39 +509,69 @@ def search_history_for_context(
     """
     ckey = conversation_key(guild_id, channel_id, user_id)
     
-    # Simple query: match content AND conversation
-    # Start with basic bool/filter
-    query = {
-        "bool": {
-            "filter": [{"term": {"conversation_key.keyword": ckey}}],
-            "must": []
+    # Check for "random" intent first
+    if "random" in query_text.lower():
+        # Use function_score with random_score
+        query = {
+            "function_score": {
+                "query": { 
+                    "bool": { 
+                        "filter": [{"term": {"conversation_key.keyword": ckey}}]
+                    } 
+                },
+                "functions": [
+                    {"random_score": {}}
+                ],
+                "boost_mode": "replace"
+            }
         }
-    }
-    
-    # If query_text is specific, add match. 
-    # If it's generic ("history", "first"), we might just rely on sort.
-    # But usually we want to find *relevant* history.
-    # For "first thing i said", we want oldest messages. Sorting handles that.
-    # We won't filter by content if the query implies "everything/start".
-    
-    # Heuristic: If query implies specific content search, add 'match'.
-    # Otherwise just return sorted list.
-    skip_content_filter = any(k in query_text.lower() for k in ["first message", "first thing", "history", "beginning", "start"])
-    
-    if not skip_content_filter and query_text.strip():
-        # Clean query text of trigger words
-        cleaned = query_text.replace("search", "").replace("history", "").strip()
-        if cleaned:
-             query["bool"]["must"].append({"match": {"content": cleaned}})
-    
-    sort_order = "asc" if oldest_first else "desc"
-    
-    resp = _search_raw(
-        query,
-        size=limit,
-        source=["role", "content", "timestamp"],
-        sort=[{"timestamp": {"order": sort_order}}]
-    )
+        # No sort order (uses score)
+        resp = _search_raw(
+            query,
+            size=limit,
+            source=["role", "content", "timestamp"],
+            sort=None 
+        )
+    else:
+        # Check for relative time queries (e.g. "2 months ago")
+        time_range = _parse_relative_time_search(query_text)
+        
+        # Standard logic
+        query = {
+            "bool": {
+                "filter": [{"term": {"conversation_key.keyword": ckey}}],
+                "must": []
+            }
+        }
+        
+        if time_range:
+             # Apply range filter
+             query["bool"]["filter"].append({"range": {"timestamp": time_range}})
+             # If time is specified, we likely don't need content text match unless specifically asked.
+             # But "entry for 2 months ago" -> "entry" is generic.
+             # We should probably clear the content match if it was just time-related words.
+             # For now, let's just NOT add the content match if we found a time range, 
+             # unless there's OTHER text left.
+             
+             # Remove time phrases from query to see if there's other text
+             # (Simple approach: just rely on the range and maybe loose match)
+             pass
+        else:
+            skip_content_filter = any(k in query_text.lower() for k in ["first message", "first thing", "history", "beginning", "start"])
+            
+            if not skip_content_filter and query_text.strip():
+                # Clean query text of trigger words
+                cleaned = query_text.replace("search", "").replace("history", "").strip()
+                if cleaned:
+                     query["bool"]["must"].append({"match": {"content": cleaned}})
+        
+        sort_order = "asc" if oldest_first else "desc"
+        resp = _search_raw(
+            query,
+            size=limit,
+            source=["role", "content", "timestamp"],
+            sort=[{"timestamp": {"order": sort_order}}]
+        )
     
     hits = resp.get("hits", {}).get("hits", [])
     if not hits:
