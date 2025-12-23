@@ -799,15 +799,34 @@ async def on_message(message: discord.Message):
 
                 if text_resp:
                     if is_test_mode:
-                        # Force code block for testing, bypass expand/collapse
-                        # We truncate to 1990 chars to roughly fit in 2000 limit with fences
-                        code_content = f"```\n{text_resp[:1990]}\n```"
-                        try:
-                            await status_msg.edit(content=code_content)
-                            if files_to_send:
-                                await status_msg.reply(files=files_to_send)
-                        except Exception as e:
-                             await status_msg.edit(content=f"❌ Test mode failed: {e}")
+                        # Check size for file embedding logic (similar to main bot handling)
+                        if len(text_resp) > 1900:
+                             import io
+                             try:
+                                 f_text = io.BytesIO(text_resp.encode("utf-8"))
+                                 text_file = discord.File(f_text, filename="response.md")
+                                 
+                                 # Edit status to show we are done but sent a file
+                                 await status_msg.edit(content="⚠️ **Test Result Too Long** -> Sent as file `response.md`")
+                                 
+                                 # Setup files list - append text file to any other artifacts
+                                 all_files = [text_file]
+                                 if files_to_send:
+                                     all_files.extend(files_to_send)
+                                 
+                                 await status_msg.reply(files=all_files)
+                             except Exception as e:
+                                 await status_msg.edit(content=f"❌ Test mode file send failed: {e}")
+                        else:
+                            # Force code block for testing, bypass expand/collapse
+                            # We truncate to 1990 chars to roughly fit in 2000 limit with fences
+                            code_content = f"```\n{text_resp[:1990]}\n```"
+                            try:
+                                await status_msg.edit(content=code_content)
+                                if files_to_send:
+                                    await status_msg.reply(files=files_to_send)
+                            except Exception as e:
+                                 await status_msg.edit(content=f"❌ Test mode failed: {e}")
                     else:
                         # Pass text AND files to the helper so they stay attached even if text becomes a file
                         await send_or_edit_with_truncation(text_resp, target_msg=status_msg, extra_files=files_to_send)
