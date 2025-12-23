@@ -58,6 +58,7 @@ FINNHUB_API_TOKEN       = get_metadata("FINNHUB_API_TOKEN")
 GOOGLE_API_KEY          = get_metadata("GOOGLE_API_KEY")     # <-- required by web_search
 GOOGLE_CSE_ID           = get_metadata("GOOGLE_CSE_ID")      # <-- required by web_search
 GEMINI_API_KEY          = get_metadata("GEMINI_API_KEY")     # <-- for Gemini image gen
+ANTHROPIC_API_KEY       = get_metadata("ANTHROPIC_API_KEY")  # <-- for Claude
 
 # Optional toggle for Responses API
 OPENAI_USE_RESPONSES    = _truthy(get_metadata("OPENAI_USE_RESPONSES", "false"))
