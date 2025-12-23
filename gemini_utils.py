@@ -452,8 +452,10 @@ def generate_gemini_text(
         
         for chunk in response_stream:
             # Process each chunk
+            logger.info(f"Chunk received: candidates={len(chunk.candidates) if chunk.candidates else 0}")
             if chunk.candidates:
                 for part in chunk.candidates[0].content.parts:
+                    logger.info(f"Part details: text={bool(part.text)}, func={bool(part.function_call)}, code={bool(part.executable_code)}, result={bool(part.code_execution_result)}")
                     # 1. Text Parts
                     if part.text:
                         # If we had accumulated code, flush it first
@@ -507,6 +509,7 @@ def generate_gemini_text(
                                 final_text.append(f"🛠️ `[Tool Call: {part.function_call.name}({arg_str})]`")
                         
                         # 4. Execution Result
+                        # 4. Execution Result
                         if part.code_execution_result:
                             # Flush any accumulated code first
                             if accumulated_code_block:
@@ -514,16 +517,16 @@ def generate_gemini_text(
                                 final_text.append(block)
                                 accumulated_code_block = ""
 
-                        outcome = part.code_execution_result.outcome_
-                        output = part.code_execution_result.output.strip()
-                        icon = "✅" if outcome == "OUTCOME_OK" else "❌"
-                        
-                        # Format block
-                        block = f"> {icon} **Result**\n> ```text\n{output}\n> ```\n"
-                        final_text.append(block)
-                        
-                        if status_tracker is not None:
-                            status_tracker["text"] = f"Executed: {outcome}\nResult: {output[:50]}..."
+                            outcome = part.code_execution_result.outcome_
+                            output = part.code_execution_result.output.strip()
+                            icon = "✅" if outcome == "OUTCOME_OK" else "❌"
+                            
+                            # Format block
+                            block = f"> {icon} **Result**\n> ```text\n{output}\n> ```\n"
+                            final_text.append(block)
+                            
+                            if status_tracker is not None:
+                                status_tracker["text"] = f"Executed: {outcome}\nResult: {output[:50]}..."
         
         # Flush any remaining code at end of stream
         if accumulated_code_block:
