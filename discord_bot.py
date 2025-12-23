@@ -717,6 +717,9 @@ async def on_message(message: discord.Message):
             # Strip 'gemini' prefix if present to clean up prompt
             clean_prompt = re.sub(r"^gemini\s*", "", prompt, flags=re.IGNORECASE).strip()
             
+            # Special Test Mode: "gemini test" -> Force code block output, bypass pagination UI
+            is_test_mode = (clean_prompt.lower() == "test")
+            
             # Fetch Memory used by Gemini
             context_msgs = build_message_window(
                 guild_id=message.guild.id if message.guild else "DM",
@@ -790,8 +793,19 @@ async def on_message(message: discord.Message):
                         files_to_send.append(discord.File(f, filename=f"artifact_{i}{ext}"))
 
                 if text_resp:
-                    # Pass text AND files to the helper so they stay attached even if text becomes a file
-                    await send_or_edit_with_truncation(text_resp, target_msg=status_msg, extra_files=files_to_send)
+                    if is_test_mode:
+                        # Force code block for testing, bypass expand/collapse
+                        # We truncate to 1990 chars to roughly fit in 2000 limit with fences
+                        code_content = f"```\n{text_resp[:1990]}\n```"
+                        try:
+                            await status_msg.edit(content=code_content)
+                            if files_to_send:
+                                await status_msg.reply(files=files_to_send)
+                        except Exception as e:
+                             await status_msg.edit(content=f"❌ Test mode failed: {e}")
+                    else:
+                        # Pass text AND files to the helper so they stay attached even if text becomes a file
+                        await send_or_edit_with_truncation(text_resp, target_msg=status_msg, extra_files=files_to_send)
                 elif files_to_send:
                     # If no text but we have files, send them
                     await status_msg.reply(files=files_to_send)
