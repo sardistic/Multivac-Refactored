@@ -409,10 +409,12 @@ def generate_gemini_text(
         
         if any(t.code_execution for t in tools_list): # Check for Code Execution
              sys_instructions.append(
-                "You can perform live computations or file generation using 'code_execution'. "
-                "IMPORTANT: The code execution sandbox does NOT have internet access or 'pydub'. "
-                "For audio generation, you MUST use 'scipy.io.wavfile' and 'numpy'. "
-                "For plotting, use 'matplotlib' or 'seaborn'."
+                "You can perform live computations, file generation, or data processing using 'code_execution'. "
+                "IMPORTANT: "
+                "1. For generating large lists, long text, or detailed data, use 'code_execution' and print() the output. This is preferred over 'answer_general_knowledge' for long content. "
+                "2. The sandbox does NOT have internet access or 'pydub'. "
+                "3. For audio, use 'scipy.io.wavfile' and 'numpy'. "
+                "4. For plotting, use 'matplotlib' or 'seaborn'."
             )
             
         if any(t.google_search for t in tools_list): # Check for Google Search
