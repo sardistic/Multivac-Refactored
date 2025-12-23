@@ -34,25 +34,59 @@ async def generate_claude_response(
     client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 
     # 1. Extract System Prompt(s)
-    # OpenAI/Gemini logic often puts system prompts in the messages list. 
-    # Claude requires them as a top-level `system` parameter.
-    system_prompt = ""
-    filtered_messages = []
+    system_prompt_parts = []
+    raw_messages = []
     
     for msg in messages:
         if msg["role"] == "system":
-            system_prompt += msg["content"] + "\n\n"
+            if msg.get("content"):
+                system_prompt_parts.append(msg["content"])
         else:
-            filtered_messages.append(msg)
+            raw_messages.append(msg)
     
-    system_prompt = system_prompt.strip()
+    system_prompt = "\n\n".join(system_prompt_parts).strip()
+
+    # 2. Sanitize Messages (Claude Strict Rules)
+    # - No empty content
+    # - Alternating User/Assistant roles
+    # - Must start with User
+    
+    sanitized_messages = []
+    
+    for msg in raw_messages:
+        content = (msg.get("content") or "").strip()
+        role = msg.get("role")
+        
+        if not content:
+            continue
+            
+        if not sanitized_messages:
+            # First message must be user
+            if role == "user":
+                sanitized_messages.append({"role": "user", "content": content})
+            else:
+                # If first is assistant, we skip it OR convert it? 
+                # Better to skip to avoid confusion, or prepend a dummy user message?
+                # Let's skip leading assistant messages for now.
+                pass
+        else:
+            prev_role = sanitized_messages[-1]["role"]
+            if role == prev_role:
+                # Merge with previous
+                sanitized_messages[-1]["content"] += f"\n\n{content}"
+            else:
+                sanitized_messages.append({"role": role, "content": content})
+
+    # Fallback if everything was filtered out
+    if not sanitized_messages:
+        sanitized_messages.append({"role": "user", "content": "Hello."})
 
     try:
-        # 2. Call API
+        # 3. Call API
         kwargs = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": filtered_messages,
+            "messages": sanitized_messages,
             "temperature": temperature,
         }
         
@@ -60,11 +94,10 @@ async def generate_claude_response(
             kwargs["system"] = system_prompt
 
         # TODO: Add tool support when needed. 
-        # For now, we are text-only to match the basic integration plan.
         
         response = await client.messages.create(**kwargs)
         
-        # 3. Extract Text
+        # 4. Extract Text
         content_block = response.content[0]
         if content_block.type == "text":
             return content_block.text
