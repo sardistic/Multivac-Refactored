@@ -391,19 +391,26 @@ def generate_gemini_text(
                      tools_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
                 else:
                      logger.warning("CodeExecution enabled but ToolCodeExecution type missing.")
+                
+                # If code is enabled, we MUST NOT add functions in v1beta
+                should_add_functions = False 
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
 
+        if should_add_functions:
+            # Enable Custom Functions (ES + General Knowledge) ONLY if Code Execution didn't take unrelated precedence
+            tools_list.append(types.Tool(function_declarations=[es_tool_spec, general_knowledge_tool]))
+        
         # 3. Build Dynamic System Instruction based on ENABLED tools
         sys_instructions = [
             "You are Multivac, a helpful AI assistant.",
-            "You have access to tools. You MUST use a tool to respond.",
-            "If the user's request requires general knowledge, chit-chat, or creative writing (and does NOT need history or code execution), you MUST use the 'answer_general_knowledge' tool."
+            "You have access to tools. You MUST use a tool to respond."
         ]
         
         # Only mention tools that are actually in the list to avoid model confusion/refusal
         if any(t.function_declarations for t in tools_list): # Check for ES tool
              sys_instructions.append(
+                "If the user's request requires general knowledge, chit-chat, or creative writing (and does NOT need history or code execution), you MUST use the 'answer_general_knowledge' tool. "
                 "You can search historical logs or memory using 'search_elasticsearch_resource'. "
                 "IMPORTANT: If the user asks about 'history', 'past messages', 'first message', 'earliest interaction', or specific past details not in your current context, you MUST use 'search_elasticsearch_resource' to find the answer."
             )
@@ -412,7 +419,7 @@ def generate_gemini_text(
              sys_instructions.append(
                 "You can perform live computations, file generation, or data processing using 'code_execution'. "
                 "IMPORTANT: "
-                "1. For generating large lists, long text, or detailed data, use 'code_execution' and print() the output. This is preferred over 'answer_general_knowledge' for long content. "
+                "1. You do NOT have a general knowledge tool. For general questions, lists, or text generation, use 'code_execution' to PRINT the answer. "
                 "2. The sandbox does NOT have internet access or 'pydub'. "
                 "3. For audio, use 'scipy.io.wavfile' and 'numpy'. "
                 "4. For plotting, use 'matplotlib' or 'seaborn'."
