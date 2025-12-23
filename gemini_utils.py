@@ -498,20 +498,11 @@ def generate_gemini_text(
                         
                         # 4. Execution Result
                         if part.code_execution_result:
-                        # Flush any accumulated code first
-                        if accumulated_code_block:
-                            block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
-                            final_text.append(block)
-                            accumulated_code_block = ""
-                            
-                        # Handle the "Answer Tool" execution (Dummy tool for strict models)
-                        if part.function_call and part.function_call.name == "answer_general_knowledge":
-                            args = part.function_call.args
-                            if args and "answer" in args:
-                                answer_text = args["answer"]
-                                final_text.append(answer_text)
-                                # Log it so we know it worked
-                                logger.info("Used answer_general_knowledge tool successfully.")
+                            # Flush any accumulated code first
+                            if accumulated_code_block:
+                                block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
+                                final_text.append(block)
+                                accumulated_code_block = ""
 
                         outcome = part.code_execution_result.outcome_
                         output = part.code_execution_result.output.strip()
