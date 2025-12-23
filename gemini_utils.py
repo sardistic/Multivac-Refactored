@@ -379,10 +379,7 @@ def generate_gemini_text(
             except Exception as e:
                  logger.warning(f"Failed to init google_search tool: {e}")
         
-        if should_add_functions:
-            # Enable Custom Functions (ES + General Knowledge)
-            # This ensures "history" and "general knowledge" queries always work unless searching
-            tools_list.append(types.Tool(function_declarations=[es_tool_spec, general_knowledge_tool]))
+
         
         # 2. Add Code Execution (if enabled) - logic remains same, strictly prioritized
         if enable_code_execution:
