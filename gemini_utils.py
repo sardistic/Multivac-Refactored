@@ -379,13 +379,18 @@ def generate_gemini_text(
                 logger.warning(f"Failed to init code_execution tool: {e}")
 
         # 3. Build Dynamic System Instruction based on ENABLED tools
-        sys_instructions = ["You are Multivac, a helpful AI assistant."]
+        # 3. Build Dynamic System Instruction based on ENABLED tools
+        sys_instructions = [
+            "You are Multivac, a helpful AI assistant.",
+            "You have access to the following tools, but you are NOT limited to them.",
+            "For general knowledge, chit-chat, creative writing, or tasks where no tool is applicable, you MUST answer DIRECTLY using your internal training data."
+        ]
         
         # Only mention tools that are actually in the list to avoid model confusion/refusal
         if any(t.function_declarations for t in tools_list): # Check for ES tool
              sys_instructions.append(
                 "You can search historical logs or memory using 'search_elasticsearch_resource'. "
-                "IMPORTANT: If the user asks about 'history', 'past messages', 'first message', 'earliest interaction', or specific past details not in your current context, you MUST use 'search_elasticsearch_resource' to find the answer. Do not guess."
+                "IMPORTANT: If the user asks about 'history', 'past messages', 'first message', 'earliest interaction', or specific past details not in your current context, you MUST use 'search_elasticsearch_resource' to find the answer."
             )
         
         if any(t.code_execution for t in tools_list): # Check for Code Execution
@@ -399,10 +404,6 @@ def generate_gemini_text(
         if any(t.google_search for t in tools_list): # Check for Google Search
              sys_instructions.append("You can search the live web using 'google_search'.")
 
-        # CRITICAL: Tell the model it can allow internal knowledge
-        sys_instructions.append(
-            "For all other queries (general knowledge, chit-chat, creative writing), answer DIRECTLY using your internal training data. You do NOT need to use a tool."
-        )
 
         config = types.GenerateContentConfig(
             # response_modalities set to None/Default for maximum stability with v1beta
