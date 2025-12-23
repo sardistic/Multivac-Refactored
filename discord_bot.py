@@ -56,6 +56,7 @@ from weather_utils import get_location_details, get_weather_data, handle_weather
 from url_utils import fetch_url_content, extract_main_text, reduce_text_length
 from progress import start_progress_bar
 from database_utils import save_message_expansion, get_message_expansion, set_message_expanded
+from claude_utils import generate_claude_response, ANTHROPIC_API_KEY
 
 # NEW: direct search fast-path (kept, but now properly gated)
 try:
@@ -89,6 +90,7 @@ logger.info(
     "Google CSE keys: GOOGLE_API_KEY=%s, GOOGLE_CSE_ID=%s",
     _redact(GOOGLE_API_KEY), _redact(GOOGLE_CSE_ID)
 )
+logger.info(f"Anthropic Key: ANTHROPIC_API_KEY={_redact(ANTHROPIC_API_KEY)}")
 
 # ---- Discord ----
 intents = discord.Intents.default()
@@ -709,6 +711,70 @@ async def on_message(message: discord.Message):
             )
             if response:
                 await send_or_edit_with_truncation(response, channel=message.channel, reply_to=message)
+            return
+
+        # CLAUDE CHAT
+        if intent == "claude_chat":
+            # Strip 'claude' prefix
+            clean_prompt = re.sub(r"^(claude|hey claude)\s*", "", prompt, flags=re.IGNORECASE).strip()
+            
+            # Fetch Context (same logic as Gemini)
+            context_msgs = build_message_window(
+                guild_id=message.guild.id if message.guild else "DM",
+                channel_id=message.channel.id,
+                user_id=message.author.id,
+                limit_msgs=20 
+            )
+            # Filter out "imagine" noise
+            context_msgs = [
+                m for m in context_msgs 
+                if not (m.get("role") == "user" and "gemini imagine" in m.get("content", "").lower())
+            ]
+            
+            # Format context for Claude (list of dicts)
+            # We need to ensure alternating user/assistant roles if possible, or Claude might complain?
+            # Our `build_message_window` returns list of dicts {role, content}.
+            # But we must append the current user prompt at the end.
+            
+            claude_messages = []
+            # Add system prompt as a fake system message (wrapper handles extraction)
+            claude_messages.append({"role": "system", "content": "You are Claude, a helpful AI assistant."})
+            
+            # Add history
+            claude_messages.extend(context_msgs)
+            
+            # Add current prompt
+            claude_messages.append({"role": "user", "content": clean_prompt})
+            
+            status_msg, response = await live_status_with_progress(
+                message,
+                action_label="Thinking (Claude)",
+                emoji="🧠",
+                coro=generate_claude_response(claude_messages),
+                duration_estimate=5,
+                summarizer=(lambda: "Queries Anthropic API...") if STREAM_OK else None,
+            )
+            
+            if response:
+                await send_or_edit_with_truncation(response, target_msg=status_msg)
+                
+                # Index response
+                try:
+                    index_message(
+                        message_id=str(status_msg.id),
+                        guild_id=str(message.guild.id) if message.guild else "DM",
+                        channel_id=str(message.channel.id),
+                        user_id=str(message.author.id),
+                        role="assistant",
+                        content=response,
+                        timestamp=_now_iso(),
+                        reply_to_id=str(message.id),
+                        model="claude-3-5-sonnet"
+                    )
+                except Exception:
+                    pass
+            else:
+                 await status_msg.edit(content="❌ Claude returned no response.")
             return
 
         # GEMINI CHAT

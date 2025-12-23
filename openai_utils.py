@@ -69,6 +69,7 @@ _INTENT_SYSTEM = (
     "- 'get_weather'\n"
     "- 'get_stock'\n"
     "- 'gemini_chat'\n"
+    "- 'claude_chat'\n"
     "- 'chat'\n\n"
     "Rules:\n"
     "- If message starts with \"imagine\", \"generate\", \"draw\", \"create\", \"paint\" → 'generate_image'.\n"
@@ -79,6 +80,7 @@ _INTENT_SYSTEM = (
     "- If they ask to describe an image → 'describe_image'.\n"
     "- Stock words or 'stock <TICKER>' → 'get_stock'.\n"
     "- If message starts with 'gemini' and is NOT image generation/editing → 'gemini_chat'.\n"
+    "- If message starts with 'claude' or user explicitly asks for 'Claude' → 'claude_chat'.\n"
     "- Else → 'chat'.\n\n"
     "IMPORTANT: Output ONLY ONE label."
 )
@@ -101,7 +103,7 @@ async def classify_intent(text: str) -> str:
         label = re.sub(r"[^a-z_]", "", label)
         return label if label in {
             "edit_image", "generate_image", "summarize_url",
-            "describe_image", "get_weather", "get_stock", "gemini_chat", "chat"
+            "describe_image", "get_weather", "get_stock", "gemini_chat", "claude_chat", "chat"
         } else "chat"
     except Exception as e:
         logging.warning(f"[intent] fallback to chat due to: {e}")
