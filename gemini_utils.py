@@ -488,45 +488,43 @@ def generate_gemini_text(
                                 snippet = "..." 
                             status_tracker["text"] = f"Writing Code...\n```{current_lang}\n{snippet}\n```"
 
-                    # 4. Execution Result
-                        # Handle Function Calls (ANY)
-                        if part.function_call:
-                            logger.info(f"Received function_call: {part.function_call.name} args={part.function_call.args}")
-                            
-                            if part.function_call.name == "answer_general_knowledge":
-                                args = part.function_call.args
-                                if args and "answer" in args:
-                                    answer_text = args["answer"]
-                                    final_text.append(answer_text)
-                                    logger.info("Used answer_general_knowledge tool successfully.")
-                            else:
-                                # Fallback: Show that a tool was called so response isn't empty
-                                # This helps debug if it's trying to call ES or Google Search but we aren't handling it
-                                try:
-                                    arg_str = str(part.function_call.args)
-                                except:
-                                    arg_str = "{...}"
-                                final_text.append(f"🛠️ `[Tool Call: {part.function_call.name}({arg_str})]`")
+                    # 4. Handle Function Calls (ANY)
+                    if part.function_call:
+                        logger.info(f"Received function_call: {part.function_call.name} args={part.function_call.args}")
                         
-                        # 4. Execution Result
-                        # 4. Execution Result
-                        if part.code_execution_result:
-                            # Flush any accumulated code first
-                            if accumulated_code_block:
-                                block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
-                                final_text.append(block)
-                                accumulated_code_block = ""
-
-                            outcome = part.code_execution_result.outcome_
-                            output = part.code_execution_result.output.strip()
-                            icon = "✅" if outcome == "OUTCOME_OK" else "❌"
-                            
-                            # Format block
-                            block = f"> {icon} **Result**\n> ```text\n{output}\n> ```\n"
+                        if part.function_call.name == "answer_general_knowledge":
+                            args = part.function_call.args
+                            if args and "answer" in args:
+                                answer_text = args["answer"]
+                                final_text.append(answer_text)
+                                logger.info("Used answer_general_knowledge tool successfully.")
+                        else:
+                            # Fallback: Show that a tool was called so response isn't empty
+                            # This helps debug if it's trying to call ES or Google Search but we aren't handling it
+                            try:
+                                arg_str = str(part.function_call.args)
+                            except:
+                                arg_str = "{...}"
+                            final_text.append(f"🛠️ `[Tool Call: {part.function_call.name}({arg_str})]`")
+                    
+                    # 5. Execution Result
+                    if part.code_execution_result:
+                        # Flush any accumulated code first
+                        if accumulated_code_block:
+                            block = f"\n> 🐍 **Thinking (Code Execution)**\n> ```{current_lang}\n{accumulated_code_block}\n> ```\n"
                             final_text.append(block)
-                            
-                            if status_tracker is not None:
-                                status_tracker["text"] = f"Executed: {outcome}\nResult: {output[:50]}..."
+                            accumulated_code_block = ""
+
+                        outcome = part.code_execution_result.outcome_
+                        output = part.code_execution_result.output.strip()
+                        icon = "✅" if outcome == "OUTCOME_OK" else "❌"
+                        
+                        # Format block
+                        block = f"> {icon} **Result**\n> ```text\n{output}\n> ```\n"
+                        final_text.append(block)
+                        
+                        if status_tracker is not None:
+                            status_tracker["text"] = f"Executed: {outcome}\nResult: {output[:50]}..."
         
         # Flush any remaining code at end of stream
         if accumulated_code_block:
