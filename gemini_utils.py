@@ -399,6 +399,11 @@ def generate_gemini_text(
         if any(t.google_search for t in tools_list): # Check for Google Search
              sys_instructions.append("You can search the live web using 'google_search'.")
 
+        # CRITICAL: Tell the model it can allow internal knowledge
+        sys_instructions.append(
+            "For all other queries (general knowledge, chit-chat, creative writing), answer DIRECTLY using your internal training data. You do NOT need to use a tool."
+        )
+
         config = types.GenerateContentConfig(
             # response_modalities set to None/Default for maximum stability with v1beta
             # response_modalities=["TEXT"], 
