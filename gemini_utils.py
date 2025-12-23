@@ -378,19 +378,31 @@ def generate_gemini_text(
             except Exception as e:
                 logger.warning(f"Failed to init code_execution tool: {e}")
 
-        config = types.GenerateContentConfig(
-            # response_modalities set to None/Default for maximum stability with v1beta
-            # response_modalities=["TEXT"], 
-            system_instruction=(
-                "You are Multivac, a helpful AI assistant. "
+        # 3. Build Dynamic System Instruction based on ENABLED tools
+        sys_instructions = ["You are Multivac, a helpful AI assistant."]
+        
+        # Only mention tools that are actually in the list to avoid model confusion/refusal
+        if any(t.function_declarations for t in tools_list): # Check for ES tool
+             sys_instructions.append(
                 "You can search historical logs or memory using 'search_elasticsearch_resource'. "
-                "IMPORTANT: If the user asks about 'history', 'past messages', 'first message', 'earliest interaction', or specific past details not in your current context, you MUST use 'search_elasticsearch_resource' to find the answer. Do not guess. "
+                "IMPORTANT: If the user asks about 'history', 'past messages', 'first message', 'earliest interaction', or specific past details not in your current context, you MUST use 'search_elasticsearch_resource' to find the answer. Do not guess."
+            )
+        
+        if any(t.code_execution for t in tools_list): # Check for Code Execution
+             sys_instructions.append(
                 "You can perform live computations or file generation using 'code_execution'. "
-                "You can search the live web using 'google_search'. "
                 "IMPORTANT: The code execution sandbox does NOT have internet access or 'pydub'. "
                 "For audio generation, you MUST use 'scipy.io.wavfile' and 'numpy'. "
                 "For plotting, use 'matplotlib' or 'seaborn'."
-            ),
+            )
+            
+        if any(t.google_search for t in tools_list): # Check for Google Search
+             sys_instructions.append("You can search the live web using 'google_search'.")
+
+        config = types.GenerateContentConfig(
+            # response_modalities set to None/Default for maximum stability with v1beta
+            # response_modalities=["TEXT"], 
+            system_instruction=" ".join(sys_instructions),
             tools=tools_list,
             safety_settings=[
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},

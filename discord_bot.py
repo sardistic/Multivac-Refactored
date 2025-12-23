@@ -718,7 +718,12 @@ async def on_message(message: discord.Message):
             clean_prompt = re.sub(r"^gemini\s*", "", prompt, flags=re.IGNORECASE).strip()
             
             # Special Test Mode: "gemini test" -> Force code block output, bypass pagination UI
-            is_test_mode = (clean_prompt.lower() == "test")
+            is_test_mode = False
+            # Check if it starts with "test " or is exactly "test"
+            if clean_prompt.lower() == "test" or clean_prompt.lower().startswith("test "):
+                is_test_mode = True
+                # Remove "test" from the actual prompt sent to LLM so it answers the query
+                clean_prompt = re.sub(r"^test\s*", "", clean_prompt, flags=re.IGNORECASE).strip()
             
             # Fetch Memory used by Gemini
             context_msgs = build_message_window(
