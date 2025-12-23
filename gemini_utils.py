@@ -425,6 +425,15 @@ def generate_gemini_text(
         if any(t.google_search for t in tools_list): # Check for Google Search
              sys_instructions.append("You can search the live web using 'google_search'.")
 
+        # DEBUG: Log exact tool configuration
+        debug_tool_names = []
+        for t in tools_list:
+            if t.code_execution: debug_tool_names.append("code_execution")
+            if t.google_search: debug_tool_names.append("google_search")
+            if t.function_declarations: debug_tool_names.append(f"funcs:{len(t.function_declarations)}")
+        
+        logger.info(f"DEBUG: is_search_intent={is_search_intent}, enable_code_execution={enable_code_execution}")
+        logger.info(f"DEBUG: Final tools_list: {debug_tool_names}")
 
         config = types.GenerateContentConfig(
             # response_modalities set to None/Default for maximum stability with v1beta
