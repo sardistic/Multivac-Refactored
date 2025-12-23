@@ -809,6 +809,10 @@ async def on_message(message: discord.Message):
                 elif files_to_send:
                     # If no text but we have files, send them
                     await status_msg.reply(files=files_to_send)
+                else:
+                    # response is tuple (text, artifacts) but both are empty?
+                    # This happens if Gemini returns empty string and no files.
+                    await status_msg.edit(content="❌ Gemini returned no text or files.")
                 
                 # For indexing, use text_resp
                 response = text_resp or "" # normalize for index_message below
