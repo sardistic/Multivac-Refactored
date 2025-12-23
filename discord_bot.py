@@ -745,6 +745,8 @@ async def on_message(message: discord.Message):
             if clean_prompt.lower().startswith("code "):
                 enable_code_execution = True
                 clean_prompt = clean_prompt[5:].strip() # Remove "code "
+            elif is_test_mode:
+                enable_code_execution = True # Always enable code for debug/test mode so we can generate large lists
             
             # Status Tracking for Live Code Execution
             status_tracker = {"text": ""}

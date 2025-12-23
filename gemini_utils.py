@@ -364,24 +364,25 @@ def generate_gemini_text(
 
         tools_list = []
         
-        # 1. Determine Intent for Tool Selection (Mutually Exclusive)
-        # Gemini 2.0 Flash (v1beta) throws 400 if we mix GoogleSearch with FunctionDeclarations.
-        # We must choose ONE based on the user's prompt.
-        
+        # 1. Determine Intent (Search vs Functions)
+        # Search is usually mutually exclusive with custom functions in v1beta
         search_keywords = ["search", "google", "web", "online", "news", "weather", "stock", "price", "current"]
         is_search_intent = any(k in prompt.lower() for k in search_keywords)
 
-        if not enable_code_execution:
-            if is_search_intent:
-                # Enable Google Search ONLY
-                try:
-                    tools_list.append(types.Tool(google_search=types.GoogleSearch()))
-                except Exception as e:
-                     logger.warning(f"Failed to init google_search tool: {e}")
-            else:
-                # Enable Custom Functions (ES) ONLY
-                # This ensures "history", "first message", "previous context" queries work via ES tool
-                tools_list.append(types.Tool(function_declarations=[es_tool_spec, general_knowledge_tool]))
+        should_add_functions = True
+
+        if is_search_intent:
+            # Enable Google Search ONLY
+            try:
+                tools_list.append(types.Tool(google_search=types.GoogleSearch()))
+                should_add_functions = False # Disable functions if searching to avoid conflicts
+            except Exception as e:
+                 logger.warning(f"Failed to init google_search tool: {e}")
+        
+        if should_add_functions:
+            # Enable Custom Functions (ES + General Knowledge)
+            # This ensures "history" and "general knowledge" queries always work unless searching
+            tools_list.append(types.Tool(function_declarations=[es_tool_spec, general_knowledge_tool]))
         
         # 2. Add Code Execution (if enabled) - logic remains same, strictly prioritized
         if enable_code_execution:
