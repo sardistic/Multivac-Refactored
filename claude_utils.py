@@ -9,7 +9,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 async def generate_claude_response(
     messages: List[Dict[str, Any]], 
-    model: str = "claude-3-5-sonnet-20240620",
+    model: str = "claude-sonnet-4-20250514",
     tools: Optional[List[Dict[str, Any]]] = None,
     temperature: float = 0.7,
     max_tokens: int = 1024
