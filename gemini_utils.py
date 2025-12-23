@@ -487,14 +487,24 @@ def generate_gemini_text(
                             status_tracker["text"] = f"Writing Code...\n```{current_lang}\n{snippet}\n```"
 
                     # 4. Execution Result
-                        # Handle the "Answer Tool" execution (Dummy tool for strict models)
-                        if part.function_call and part.function_call.name == "answer_general_knowledge":
-                            args = part.function_call.args
-                            if args and "answer" in args:
-                                answer_text = args["answer"]
-                                final_text.append(answer_text)
-                                # Log it so we know it worked
-                                logger.info("Used answer_general_knowledge tool successfully.")
+                        # Handle Function Calls (ANY)
+                        if part.function_call:
+                            logger.info(f"Received function_call: {part.function_call.name} args={part.function_call.args}")
+                            
+                            if part.function_call.name == "answer_general_knowledge":
+                                args = part.function_call.args
+                                if args and "answer" in args:
+                                    answer_text = args["answer"]
+                                    final_text.append(answer_text)
+                                    logger.info("Used answer_general_knowledge tool successfully.")
+                            else:
+                                # Fallback: Show that a tool was called so response isn't empty
+                                # This helps debug if it's trying to call ES or Google Search but we aren't handling it
+                                try:
+                                    arg_str = str(part.function_call.args)
+                                except:
+                                    arg_str = "{...}"
+                                final_text.append(f"🛠️ `[Tool Call: {part.function_call.name}({arg_str})]`")
                         
                         # 4. Execution Result
                         if part.code_execution_result:
