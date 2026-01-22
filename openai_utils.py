@@ -322,10 +322,17 @@ def _normalize_messages_for_responses(messages: List[Dict[str, Any]]) -> List[Di
                 if ptype in ("text", "input_text"):
                     out_parts.append({"type": "input_text", "text": p.get("text", "")})
                 elif ptype in ("image_url", "input_image"):
-                    url = p.get("image_url", {}).get("url") if ptype == "image_url" else p.get("image_url", {}).get("url")
-                    if not url and isinstance(p.get("image_url"), str):
-                        url = p["image_url"]
-                    out_parts.append({"type": "input_image", "image_url": {"url": url}})
+                    # Extract URL from Chat Completions format: {"type": "image_url", "image_url": {"url": "..."}}
+                    if ptype == "image_url":
+                        # Chat format: nested {"url": ...}
+                        url = p.get("image_url", {}).get("url") if isinstance(p.get("image_url"), dict) else p.get("image_url")
+                    else:
+                        # Already in input_image format
+                        url = p.get("image_url", {}).get("url") if isinstance(p.get("image_url"), dict) else p.get("image_url")
+                    
+                    # Responses API expects: {"type": "input_image", "image_url": "direct-string-url"}
+                    # NOT {"type": "input_image", "image_url": {"url": "..."}}
+                    out_parts.append({"type": "input_image", "image_url": url})
                 else:
                     # fallback treat as text
                     out_parts.append({"type": "input_text", "text": p.get("text", str(p))})
