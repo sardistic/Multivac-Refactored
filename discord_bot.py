@@ -1090,12 +1090,9 @@ async def on_message(message: discord.Message):
 
         # IMAGE EDIT using Responses API
         if intent == "edit_image" and image_urls:
-            status_msg = await message.channel.send("🔧 Editing image...")
-            
-            try:
+            async def _do_edit():
                 from openai_utils import openai_client
                 
-                # Use Responses API with action: "edit"
                 response = await openai_client.responses.create(
                     model="gpt-4.1",
                     input=[
@@ -1115,15 +1112,21 @@ async def on_message(message: discord.Message):
                 if image_calls and image_calls[0].result:
                     import base64
                     image_base64 = image_calls[0].result
-                    image_bytes = base64.b64decode(image_base64)
-                    
-                    await status_msg.edit(content="✅ Image edited")
-                    await message.channel.send(file=discord.File(io.BytesIO(image_bytes), "edited.png"))
-                else:
-                    await status_msg.edit(content="❌ No image returned")
-            except Exception as e:
-                logger.exception("Image edit error")
-                await status_msg.edit(content=f"❌ Edit failed: {str(e)[:100]}")
+                    return io.BytesIO(base64.b64decode(image_base64))
+                return None
+            
+            status_msg, image_data = await live_status_with_progress(
+                message,
+                action_label="Editing",
+                emoji="🔧",
+                coro=_do_edit(),
+                duration_estimate=30,
+            )
+            if image_data:
+                await status_msg.edit(content="✅ Image edited")
+                await message.channel.send(file=discord.File(image_data, "edited.png"))
+            else:
+                await status_msg.edit(content="❌ Edit failed")
             return
 
         # SUMMARIZE URL
