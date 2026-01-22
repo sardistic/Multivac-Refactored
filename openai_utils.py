@@ -91,16 +91,21 @@ async def classify_intent(text: str, has_images: bool = False) -> str:
         if not (text or "").strip():
             return "chat"
         
-        # Build system prompt with image context
-        system_prompt = _INTENT_SYSTEM
+        # Build image-aware system prompt
         if has_images:
-            system_prompt += (
-                "\n\nIMPORTANT: The user has attached one or more images.\n"
-                "- If they want to EDIT/MODIFY the image (change, fix, adjust, make transparent, etc.) → 'edit_image'.\n"
-                "- If they want to UNDERSTAND/ANALYZE the image (describe, explain, translate text from, analyze, what is, etc.) → 'describe_image'.\n"
-                "- If they want to GENERATE a new image (imagine, create, draw, paint) → 'generate_image'.\n"
-                "- For any other image-related prompt that doesn't fit above, default to 'describe_image'."
+            system_prompt = (
+                _INTENT_SYSTEM + "\n\n"
+                "CRITICAL: The user has attached one or more IMAGES with their message.\n"
+                "When images are present, assume the user's request is ABOUT those images unless explicitly stated otherwise.\n\n"
+                "Choose the intent:\n"
+                "- 'edit_image' = User wants to MODIFY/EDIT the image (change colors, remove background, fix, adjust, make transparent, crop, etc.)\n"
+                "- 'describe_image' = User wants to UNDERSTAND/ANALYZE the image (describe, explain, analyze, transcribe text, translate text from image, what does it say, identify, etc.)\n"
+                "- 'generate_image' = User wants to CREATE a NEW image from scratch (imagine, generate, draw, paint, create)\n\n"
+                "IMPORTANT: 'translate to pig latin', 'translate this', 'transcribe' with images = 'describe_image' (they want text FROM the image)\n"
+                "Only use 'chat' if the message is clearly NOT about the attached images."
             )
+        else:
+            system_prompt = _INTENT_SYSTEM
         
         resp = await openai_client.chat.completions.create(
             model="gpt-4o-mini",
