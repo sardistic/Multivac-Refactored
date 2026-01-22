@@ -1144,8 +1144,12 @@ async def on_message(message: discord.Message):
                 "- Point to 2–3 specific visual cues that support your explanation.\n"
                 "- Keep it concise and concrete."
             )
-            if is_reply_to_bot and ref_msg and (ref_msg.content or "").strip():
-                reply_context = f"You are responding to your previous message:\n---\n{ref_msg.content.strip()}\n---"
+            # Include replied-to message content (whether it's from bot or user)
+            if ref_msg and (ref_msg.content or "").strip():
+                if is_reply_to_bot:
+                    reply_context = f"You are responding to your previous message:\n---\n{ref_msg.content.strip()}\n---"
+                else:
+                    reply_context = f"User is replying to this message:\n---\nFrom: {ref_msg.author.display_name}\n{ref_msg.content.strip()}\n---"
             else:
                 reply_context = ""
 
@@ -1229,10 +1233,14 @@ async def on_message(message: discord.Message):
                 guild_id=message.guild.id, channel_id=message.channel.id, user_id=user_id, max_items=12
             )
             msgs.append({"role": "system", "content": timeline_block})
-            # 2b) If replying to the bot, include the replied-to assistant message
-            if is_reply_to_bot and ref_msg and (ref_msg.content or "").strip():
-                msgs.append({"role": "system", "content":
-                    f"You are replying to your earlier assistant message:\n---\n{ref_msg.content.strip()}\n---"})
+            # 2b) Include replied-to message content (whether it's from bot or user)
+            if ref_msg and (ref_msg.content or "").strip():
+                if is_reply_to_bot:
+                    msgs.append({"role": "system", "content":
+                        f"You are replying to your earlier assistant message:\n---\n{ref_msg.content.strip()}\n---"})
+                else:
+                    msgs.append({"role": "system", "content":
+                        f"User is replying to this message:\n---\nFrom: {ref_msg.author.display_name}\n{ref_msg.content.strip()}\n---"})
             # 3) ES conversation window (oldest→newest)
             history_msgs = build_message_window(
                 guild_id=message.guild.id,
