@@ -91,19 +91,23 @@ async def classify_intent(text: str, has_images: bool = False) -> str:
         if not (text or "").strip():
             return "chat"
         
-        # If images are present with vague prompts, assume image analysis
+        # Build system prompt with image context
+        system_prompt = _INTENT_SYSTEM
         if has_images:
-            lower_text = text.lower().strip()
-            vague_triggers = ["analyze", "what", "explain", "describe", "tell me about", "look at"]
-            if any(trigger in lower_text for trigger in vague_triggers) and len(text.split()) < 10:
-                return "describe_image"
+            system_prompt += (
+                "\n\nIMPORTANT: The user has attached one or more images.\n"
+                "- If they want to EDIT/MODIFY the image (change, fix, adjust, make transparent, etc.) → 'edit_image'.\n"
+                "- If they want to UNDERSTAND/ANALYZE the image (describe, explain, translate text from, analyze, what is, etc.) → 'describe_image'.\n"
+                "- If they want to GENERATE a new image (imagine, create, draw, paint) → 'generate_image'.\n"
+                "- For any other image-related prompt that doesn't fit above, default to 'describe_image'."
+            )
         
         resp = await openai_client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0,
             max_tokens=10,
             messages=[
-                {"role": "system", "content": _INTENT_SYSTEM},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text.strip()},
             ],
         )
