@@ -174,7 +174,11 @@ def make_preview(full_text: str, max_lines: int = LINE_TRUNCATE_AT):
 async def send_or_edit_with_truncation(
     full_text: str, *, channel: Optional[discord.abc.Messageable] = None,
     target_msg: Optional[discord.Message] = None, reply_to: Optional[discord.Message] = None,
-    extra_files: Optional[List[discord.File]] = None
+    extra_files: Optional[List[discord.File]] = None,
+    # New parameters for automatic indexing
+    original_message: Optional[discord.Message] = None,
+    model: Optional[str] = None,
+    auto_index: bool = True
 ):
     """Send or edit a message with 2-line preview and reactions. Supports attaching extra files."""
     if not isinstance(full_text, str):
@@ -202,6 +206,25 @@ async def send_or_edit_with_truncation(
                 except Exception as e:
                     logger.error(f"Failed to reply with artifacts on truncation: {e}")
 
+            # Auto-index before returning
+            if auto_index:
+                try:
+                    src_msg = original_message or reply_to
+                    if src_msg:
+                        index_message(
+                            message_id=str(target_msg.id),
+                            guild_id=str(src_msg.guild.id) if src_msg.guild else "DM",
+                            channel_id=str(src_msg.channel.id),
+                            user_id=str(src_msg.author.id),
+                            role="assistant",
+                            content=full_text,
+                            timestamp=_now_iso(),
+                            reply_to_id=str(src_msg.id),
+                            model=model or "unknown"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to auto-index bot message: {e}")
+            
             return target_msg
         else:
             # New message case - just attach files to the preview message
@@ -209,6 +232,26 @@ async def send_or_edit_with_truncation(
             save_message_expansion(sent.id, full_text, expanded=False)
             with contextlib.suppress(Exception):
                 await sent.add_reaction(EXPAND_EMOJI)
+            
+            # Auto-index before returning
+            if auto_index:
+                try:
+                    src_msg = original_message or reply_to
+                    if src_msg:
+                        index_message(
+                            message_id=str(sent.id),
+                            guild_id=str(src_msg.guild.id) if src_msg.guild else "DM",
+                            channel_id=str(src_msg.channel.id),
+                            user_id=str(src_msg.author.id),
+                            role="assistant",
+                            content=full_text,
+                            timestamp=_now_iso(),
+                            reply_to_id=str(src_msg.id),
+                            model=model or "unknown"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to auto-index bot message: {e}")
+            
             return sent
     else:
         if target_msg:
@@ -229,9 +272,31 @@ async def send_or_edit_with_truncation(
             with contextlib.suppress(Exception):
                 await target_msg.clear_reactions()
             save_message_expansion(target_msg.id, full_text, expanded=True)
-            return target_msg
+            final_msg = target_msg
         else:
-            return await channel.send(full_text, reference=reply_to, files=extra_files)
+            final_msg = await channel.send(full_text, reference=reply_to, files=extra_files)
+    
+    # Auto-index this bot message so it's available in context
+    if auto_index and final_msg:
+        try:
+            # Determine the originating user message for proper conversation threading
+            src_msg = original_message or reply_to
+            if src_msg:
+                index_message(
+                    message_id=str(final_msg.id),
+                    guild_id=str(src_msg.guild.id) if src_msg.guild else "DM",
+                    channel_id=str(src_msg.channel.id),
+                    user_id=str(src_msg.author.id),  # Link to the user's conversation
+                    role="assistant",
+                    content=full_text,  # Index the full text, not the preview
+                    timestamp=_now_iso(),
+                    reply_to_id=str(src_msg.id),
+                    model=model or "unknown"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to auto-index bot message: {e}")
+    
+    return final_msg
 
 async def live_status_with_progress(
     message: discord.Message, *, action_label: str, emoji: str, coro, duration_estimate: int, summarizer=None
@@ -756,23 +821,14 @@ async def on_message(message: discord.Message):
             )
             
             if response:
-                await send_or_edit_with_truncation(response, target_msg=status_msg)
+                await send_or_edit_with_truncation(
+                    response, 
+                    target_msg=status_msg, 
+                    original_message=message,
+                    model="claude-sonnet-4"
+                )
                 
-                # Index response
-                try:
-                    index_message(
-                        message_id=str(status_msg.id),
-                        guild_id=str(message.guild.id) if message.guild else "DM",
-                        channel_id=str(message.channel.id),
-                        user_id=str(message.author.id),
-                        role="assistant",
-                        content=response,
-                        timestamp=_now_iso(),
-                        reply_to_id=str(message.id),
-                        model="claude-3-5-sonnet"
-                    )
-                except Exception:
-                    pass
+                # Manual indexing removed - auto-indexing now handles this
             else:
                  await status_msg.edit(content="❌ Claude returned no response.")
             return
@@ -906,24 +962,7 @@ async def on_message(message: discord.Message):
                     # This happens if Gemini returns empty string and no files.
                     await status_msg.edit(content="❌ Gemini returned no text or files.")
                 
-                # For indexing, use text_resp
-                response = text_resp or "" # normalize for index_message below
-                
-                # Index the Gemini response with model tag
-                try:
-                    index_message(
-                        message_id=str(status_msg.id) if status_msg else str(message.id) + "-gemini",
-                        guild_id=str(message.guild.id) if message.guild else "DM",
-                        channel_id=str(message.channel.id),
-                        user_id=str(message.author.id),
-                        role="assistant",
-                        content=response,
-                        timestamp=_now_iso(),
-                        reply_to_id=str(message.id),
-                        model="gemini-2.0-flash"
-                    )
-                except Exception:
-                    pass
+                # Manual indexing removed - auto-indexing now handles this
             else:
                 await status_msg.edit(content="❌ Gemini returned no response.")
             return
@@ -1140,7 +1179,12 @@ async def on_message(message: discord.Message):
                     text_resp, artifacts = response, []
 
                 if text_resp and text_resp.strip():
-                    await send_or_edit_with_truncation(text_resp, target_msg=status_msg)
+                    await send_or_edit_with_truncation(
+                        text_resp, 
+                        target_msg=status_msg, 
+                        original_message=message,
+                        model="gpt-4o-vision"
+                    )
                 
                 # Send artifacts (images/plots)
                 if artifacts:
@@ -1274,25 +1318,16 @@ async def on_message(message: discord.Message):
         )
 
         if response and response.strip():
-            await send_or_edit_with_truncation(response, target_msg=status_msg)
+            await send_or_edit_with_truncation(
+                response, 
+                target_msg=status_msg, 
+                original_message=message,
+                model="gpt-4o"
+            )
         else:
             await status_msg.edit(content="🤖 INSUFFICIENT DATA FOR MEANINGFUL ANSWER")
 
-        # Store assistant reply (live indexing)
-        try:
-            index_message(
-                message_id=str(status_msg.id) if status_msg else str(message.id) + "-bot",
-                guild_id=str(message.guild.id) if message.guild else "DM",
-                channel_id=str(message.channel.id),
-                user_id=str(message.author.id),  # conversation_key is anchored to the human user
-                role="assistant",
-                content=response or "",
-                timestamp=_now_iso(),
-                reply_to_id=str(message.id),
-                model="gpt-4o",  # Explicitly tag the model for consistent indexing
-            )
-        except Exception:
-            pass
+        # Manual indexing removed - auto-indexing now handles this
 
     except Exception as e:
         logger.exception("Critical error in on_message dispatch")
