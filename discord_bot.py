@@ -1088,41 +1088,44 @@ async def on_message(message: discord.Message):
                 await status_msg.edit(content="❌ Image generation failed.")
             return
 
-        # IMAGE EDIT (Vision-based text transformation + regeneration)
+        # IMAGE EDIT using Responses API
         if intent == "edit_image" and image_urls:
-            status_msg = await message.channel.send("🔧 Analyzing image...")
+            status_msg = await message.channel.send("🔧 Editing image...")
             
             try:
-                # Use vision to extract text and apply transformation
                 from openai_utils import openai_client
-                vision_msgs = [
-                    {"role": "system", "content": "Extract all text from the image and apply the requested transformation. Output ONLY the transformed text."},
-                    {
-                        "role": "user",
-                        "content": [{"type": "text", "text": prompt}] + 
-                                   [{"type": "image_url", "image_url": {"url": u}} for u in image_urls]
-                    }
-                ]
                 
-                vision_resp = await openai_client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=vision_msgs,
-                    max_tokens=1000
+                # Use Responses API with action: "edit"
+                response = await openai_client.responses.create(
+                    model="gpt-4.1",
+                    input=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": prompt},
+                                {"type": "input_image", "image_url": image_urls[0]}
+                            ]
+                        }
+                    ],
+                    tools=[{"type": "image_generation", "action": "edit"}]
                 )
-                transformed_text = vision_resp.choices[0].message.content.strip()
                 
-                # Generate new image with transformed text
-                await status_msg.edit(content="🎨 Generating edited image...")
-                gen_prompt = f"Create a simple, clean image displaying this text clearly and readably:\\n\\n{transformed_text}"
-                
-                from stability_utils import handle_image_generation
-                image_data = await handle_image_generation(message, gen_prompt)
-                
-                if image_data:
+                # Extract edited image
+                image_calls = [o for o in response.output if o.type == "image_generation_call"]
+                if image_calls and image_calls[0].result:
+                    import base64
+                    image_base64 = image_calls[0].result
+                    image_bytes = base64.b64decode(image_base64)
+                    
                     await status_msg.edit(content="✅ Image edited")
-                    await message.channel.send(file=discord.File(image_data, "edited_image.png"))
+                    await message.channel.send(file=discord.File(BytesIO(image_bytes), "edited.png"))
                 else:
-                    await status_msg.edit(content="❌ Image generation failed")
+                    await status_msg.edit(content="❌ No image returned")
+            except Exception as e:
+                logger.exception("Image edit error")
+                await status_msg.edit(content=f"❌ Edit failed: {str(e)[:100]}")
+            return
+
             except Exception as e:
                 logger.exception("Image edit error")
                 await status_msg.edit(content=f"❌ Edit failed: {str(e)[:100]}")
