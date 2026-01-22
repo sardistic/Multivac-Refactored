@@ -20,6 +20,7 @@ import json
 import logging
 import mimetypes
 import asyncio
+import io
 import contextlib
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
@@ -1091,9 +1092,10 @@ async def on_message(message: discord.Message):
         # IMAGE EDIT using Responses API
         if intent == "edit_image" and image_urls:
             async def _do_edit():
+                # No local imports needed if we have global ones, but safe to keep for closure self-containment
+                from openai_utils import openai_client
                 import io
                 import base64
-                from openai_utils import openai_client
                 
                 # Force the model to edit by being explicit
                 edit_instruction = f"You must edit this image. {prompt}. Apply the changes to the image."
@@ -1115,11 +1117,12 @@ async def on_message(message: discord.Message):
                 # Extract edited image
                 image_calls = [o for o in response.output if o.type == "image_generation_call"]
                 if image_calls and image_calls[0].result:
-                    import base64
                     image_base64 = image_calls[0].result
+                    # Use io.BytesIO explicitly
                     return io.BytesIO(base64.b64decode(image_base64))
                 return None
             
+            # Use the progress bar!
             status_msg, image_data = await live_status_with_progress(
                 message,
                 action_label="Editing",
@@ -1127,11 +1130,12 @@ async def on_message(message: discord.Message):
                 coro=_do_edit(),
                 duration_estimate=30,
             )
+            
             if image_data:
                 await status_msg.edit(content="✅ Image edited")
                 await message.channel.send(file=discord.File(image_data, "edited.png"))
             else:
-                await status_msg.edit(content="❌ Edit failed")
+                await status_msg.edit(content="❌ Edit failed or refused")
             return
 
         # SUMMARIZE URL
