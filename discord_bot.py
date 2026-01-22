@@ -1088,22 +1088,46 @@ async def on_message(message: discord.Message):
                 await status_msg.edit(content="❌ Image generation failed.")
             return
 
-        # IMAGE EDIT
+        # IMAGE EDIT (Vision-based text transformation + regeneration)
         if intent == "edit_image" and image_urls:
-            status_msg, image_data = await live_status_with_progress(
-                message,
-                action_label="Editing",
-                emoji="🔧",
-                coro=edit_image_with_prompt(image_urls, prompt),
-                duration_estimate=duration_estimate,
-                summarizer=(lambda: "Applying edits… refining…") if STREAM_OK else None,
-            )
-            if image_data:
-                await status_msg.edit(content="✅ Image edited")
-                await message.channel.send(file=discord.File(image_data, "edited_image.png"))
-            else:
-                await status_msg.edit(content="❌ Edit failed or blocked.")
+            status_msg = await message.channel.send("🔧 Analyzing image...")
+            
+            try:
+                # Use vision to extract text and apply transformation
+                from openai_utils import openai_client
+                vision_msgs = [
+                    {"role": "system", "content": "Extract all text from the image and apply the requested transformation. Output ONLY the transformed text."},
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}] + 
+                                   [{"type": "image_url", "image_url": {"url": u}} for u in image_urls]
+                    }
+                ]
+                
+                vision_resp = await openai_client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=vision_msgs,
+                    max_tokens=1000
+                )
+                transformed_text = vision_resp.choices[0].message.content.strip()
+                
+                # Generate new image with transformed text
+                await status_msg.edit(content="🎨 Generating edited image...")
+                gen_prompt = f"Create a simple, clean image displaying this text clearly and readably:\\n\\n{transformed_text}"
+                
+                from stability_utils import handle_image_generation
+                image_data = await handle_image_generation(message, gen_prompt)
+                
+                if image_data:
+                    await status_msg.edit(content="✅ Image edited")
+                    await message.channel.send(file=discord.File(image_data, "edited_image.png"))
+                else:
+                    await status_msg.edit(content="❌ Image generation failed")
+            except Exception as e:
+                logger.exception("Image edit error")
+                await status_msg.edit(content=f"❌ Edit failed: {str(e)[:100]}")
             return
+
 
         # SUMMARIZE URL
         if intent == "summarize_url" and general_url_match:
