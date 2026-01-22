@@ -1118,7 +1118,7 @@ async def on_message(message: discord.Message):
                     image_bytes = base64.b64decode(image_base64)
                     
                     await status_msg.edit(content="✅ Image edited")
-                    await message.channel.send(file=discord.File(BytesIO(image_bytes), "edited.png"))
+                    await message.channel.send(file=discord.File(io.BytesIO(image_bytes), "edited.png"))
                 else:
                     await status_msg.edit(content="❌ No image returned")
             except Exception as e:
