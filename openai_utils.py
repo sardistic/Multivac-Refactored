@@ -85,11 +85,19 @@ _INTENT_SYSTEM = (
     "IMPORTANT: Output ONLY ONE label."
 )
 
-async def classify_intent(text: str) -> str:
+async def classify_intent(text: str, has_images: bool = False) -> str:
     """Return one of: edit_image | generate_image | summarize_url | describe_image | get_weather | get_stock | gemini_chat | chat."""
     try:
         if not (text or "").strip():
             return "chat"
+        
+        # If images are present with vague prompts, assume image analysis
+        if has_images:
+            lower_text = text.lower().strip()
+            vague_triggers = ["analyze", "what", "explain", "describe", "tell me about", "look at"]
+            if any(trigger in lower_text for trigger in vague_triggers) and len(text.split()) < 10:
+                return "describe_image"
+        
         resp = await openai_client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0,
