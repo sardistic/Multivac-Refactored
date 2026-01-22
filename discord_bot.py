@@ -612,6 +612,9 @@ async def on_message(message: discord.Message):
         return
     # If not configured, we do NOT send “No results found” — we let the model’s web_search tool handle it.
 
+    # Quick check for images BEFORE intent classification
+    has_attachments = bool(message.attachments or (ref_msg and ref_msg.attachments))
+    
     # Intent
     # Fix for "gemini imagine" being grabbed by chat intent
     if raw_prompt.lower().strip().startswith("gemini imagine"):
@@ -619,8 +622,8 @@ async def on_message(message: discord.Message):
         # We don't strip "gemini" here because stability_utils expects it? 
         # Actually stability_utils checks if content.startswith("gemini").
     else:
-        intent = await classify_intent(raw_prompt)
-    logger.debug(f"Intent classified as: {intent}")
+        intent = await classify_intent(raw_prompt, has_images=has_attachments)
+    logger.debug(f"Intent classified as: {intent} (has_attachments={has_attachments})")
 
     # Collect image inputs (replied image FIRST, then attachments, then URLs)
     image_urls: List[str] = []
