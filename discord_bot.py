@@ -1095,13 +1095,16 @@ async def on_message(message: discord.Message):
                 import base64
                 from openai_utils import openai_client
                 
+                # Force the model to edit by being explicit
+                edit_instruction = f"You must edit this image. {prompt}. Apply the changes to the image."
+                
                 response = await openai_client.responses.create(
                     model="gpt-4.1",
                     input=[
                         {
                             "role": "user",
                             "content": [
-                                {"type": "input_text", "text": prompt},
+                                {"type": "input_text", "text": edit_instruction},
                                 {"type": "input_image", "image_url": image_urls[0]}
                             ]
                         }
