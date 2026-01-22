@@ -1091,6 +1091,8 @@ async def on_message(message: discord.Message):
         # IMAGE EDIT using Responses API
         if intent == "edit_image" and image_urls:
             async def _do_edit():
+                import io
+                import base64
                 from openai_utils import openai_client
                 
                 response = await openai_client.responses.create(
