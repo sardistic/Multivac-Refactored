@@ -1126,12 +1126,6 @@ async def on_message(message: discord.Message):
                 await status_msg.edit(content=f"❌ Edit failed: {str(e)[:100]}")
             return
 
-            except Exception as e:
-                logger.exception("Image edit error")
-                await status_msg.edit(content=f"❌ Edit failed: {str(e)[:100]}")
-            return
-
-
         # SUMMARIZE URL
         if intent == "summarize_url" and general_url_match:
             url = general_url_match.group(0)
