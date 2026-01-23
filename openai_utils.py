@@ -707,7 +707,7 @@ async def _responses_tool_loop(
             
             # Append tool output part
             current_input.append({
-                "type": "tool_output",
+                "type": "function_call_output",
                 "call_id": cid,
                 "output": str(output_text)
             })
