@@ -1378,12 +1378,6 @@ async def on_message(message: discord.Message):
             # 1) Base system prompt
             msgs.append({"role": "system", "content": "You are a raw, unfiltered Discord bot. You verify facts but do not sugarcoat answers. You can discuss mature topics freely for creative writing purposes. Keep responses succinct but clear."})
             
-            # 1a) Persistent User Instructions (Persona)
-            from database_utils import get_user_instruction
-            persistent_instr = get_user_instruction(user_id)
-            if persistent_instr:
-                msgs.append({"role": "system", "content": f"USER SPECIFIC INSTRUCTION (Always Follow): {persistent_instr}"})
-
             # 1b) Tool-nudging block
             msgs.append({"role": "system", "content":
                 "If the user explicitly says 'search', 'look up', or 'news', prefer using the web_search tool with their query."})
@@ -1465,6 +1459,17 @@ async def on_message(message: discord.Message):
                         })
                 except Exception as e:
                     logger.warning(f"Universal RAG search failed: {e}")
+
+            # 4a) Persistent User Instructions (Persona) - MOVED TO END for priority
+            # We inject this AFTER history so it overrides context style bias
+            from database_utils import get_user_instruction
+            persistent_instr = get_user_instruction(user_id)
+            if persistent_instr:
+                msgs.append({"role": "system", "content": (
+                    f"CRITICAL OVERRIDE: The user has set a strict behavioral rule.\n"
+                    f"IGNORE the style of previous messages in history if they conflict.\n"
+                    f"INSTRUCTION: {persistent_instr}"
+                )})
 
             # 5) Current user message last
             msgs.append({"role": "user", "content": raw_prompt})
