@@ -461,7 +461,7 @@ def _normalize_messages_for_responses(messages: List[Dict[str, Any]]) -> List[Di
 # -----------------------------------------------------------------------------
 
 async def _exec_tool(name: str, args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
-    logger.debug(f"[openai.tools] Executing {name} with args={list(args.keys())}")  # don't log full args for privacy/size
+    logging.debug(f"[openai.tools] Executing {name} with args={list(args.keys())}")  # don't log full args for privacy/size
     try:
         if name == "web_search":
             if _tool_web_search is None:
@@ -617,7 +617,7 @@ def _collect_tool_uses(r) -> List[tuple[str, str, Dict[str, Any]]]:
             calls = item.get("tool_calls")
         
         if calls:
-             logger.debug(f"[openai.tools.parser] Found {len(calls)} tool_calls in item")
+             logging.debug(f"[openai.tools.parser] Found {len(calls)} tool_calls in item")
         
         if calls:
             for c in calls:
@@ -665,11 +665,11 @@ async def _responses_tool_loop(first_resp, *, max_rounds: int = 3, tool_context:
         tool_outputs = []
         for tool_call_id, name, args in uses:
             try:
-                logger.debug(f"[openai.tools] Calling tool {name}...")
+                logging.debug(f"[openai.tools] Calling tool {name}...")
                 output_text = await _exec_tool(name, args, context=tool_context)
-                logger.debug(f"[openai.tools] Tool {name} returned {len(str(output_text))} chars")
+                logging.debug(f"[openai.tools] Tool {name} returned {len(str(output_text))} chars")
             except Exception as e:
-                logger.error(f"[openai.tools] Tool {name} failed: {e}")
+                logging.error(f"[openai.tools] Tool {name} failed: {e}")
                 output_text = f"tool_error: {name}: {e}"
             tool_outputs.append({"tool_call_id": tool_call_id, "output": str(output_text)})
 
@@ -925,13 +925,13 @@ async def generate_openai_messages_response_with_tools(
                 return text
             
             # Fallback if no text content found
-            logger.warning(f"[openai] No text and no tools! Raw Resp Output: {getattr(resp, 'output', 'N/A')}")
+            logging.warning(f"[openai] No text and no tools! Raw Resp Output: {getattr(resp, 'output', 'N/A')}")
             try:
                 # Debug dump output structure
                 outputs = getattr(resp, 'output', []) or getattr(resp, 'outputs', [])
                 if isinstance(outputs, list):
                     for i, o in enumerate(outputs):
-                         logger.warning(f"  [openai] output[{i}]: {o}")
+                         logging.warning(f"  [openai] output[{i}]: {o}")
             except Exception: 
                 pass
 
