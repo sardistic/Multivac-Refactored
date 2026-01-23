@@ -667,20 +667,36 @@ def _collect_tool_uses(r) -> List[tuple[str, str, Dict[str, Any]]]:
 
     return out
 
-async def _responses_tool_loop(first_resp, *, max_rounds: int = 3, tool_context: Optional[Dict[str, Any]] = None):
+async def _responses_tool_loop(
+    first_resp, 
+    messages: List[Any], 
+    *, 
+    model: str = "gpt-4o",
+    temperature: float = 0.6,
+    max_tokens: int = 700,
+    max_rounds: int = 3, 
+    tool_context: Optional[Dict[str, Any]] = None
+):
     """
-    Execute tool calls and iteratively submit outputs via responses.submit_tool_outputs
-    until the model stops asking for tools or we hit max_rounds.
-    Always submit against the *latest* resp.id.
+    Execute tool calls and iteratively call responses.create by appending outputs to input history.
     """
     resp = first_resp
+    current_input = list(messages)  # Copy
+
     for _ in range(max_rounds):
         uses = _collect_tool_uses(resp)
         if not uses:
             break
 
-        tool_outputs = []
-        for tool_call_id, name, args in uses:
+        # Append assistant's output (tool calls) to history
+        # resp.output is typically a list of ContentPart or ToolCall objects
+        raw_output = getattr(resp, "output", []) or getattr(resp, "outputs", [])
+        if isinstance(raw_output, list):
+            current_input.extend(raw_output)
+        elif raw_output:
+            current_input.append(raw_output)
+
+        for cid, name, args in uses:
             try:
                 logging.debug(f"[openai.tools] Calling tool {name}...")
                 output_text = await _exec_tool(name, args, context=tool_context)
@@ -688,12 +704,21 @@ async def _responses_tool_loop(first_resp, *, max_rounds: int = 3, tool_context:
             except Exception as e:
                 logging.error(f"[openai.tools] Tool {name} failed: {e}")
                 output_text = f"tool_error: {name}: {e}"
-            tool_outputs.append({"tool_call_id": tool_call_id, "output": str(output_text)})
+            
+            # Append tool output part
+            current_input.append({
+                "type": "tool_output",
+                "call_id": cid,
+                "output": str(output_text)
+            })
 
-        # Submit on the current response id
-        resp = await openai_client.responses.submit_tool_outputs(
-            id=getattr(resp, "id"),
-            tool_outputs=tool_outputs,
+        # Generate next response
+        resp = await openai_client.responses.create(
+            model=model,
+            input=current_input,
+            tools=_normalize_tools(None), # Tools are still available? Yes.
+            max_output_tokens=max_tokens,
+            temperature=temperature,
         )
 
     return resp
@@ -936,7 +961,15 @@ async def generate_openai_messages_response_with_tools(
                 logging.debug("[openai.tools] Model did not call any tools")
             
             # run tool loop (critical)
-            resp = await _responses_tool_loop(resp, max_rounds=3, tool_context=tool_context)
+            resp = await _responses_tool_loop(
+                resp, 
+                messages=norm,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                max_rounds=3, 
+                tool_context=tool_context
+            )
             text = _extract_responses_text(resp)
             if text:
                 return text
