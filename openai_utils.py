@@ -253,6 +253,71 @@ TOOLS_DEF = [
             },
         },
     },
+    # ---- Git self-awareness tools ----
+    {
+        "type": "function",
+        "function": {
+            "name": "git_recent_commits",
+            "description": "Get my recent git commits. Use to answer questions about what I've changed recently.",
+            "parameters": {
+                "type": "object",
+                "properties": {"count": {"type": "integer", "description": "Number of commits (max 50)", "default": 10}},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_commit_diff",
+            "description": "Get the diff/changes for a specific commit by SHA.",
+            "parameters": {
+                "type": "object",
+                "properties": {"sha": {"type": "string", "description": "Commit SHA (short or full)"}},
+                "required": ["sha"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_read_file",
+            "description": "Read content of one of my source files to explain my own code.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string", "description": "File path, e.g. 'discord_bot.py'"}},
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_search_code",
+            "description": "Search my codebase for a pattern. Returns matching lines.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "Search query"}},
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_file_list",
+            "description": "List all files in my repository.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_repo_info",
+            "description": "Get basic info about my repository: branch, remote, last commit.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
 # -----------------------------------------------------------------------------
@@ -409,6 +474,47 @@ async def _exec_tool(name: str, args: Dict[str, Any]) -> str:
 
         if name == "get_youtube_transcript":
             return "tool_unavailable: youtube transcript not configured"
+
+        # ---- Git self-awareness tools ----
+        if name == "git_recent_commits":
+            from git_utils import get_recent_commits
+            count = int(args.get("count", 10))
+            commits = get_recent_commits(count)
+            return json.dumps({"commits": commits}, ensure_ascii=False)
+
+        if name == "git_commit_diff":
+            from git_utils import get_commit_diff
+            sha = args.get("sha", "")
+            if not sha:
+                return json.dumps({"error": "missing 'sha'"})
+            diff = get_commit_diff(sha)
+            return json.dumps({"diff": diff}, ensure_ascii=False)
+
+        if name == "git_read_file":
+            from git_utils import get_file_content
+            path = args.get("path", "")
+            if not path:
+                return json.dumps({"error": "missing 'path'"})
+            content = get_file_content(path)
+            return json.dumps({"content": content}, ensure_ascii=False)
+
+        if name == "git_search_code":
+            from git_utils import search_code
+            query = args.get("query", "")
+            if not query:
+                return json.dumps({"error": "missing 'query'"})
+            results = search_code(query)
+            return json.dumps({"results": results}, ensure_ascii=False)
+
+        if name == "git_file_list":
+            from git_utils import get_file_list
+            files = get_file_list()
+            return json.dumps({"files": files}, ensure_ascii=False)
+
+        if name == "git_repo_info":
+            from git_utils import get_repo_info
+            info = get_repo_info()
+            return json.dumps({"info": info}, ensure_ascii=False)
 
         return f"tool_error: unknown tool '{name}'"
     except Exception as e:
