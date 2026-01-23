@@ -318,6 +318,14 @@ TOOLS_DEF = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_available_tools",
+            "description": "List all my available tools and what they do. Call this to see what capabilities I have.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
 # -----------------------------------------------------------------------------
@@ -515,6 +523,17 @@ async def _exec_tool(name: str, args: Dict[str, Any]) -> str:
             from git_utils import get_repo_info
             info = get_repo_info()
             return json.dumps({"info": info}, ensure_ascii=False)
+
+        if name == "list_available_tools":
+            # Return a summary of all available tools
+            tool_summaries = []
+            for t in TOOLS_DEF:
+                fn = t.get("function", {})
+                tool_summaries.append({
+                    "name": fn.get("name"),
+                    "description": fn.get("description"),
+                })
+            return json.dumps({"tools": tool_summaries}, ensure_ascii=False)
 
         return f"tool_error: unknown tool '{name}'"
     except Exception as e:
@@ -808,7 +827,18 @@ async def generate_openai_messages_response_with_tools(
 ) -> str:
     try:
         if USE_RESPONSES:
-            norm = _normalize_messages_for_responses(messages)
+            # Add system instruction to encourage tool use
+            tool_instruction = {
+                "role": "system",
+                "content": (
+                    "You have access to tools. When the user asks about your code, commits, files, "
+                    "weather, stocks, or other data you can fetch, USE the appropriate tool to get "
+                    "real information. Do not say you 'would use' a tool - actually call it."
+                )
+            }
+            messages_with_instruction = [tool_instruction] + messages
+            
+            norm = _normalize_messages_for_responses(messages_with_instruction)
             resp = await openai_client.responses.create(
                 model=model,
                 input=norm,
@@ -816,12 +846,20 @@ async def generate_openai_messages_response_with_tools(
                 max_output_tokens=max_tokens,
                 temperature=temperature,
             )
+            
+            # Debug: log if tools were called
+            uses = _collect_tool_uses(resp)
+            if uses:
+                logging.debug(f"[openai.tools] Model called {len(uses)} tools: {[u[1] for u in uses]}")
+            else:
+                logging.debug("[openai.tools] Model did not call any tools")
+            
             # run tool loop (critical)
             resp = await _responses_tool_loop(resp, max_rounds=3)
             text = _extract_responses_text(resp)
             if text:
                 return text
-            return "I would use tools for this, but I can proceed directly if you share more specifics."
+            return "I tried to use my tools but couldn't get a response. Could you rephrase?"
         else:
             resp = await openai_client.chat.completions.create(
                 model=model,
