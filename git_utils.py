@@ -64,6 +64,9 @@ def _run_git(*args, max_output: int = 8000) -> str:
             timeout=10,
         )
         output = result.stdout or result.stderr or ""
+        if result.returncode != 0:
+            return f"[error: git command failed with code {result.returncode}: {output.strip()}]"
+            
         if len(output) > max_output:
             output = output[:max_output] + f"\n... [truncated, {len(output)} total chars]"
         return _redact_secrets(output)
@@ -77,6 +80,10 @@ def get_recent_commits(n: int = 10) -> List[Dict[str, str]]:
     """Get recent commits with SHA, message, author, and relative date."""
     n = min(n, 50)  # Cap at 50
     output = _run_git("log", f"-n{n}", "--pretty=format:%h|%s|%an|%ar")
+    
+    if output.startswith("[error:"):
+        return [{"sha": "error", "message": output, "author": "system", "date": "now"}]
+        
     commits = []
     for line in output.strip().split("\n"):
         if "|" in line:
