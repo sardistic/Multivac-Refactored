@@ -126,6 +126,35 @@ def _state_key(guild_id: int | None, channel_id: int) -> str:
     g = str(guild_id) if guild_id else "DM"
     return f"{g}:{channel_id}"
 
+# ---- Multi-Image Selection ----
+async def prompt_for_image_selection(message, image_count: int, timeout: float = 30.0):
+    """
+    Ask user which image to process when multiple are present.
+    Returns: int (0-based index), "all", or 0 on timeout/invalid.
+    """
+    prompt_msg = await message.reply(
+        f"📷 I see **{image_count} images**. Which one should I edit?\n"
+        "Reply with a number (1, 2, ...) or **all**."
+    )
+    
+    def check(m):
+        return m.author == message.author and m.channel == message.channel
+    
+    try:
+        reply = await bot.wait_for("message", check=check, timeout=timeout)
+        text = reply.content.strip().lower()
+        if text == "all":
+            return "all"
+        if text.isdigit():
+            idx = int(text) - 1
+            if 0 <= idx < image_count:
+                return idx
+        await message.channel.send("⚠️ Invalid selection. Using the first image.")
+        return 0
+    except asyncio.TimeoutError:
+        await prompt_msg.edit(content="⏰ Timed out. Using the first image.")
+        return 0
+
 # --------------------------
 # Helpers
 # --------------------------
@@ -1091,13 +1120,20 @@ async def on_message(message: discord.Message):
 
         # IMAGE EDIT using Responses API
         if intent == "edit_image" and image_urls:
-            async def _do_edit():
-                # No local imports needed if we have global ones, but safe to keep for closure self-containment
+            # Handle multiple images - ask user which one
+            images_to_edit = image_urls
+            if len(image_urls) > 1:
+                selection = await prompt_for_image_selection(message, len(image_urls))
+                if selection == "all":
+                    pass  # Keep all images, process sequentially
+                else:
+                    images_to_edit = [image_urls[selection]]
+            
+            async def _do_single_edit(img_url: str):
                 from openai_utils import openai_client
                 import io
                 import base64
                 
-                # Force the model to edit by being explicit
                 edit_instruction = f"You must edit this image. {prompt}. Apply the changes to the image."
                 
                 response = await openai_client.responses.create(
@@ -1107,35 +1143,40 @@ async def on_message(message: discord.Message):
                             "role": "user",
                             "content": [
                                 {"type": "input_text", "text": edit_instruction},
-                                {"type": "input_image", "image_url": image_urls[0]}
+                                {"type": "input_image", "image_url": img_url}
                             ]
                         }
                     ],
                     tools=[{"type": "image_generation", "action": "edit"}]
                 )
                 
-                # Extract edited image
                 image_calls = [o for o in response.output if o.type == "image_generation_call"]
                 if image_calls and image_calls[0].result:
                     image_base64 = image_calls[0].result
-                    # Use io.BytesIO explicitly
                     return io.BytesIO(base64.b64decode(image_base64))
                 return None
             
-            # Use the progress bar!
-            status_msg, image_data = await live_status_with_progress(
-                message,
-                action_label="Editing",
-                emoji="🔧",
-                coro=_do_edit(),
-                duration_estimate=30,
-            )
+            # Process each image
+            edited_count = 0
+            for idx, img_url in enumerate(images_to_edit):
+                label = f"Editing ({idx+1}/{len(images_to_edit)})" if len(images_to_edit) > 1 else "Editing"
+                status_msg, image_data = await live_status_with_progress(
+                    message,
+                    action_label=label,
+                    emoji="🔧",
+                    coro=_do_single_edit(img_url),
+                    duration_estimate=30,
+                )
+                
+                if image_data:
+                    edited_count += 1
+                    await status_msg.edit(content=f"✅ Image {idx+1} edited" if len(images_to_edit) > 1 else "✅ Image edited")
+                    await message.channel.send(file=discord.File(image_data, f"edited_{idx+1}.png"))
+                else:
+                    await status_msg.edit(content=f"❌ Image {idx+1} failed" if len(images_to_edit) > 1 else "❌ Edit failed")
             
-            if image_data:
-                await status_msg.edit(content="✅ Image edited")
-                await message.channel.send(file=discord.File(image_data, "edited.png"))
-            else:
-                await status_msg.edit(content="❌ Edit failed or refused")
+            if len(images_to_edit) > 1 and edited_count > 0:
+                await message.channel.send(f"✅ Done! Edited {edited_count}/{len(images_to_edit)} images.")
             return
 
         # SUMMARIZE URL
