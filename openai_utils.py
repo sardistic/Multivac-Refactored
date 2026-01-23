@@ -611,6 +611,23 @@ def _collect_tool_uses(r) -> List[tuple[str, str, Dict[str, Any]]]:
     # logger.debug(f"[openai.tools.parser] Inspecting outputs: {outputs}") # Very verbose
 
     for item in outputs:
+        # C) Item itself is the tool call (ResponseFunctionToolCall)
+        itype = getattr(item, "type", None) or (item.get("type") if isinstance(item, dict) else None)
+        if itype in ("function_call", "function", "tool_call"):
+             cid = getattr(item, "call_id", None) or getattr(item, "id", None) or (item.get("call_id") if isinstance(item, dict) else None)
+             name = getattr(item, "name", None) or (item.get("name") if isinstance(item, dict) else None)
+             args = getattr(item, "arguments", None) or (item.get("arguments") if isinstance(item, dict) else None)
+             if isinstance(args, str):
+                 try:
+                     args = json.loads(args)
+                 except Exception:
+                     args = {}
+             
+             if cid and name:
+                 logging.debug(f"[openai.tools.parser] Found direct tool call: {name}")
+                 out.append((cid, name, args))
+                 continue
+
         # A) top-level .tool_calls
         calls = getattr(item, "tool_calls", None)
         if calls is None and isinstance(item, dict):
