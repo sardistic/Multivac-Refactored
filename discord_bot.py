@@ -127,33 +127,42 @@ def _state_key(guild_id: int | None, channel_id: int) -> str:
     return f"{g}:{channel_id}"
 
 # ---- Multi-Image Selection ----
+# Track users currently being prompted (to prevent on_message from double-processing)
+_pending_image_selection: set[int] = set()  # user IDs awaiting reply
+
 async def prompt_for_image_selection(message, image_count: int, timeout: float = 30.0):
     """
     Ask user which image to process when multiple are present.
     Returns: int (0-based index), "all", or 0 on timeout/invalid.
     """
-    prompt_msg = await message.reply(
-        f"📷 I see **{image_count} images**. Which one should I edit?\n"
-        "Reply with a number (1, 2, ...) or **all**."
-    )
-    
-    def check(m):
-        return m.author == message.author and m.channel == message.channel
+    user_id = message.author.id
+    _pending_image_selection.add(user_id)
     
     try:
-        reply = await bot.wait_for("message", check=check, timeout=timeout)
-        text = reply.content.strip().lower()
-        if text == "all":
-            return "all"
-        if text.isdigit():
-            idx = int(text) - 1
-            if 0 <= idx < image_count:
-                return idx
-        await message.channel.send("⚠️ Invalid selection. Using the first image.")
-        return 0
-    except asyncio.TimeoutError:
-        await prompt_msg.edit(content="⏰ Timed out. Using the first image.")
-        return 0
+        prompt_msg = await message.reply(
+            f"📷 I see **{image_count} images**. Which one should I edit?\n"
+            "Reply with a number (1, 2, ...) or **all**."
+        )
+        
+        def check(m):
+            return m.author.id == user_id and m.channel == message.channel
+        
+        try:
+            reply = await bot.wait_for("message", check=check, timeout=timeout)
+            text = reply.content.strip().lower()
+            if text == "all":
+                return "all"
+            if text.isdigit():
+                idx = int(text) - 1
+                if 0 <= idx < image_count:
+                    return idx
+            await message.channel.send("⚠️ Invalid selection. Using the first image.")
+            return 0
+        except asyncio.TimeoutError:
+            await prompt_msg.edit(content="⏰ Timed out. Using the first image.")
+            return 0
+    finally:
+        _pending_image_selection.discard(user_id)
 
 # --------------------------
 # Helpers
@@ -601,6 +610,10 @@ async def on_message(message: discord.Message):
 
     # Allow the plain text trigger too
     if not (is_direct_mention or is_reply_to_bot) or message.mention_everyone:
+        return
+    
+    # Skip if user is currently responding to an image selection prompt
+    if message.author.id in _pending_image_selection:
         return
 
     # Pre-log the user's message (live indexing)
