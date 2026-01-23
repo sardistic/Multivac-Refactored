@@ -512,17 +512,39 @@ async def on_ready():
     logger.info("Startup: Gemini Tools Patch Loaded (Scipy+Artifacts) v3")
 
 @bot.event
-async def on_reaction_add(reaction, user):
-    if user.bot:
+async def on_raw_reaction_add(payload):
+    # Ignore bot's own reactions
+    if payload.user_id == bot.user.id:
         return
-    msg = reaction.message
-    if msg.author.id != bot.user.id:
-        return
-    rec = get_message_expansion(msg.id)
+
+    # Check if this message is a truncatable message (fast DB check)
+    rec = get_message_expansion(payload.message_id)
     if not rec:
         return
 
-    emoji = str(reaction.emoji)
+    # Get channel and message
+    channel = bot.get_channel(payload.channel_id)
+    if not channel:
+        return
+    try:
+        msg = await channel.fetch_message(payload.message_id)
+    except discord.NotFound:
+        return
+    except Exception as e:
+        logger.error(f"Failed to fetch message for expansion: {e}")
+        return
+
+    # Ensure we only care about reactions to the bot's messages
+    if msg.author.id != bot.user.id:
+        return
+
+    emoji = str(payload.emoji)
+
+    user = bot.get_user(payload.user_id) 
+    # If user is None (not in cache), we can't easily pass 'user' to remove_reaction 
+    # unless we fetch member. But remove_reaction accepts Member or User.
+    # We can use payload.member if in guild.
+    member = payload.member or user
 
     if emoji == EXPAND_EMOJI and not rec["expanded"]:
         full = rec["full_text"]
@@ -537,10 +559,9 @@ async def on_reaction_add(reaction, user):
                     "⚠️ Response too long to expand inline. Sending as file.",
                     file=discord.File(f, filename="response.md")
                 )
-                # We do NOT mark as expanded because we didn't actually expand the original message.
-                # Just remove the user's reaction so they can try again if they really want the file again?
-                # Or maybe we leave it.
-                await msg.remove_reaction(emoji, user)
+                if member:
+                    with contextlib.suppress(Exception):
+                        await msg.remove_reaction(emoji, member)
             except Exception as e:
                 logger.error(f"Failed to send long response file: {e}")
         else:
