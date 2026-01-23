@@ -210,6 +210,39 @@ def make_preview(full_text: str, max_lines: int = LINE_TRUNCATE_AT):
         return preview + "…", True
     return full_text, False
 
+async def auto_collapse_task(message: discord.Message, delay: float = 600.0):
+    """
+    Async task wrapper for auto-collapsing a specific message object.
+    """
+    # Wait
+    await asyncio.sleep(delay)
+    
+    try:
+        # Re-check state from DB
+        rec = get_message_expansion(message.id)
+        if not rec or not rec["expanded"]:
+            return  # Already collapsed or gone
+
+        # Generate preview
+        full_text = rec["full_text"]
+        preview, _ = make_preview(full_text, LINE_TRUNCATE_AT)
+        
+        # Collapse it
+        footer = f"\n\n(react {EXPAND_EMOJI} to expand)"
+        await message.edit(content=f"{preview}{footer}")
+        
+        # Update state
+        set_message_expanded(message.id, False)
+        
+        # Update reactions
+        with contextlib.suppress(Exception):
+            await message.clear_reaction(COLLAPSE_EMOJI)
+        with contextlib.suppress(Exception):
+            await message.add_reaction(EXPAND_EMOJI)
+            
+    except Exception as e:
+        logger.warning(f"Auto-collapse task failed for msg {message.id}: {e}")
+
 async def send_or_edit_with_truncation(
     full_text: str, *, channel: Optional[discord.abc.Messageable] = None,
     target_msg: Optional[discord.Message] = None, reply_to: Optional[discord.Message] = None,
@@ -226,72 +259,83 @@ async def send_or_edit_with_truncation(
     preview, did_trunc = make_preview(full_text, LINE_TRUNCATE_AT)
 
     if did_trunc:
-        content = f"{preview}\n\n(react {EXPAND_EMOJI} to expand)"
-        if target_msg:
-            await target_msg.edit(content=content)
-            save_message_expansion(target_msg.id, full_text, expanded=False)
-            with contextlib.suppress(Exception):
-                await target_msg.clear_reactions()
-            with contextlib.suppress(Exception):
-                await target_msg.add_reaction(EXPAND_EMOJI)
+        # Check total length for expand-by-default eligibility
+        # Discord limit ~2000. We need room for footer.
+        footer_expand = f"\n\n(react {EXPAND_EMOJI} to expand)"
+        footer_collapse = f"\n\n(react {COLLAPSE_EMOJI} to collapse)"
+        
+        if len(full_text) + len(footer_collapse) <= 2000:
+            # OPTION A: EXPAND BY DEFAULT (Short enough to fit)
+            content = f"{full_text}{footer_collapse}"
             
-            # CRITICAL FIX: If we have extra files (images/audio), we MUST send them!
-            # Since we truncated the text to a preview, we can't easily attach to *this* message 
-            # without confusing the expansion logic or getting overwritten later.
-            # Best approach: Reply with the artifacts so they are visible immediately.
-            if extra_files:
-                try:
-                    await target_msg.reply(files=extra_files)
-                except Exception as e:
-                    logger.error(f"Failed to reply with artifacts on truncation: {e}")
+            if target_msg:
+                sent = target_msg
+                await target_msg.edit(content=content)
+            else:
+                sent = await channel.send(content, reference=reply_to, files=extra_files)
+                
+            # Initial State: Expanded
+            save_message_expansion(sent.id, full_text, expanded=True)
+            
+            # Reactions: Show Collapse
+            with contextlib.suppress(Exception):
+                await sent.clear_reactions()
+            with contextlib.suppress(Exception):
+                await sent.add_reaction(COLLAPSE_EMOJI)
+                
+            # Schedule Auto-Collapse (10 mins)
+            asyncio.create_task(auto_collapse_task(sent, delay=600))
+            
+            # Note: For expanded messages, we already sent extra_files in the main message (if new).
+            # If editing (target_msg), we might need to reply with files if they were passed?
+            # Existing logic handled extra_files via reply for edit. 
+            if target_msg and extra_files:
+                 with contextlib.suppress(Exception):
+                     await target_msg.reply(files=extra_files)
 
-            # Auto-index before returning
-            if auto_index:
-                try:
-                    src_msg = original_message or reply_to
-                    if src_msg:
-                        index_message(
-                            message_id=str(target_msg.id),
-                            guild_id=str(src_msg.guild.id) if src_msg.guild else "DM",
-                            channel_id=str(src_msg.channel.id),
-                            user_id=str(src_msg.author.id),
-                            role="assistant",
-                            content=full_text,
-                            timestamp=_now_iso(),
-                            reply_to_id=str(src_msg.id),
-                            model=model or "unknown"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to auto-index bot message: {e}")
-            
-            return target_msg
         else:
-            # New message case - just attach files to the preview message
-            sent = await channel.send(content, reference=reply_to, files=extra_files)
+            # OPTION B: PREVIEW ONLY (Too long to expand inline)
+            content = f"{preview}{footer_expand}"
+            
+            if target_msg:
+                sent = target_msg
+                await target_msg.edit(content=content)
+                # For edits, we reply with artifacts because we can't attach easily to existing without replacing?
+                if extra_files:
+                    with contextlib.suppress(Exception):
+                        await target_msg.reply(files=extra_files)
+            else:
+                sent = await channel.send(content, reference=reply_to, files=extra_files)
+
+            # Initial State: Collapsed
             save_message_expansion(sent.id, full_text, expanded=False)
+            
+            # Reactions: Show Expand
+            with contextlib.suppress(Exception):
+                await sent.clear_reactions()
             with contextlib.suppress(Exception):
                 await sent.add_reaction(EXPAND_EMOJI)
-            
-            # Auto-index before returning
-            if auto_index:
-                try:
-                    src_msg = original_message or reply_to
-                    if src_msg:
-                        index_message(
-                            message_id=str(sent.id),
-                            guild_id=str(src_msg.guild.id) if src_msg.guild else "DM",
-                            channel_id=str(src_msg.channel.id),
-                            user_id=str(src_msg.author.id),
-                            role="assistant",
-                            content=full_text,
-                            timestamp=_now_iso(),
-                            reply_to_id=str(src_msg.id),
-                            model=model or "unknown"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to auto-index bot message: {e}")
-            
-            return sent
+        
+        # Auto-index before returning
+        if auto_index:
+            try:
+                src_msg = original_message or reply_to
+                if src_msg:
+                    index_message(
+                        message_id=str(sent.id),
+                        guild_id=str(src_msg.guild.id) if src_msg.guild else "DM",
+                        channel_id=str(src_msg.channel.id),
+                        user_id=str(src_msg.author.id),
+                        role="assistant",
+                        content=full_text,
+                        timestamp=_now_iso(),
+                        reply_to_id=str(src_msg.id),
+                        model=model or "unknown"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to auto-index bot message: {e}")
+        
+        return sent
     else:
         if target_msg:
             if extra_files:
