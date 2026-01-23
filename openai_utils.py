@@ -461,6 +461,7 @@ def _normalize_messages_for_responses(messages: List[Dict[str, Any]]) -> List[Di
 # -----------------------------------------------------------------------------
 
 async def _exec_tool(name: str, args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
+    logger.debug(f"[openai.tools] Executing {name} with args={list(args.keys())}")  # don't log full args for privacy/size
     try:
         if name == "web_search":
             if _tool_web_search is None:
@@ -606,12 +607,18 @@ def _collect_tool_uses(r) -> List[tuple[str, str, Dict[str, Any]]]:
     outputs = getattr(r, "output", None) or getattr(r, "outputs", None) or []
     if not isinstance(outputs, list):
         outputs = [outputs]
+    
+    # logger.debug(f"[openai.tools.parser] Inspecting outputs: {outputs}") # Very verbose
 
     for item in outputs:
         # A) top-level .tool_calls
         calls = getattr(item, "tool_calls", None)
         if calls is None and isinstance(item, dict):
             calls = item.get("tool_calls")
+        
+        if calls:
+             logger.debug(f"[openai.tools.parser] Found {len(calls)} tool_calls in item")
+        
         if calls:
             for c in calls:
                 cid  = getattr(c, "id", None) or (c.get("id") if isinstance(c, dict) else None)
@@ -658,8 +665,11 @@ async def _responses_tool_loop(first_resp, *, max_rounds: int = 3, tool_context:
         tool_outputs = []
         for tool_call_id, name, args in uses:
             try:
+                logger.debug(f"[openai.tools] Calling tool {name}...")
                 output_text = await _exec_tool(name, args, context=tool_context)
+                logger.debug(f"[openai.tools] Tool {name} returned {len(str(output_text))} chars")
             except Exception as e:
+                logger.error(f"[openai.tools] Tool {name} failed: {e}")
                 output_text = f"tool_error: {name}: {e}"
             tool_outputs.append({"tool_call_id": tool_call_id, "output": str(output_text)})
 
@@ -913,6 +923,18 @@ async def generate_openai_messages_response_with_tools(
             text = _extract_responses_text(resp)
             if text:
                 return text
+            
+            # Fallback if no text content found
+            logger.warning(f"[openai] No text and no tools! Raw Resp Output: {getattr(resp, 'output', 'N/A')}")
+            try:
+                # Debug dump output structure
+                outputs = getattr(resp, 'output', []) or getattr(resp, 'outputs', [])
+                if isinstance(outputs, list):
+                    for i, o in enumerate(outputs):
+                         logger.warning(f"  [openai] output[{i}]: {o}")
+            except Exception: 
+                pass
+
             return "I tried to use my tools but couldn't get a response. Could you rephrase?"
         else:
             resp = await openai_client.chat.completions.create(
