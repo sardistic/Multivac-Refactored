@@ -170,6 +170,21 @@ TOOL_SPECS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_memory",
+            "description": "Search my long-term memory (Elasticsearch) for past conversations or context. Use this to remember things the user told you previously.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query (e.g. 'favorite pokemon', 'project ideas')"},
+                    "limit": {"type": "integer", "description": "Max results to return", "default": 5},
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 
@@ -292,6 +307,84 @@ async def handle_git_repo_info(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "info": info}
 
 
+async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
+    # We need to access memory_utils. We'll import it here.
+    # Note: We need the context (guild_id, etc.) which usually comes from the bot state.
+    # However, these handlers only take `args`.
+    # This is a limitation of the current tool system designed for stateless generic tools.
+    #
+    # WORKAROUND: The `args` should definitely include context if the model puts it there,
+    # but the model doesn't know the IDs.
+    #
+    # Better approach for context-aware tools:
+    # The `args` passed to `handle_...` are purely from the model.
+    # We might need to inject context into `args` *before* calling the handler in `_exec_tool`?
+    # Or `_exec_tool` needs to support context.
+    #
+    # Looking at `openai_utils._exec_tool`, it just takes `name` and `args`.
+    # And `discord_bot` calls `generate...` which calls `_responses_tool_loop`.
+    #
+    # For now, `search_memory` requires guild/channel/user context.
+    # Since we can't easily change the function signature of all handlers without breaking things,
+    # we will fail gracefully if context isn't passed, OR we update `_exec_tool` to accept context.
+    #
+    # PREFERRED FIX: The bot should probably inject `_context` into the args if possible.
+    # But for now, let's see if we can make `search_memory` take arguments that the model MIGHT know?
+    # No, model doesn't know guild_id.
+    #
+    # Solution: We will update `openai_utils.py` to allow passing a `context` dict to `_exec_tool`.
+    # But that requires updating the loop.
+    #
+    # SIMPLEST FIX for this session:
+    # We'll rely on a global or contextvar? No, that's messy.
+    #
+    # Let's look at `openai_utils.py` call site.
+    # `discord_bot.py` calls `generate_openai_messages_response_with_tools`.
+    # It doesn't pass context to that function either, except via 'messages'.
+    #
+    # WAIT! `discord_bot.py` has the context variables `message`, `guild_id`, `user_id`.
+    # But the tool execution happens deep inside `openai_utils.py`.
+    #
+    # I will modify `generate_openai_messages_response_with_tools` to accept `tool_context`.
+    # And pass that down.
+    
+    # For this file modification, I'll just write the handler assuming `_context` might be in args
+    # (injected by the caller) or we'll fail.
+    # Actually, let's just write the handler and then fix the plumbing in `openai_utils`.
+    from memory_utils import fetch_matches_recent
+    
+    # Check if context was injected
+    ctx =  args.get("_context", {})
+    guild_id = ctx.get("guild_id")
+    channel_id = ctx.get("channel_id")
+    user_id = ctx.get("user_id")
+    
+    if not (guild_id and channel_id and user_id):
+        return {"ok": False, "error": "missing_context_for_memory"}
+        
+    query = args.get("query", "")
+    limit = int(args.get("limit", 5))
+    
+    results = fetch_matches_recent(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        user_id=user_id,
+        query=query,
+        size=limit
+    )
+    
+    # Format for the model
+    formatted = []
+    for r in results:
+        formatted.append({
+            "role": r.get("role"),
+            "content": r.get("content"),
+            "timestamp": r.get("timestamp")
+        })
+        
+    return {"ok": True, "results": formatted}
+
+
 TOOL_HANDLERS = {
     "get_weather": handle_get_weather,
     "get_stock_quote": handle_get_stock_quote,
@@ -304,5 +397,6 @@ TOOL_HANDLERS = {
     "git_search_code": handle_git_search_code,
     "git_file_list": handle_git_file_list,
     "git_repo_info": handle_git_repo_info,
+    "search_memory": handle_search_memory,
 }
 

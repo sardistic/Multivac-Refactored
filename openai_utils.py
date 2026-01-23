@@ -321,6 +321,21 @@ TOOLS_DEF = [
     {
         "type": "function",
         "function": {
+            "name": "search_memory",
+            "description": "Search my long-term memory (Elasticsearch) for past conversations or context. Use to remember things.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "limit": {"type": "integer", "description": "Results (max 20)", "default": 5},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_available_tools",
             "description": "List all my available tools and what they do. Call this to see what capabilities I have.",
             "parameters": {"type": "object", "properties": {}, "required": []},
@@ -445,7 +460,7 @@ def _normalize_messages_for_responses(messages: List[Dict[str, Any]]) -> List[Di
 # Tool execution router
 # -----------------------------------------------------------------------------
 
-async def _exec_tool(name: str, args: Dict[str, Any]) -> str:
+async def _exec_tool(name: str, args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
     try:
         if name == "web_search":
             if _tool_web_search is None:
@@ -524,6 +539,44 @@ async def _exec_tool(name: str, args: Dict[str, Any]) -> str:
             info = get_repo_info()
             return json.dumps({"info": info}, ensure_ascii=False)
 
+        if name == "search_memory":
+            if not context:
+                return json.dumps({"error": "missing_context_for_memory"}, ensure_ascii=False)
+            
+            # Inject context into args for handler or handle directly here
+            # Since tools_registry handler needs imports, let's keep it here or call tools_registry
+            # Ideally we keep logic in tools_registry, but passing context is tricky.
+            # We'll just define the logic here for simplicity as we did with git tools.
+            from memory_utils import fetch_matches_recent
+            
+            guild_id = context.get("guild_id")
+            channel_id = context.get("channel_id")
+            user_id = context.get("user_id")
+            
+            if not (guild_id and channel_id and user_id):
+                return json.dumps({"error": "incomplete_context_for_memory"}, ensure_ascii=False)
+                
+            query = args.get("query", "")
+            limit = int(args.get("limit", 5))
+            
+            results = fetch_matches_recent(
+                guild_id=guild_id,
+                channel_id=channel_id,
+                user_id=user_id,
+                query=query,
+                size=limit
+            )
+            
+            # Format minimal results
+            formatted = []
+            for r in results:
+                formatted.append({
+                    "role": r.get("role"),
+                    "content": r.get("content"),
+                    "timestamp": r.get("timestamp")
+                })
+            return json.dumps({"results": formatted}, ensure_ascii=False)
+
         if name == "list_available_tools":
             # Return a summary of all available tools
             tool_summaries = []
@@ -590,7 +643,7 @@ def _collect_tool_uses(r) -> List[tuple[str, str, Dict[str, Any]]]:
 
     return out
 
-async def _responses_tool_loop(first_resp, *, max_rounds: int = 3):
+async def _responses_tool_loop(first_resp, *, max_rounds: int = 3, tool_context: Optional[Dict[str, Any]] = None):
     """
     Execute tool calls and iteratively submit outputs via responses.submit_tool_outputs
     until the model stops asking for tools or we hit max_rounds.
@@ -605,7 +658,7 @@ async def _responses_tool_loop(first_resp, *, max_rounds: int = 3):
         tool_outputs = []
         for tool_call_id, name, args in uses:
             try:
-                output_text = await _exec_tool(name, args)
+                output_text = await _exec_tool(name, args, context=tool_context)
             except Exception as e:
                 output_text = f"tool_error: {name}: {e}"
             tool_outputs.append({"tool_call_id": tool_call_id, "output": str(output_text)})
@@ -821,6 +874,7 @@ async def generate_openai_messages_response_with_tools(
     messages: List[Dict[str, Any]],
     *,
     tools: Optional[list] = None,
+    tool_context: Optional[Dict[str, Any]] = None,
     model: str = "gpt-4o",
     max_tokens: int = 700,
     temperature: float = 0.6,
@@ -855,7 +909,7 @@ async def generate_openai_messages_response_with_tools(
                 logging.debug("[openai.tools] Model did not call any tools")
             
             # run tool loop (critical)
-            resp = await _responses_tool_loop(resp, max_rounds=3)
+            resp = await _responses_tool_loop(resp, max_rounds=3, tool_context=tool_context)
             text = _extract_responses_text(resp)
             if text:
                 return text

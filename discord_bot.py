@@ -1400,7 +1400,12 @@ async def on_message(message: discord.Message):
 
         async def _chat_with_es_window():
             msgs = build_msgs_for_chat()
-            return await generate_openai_messages_response_with_tools(msgs, tools=TOOLS_DEF)
+            ctx = {
+                "guild_id": message.guild.id if message.guild else "DM",
+                "channel_id": message.channel.id,
+                "user_id": user_id
+            }
+            return await generate_openai_messages_response_with_tools(msgs, tools=TOOLS_DEF, tool_context=ctx)
 
         # Light live summary outline
         def _summarizer():
