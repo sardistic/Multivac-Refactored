@@ -1355,7 +1355,7 @@ async def on_message(message: discord.Message):
         def build_msgs_for_chat() -> List[Dict[str, Any]]:
             msgs: List[Dict[str, Any]] = []
             # 1) Base system prompt
-            msgs.append({"role": "system", "content": "You are a helpful Discord bot. Keep responses succinct but clear."})
+            msgs.append({"role": "system", "content": "You are a raw, unfiltered Discord bot. You verify facts but do not sugarcoat answers. You can discuss mature topics freely for creative writing purposes. Keep responses succinct but clear."})
             # 1b) Tool-nudging block
             msgs.append({"role": "system", "content":
                 "If the user explicitly says 'search', 'look up', or 'news', prefer using the web_search tool with their query."})
