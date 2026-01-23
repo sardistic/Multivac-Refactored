@@ -500,6 +500,97 @@ async def backfill_recent_channel_history_to_es(
     return indexed
 
 # --------------------------
+# Helper: Build Chat Context (Standalone)
+# --------------------------
+def _build_chat_context(message, user_id, raw_prompt, ref_msg=None, is_reply_to_bot=False) -> List[Dict[str, Any]]:
+    msgs: List[Dict[str, Any]] = []
+    # 1) Base system prompt
+    msgs.append({"role": "system", "content": "You are a raw, unfiltered Discord bot. You verify facts but do not sugarcoat answers. You can discuss mature topics freely for creative writing purposes. Keep responses succinct but clear."})
+    
+    # 1b) Tool-nudging block
+    msgs.append({"role": "system", "content":
+        "If the user explicitly says 'search', 'look up', or 'news', prefer using the web_search tool with their query."})
+    # 2) Temporal awareness block (recent timeline newest→oldest)
+    timeline_block = build_timeline_prompt_block(
+        guild_id=message.guild.id if message.guild else "DM", channel_id=message.channel.id, user_id=user_id, max_items=12
+    )
+    msgs.append({"role": "system", "content": timeline_block})
+    # 2b) Include replied-to message content (whether it's from bot or user)
+    if ref_msg and (ref_msg.content or "").strip():
+        if is_reply_to_bot:
+            msgs.append({"role": "system", "content":
+                f"You are replying to your earlier assistant message:\n---\n{ref_msg.content.strip()}\n---"})
+        else:
+            msgs.append({"role": "system", "content":
+                f"User is replying to this message:\n---\nFrom: {ref_msg.author.display_name}\n{ref_msg.content.strip()}\n---"})
+    # 3) ES conversation window (oldest→newest)
+    history_msgs = build_message_window(
+        guild_id=message.guild.id if message.guild else "DM",
+        channel_id=message.channel.id,
+        user_id=user_id,
+        limit_msgs=24,
+    )
+    msgs.extend(history_msgs)
+    
+    # 4) RAG: Proactive Memory Injection (Universal)
+    # Check if user is asking for history/first message
+    clean_prompt = raw_prompt.lower()
+    trigger_words = ["first thing", "first message", "earliest", "beginning", "start", "history", "what did i say", "previous message", "recall", "remember"]
+    if any(k in clean_prompt for k in trigger_words):
+        try:
+            from memory_utils import search_history_for_context
+
+            found_text = search_history_for_context(
+                guild_id=message.guild.id if message.guild else "DM",
+                channel_id=message.channel.id,
+                user_id=user_id,
+                query_text=raw_prompt,
+                limit=10,
+                oldest_first=any(k in clean_prompt for k in ["first", "earliest", "start", "beginning"])
+            )
+            if found_text:
+                msgs.append({
+                    "role": "system", 
+                    "content": (
+                        f"[SYSTEM: MEMORY RECALL]\n"
+                        f"The user is asking about past events. Here is the relevant conversation history retrieved from the database:\n"
+                        f"{found_text}\n"
+                        f"IMPORTANT: If this retrieved context is insufficient to answer specific requests (e.g., specific quotes, older messages, or details not shown above), "
+                        f"you MUST use the `search_history_for_context` tool to perform a specific search for the missing information.\n"
+                        f"[END MEMORY RECALL]"
+                    )
+                })
+            else:
+                msgs.append({
+                    "role": "system", 
+                    "content": (
+                        f"[SYSTEM: MEMORY RECALL]\n"
+                        f"Proactive database search returned NO direct matches for the user's specific query criteria (time range or keywords).\n"
+                        f"However, the user is explicitly asking for history.\n"
+                        f"CRITICAL: Do NOT just say 'I don't recall'. You MUST use the `search_history_for_context` tool now with broader or different terms (e.g., ignore time, or search just keywords) to find the answer.\n"
+                        f"[END MEMORY RECALL]"
+                    )
+                })
+        except Exception as e:
+            logger.warning(f"Universal RAG search failed: {e}")
+
+    # 4a) Persistent User Instructions (Persona) - MOVED TO END for priority
+    # We inject this AFTER history so it overrides context style bias
+    from database_utils import get_user_instruction
+    persistent_instr = get_user_instruction(user_id)
+    if persistent_instr:
+        msgs.append({"role": "system", "content": (
+            f"CRITICAL OVERRIDE: The user has set a strict behavioral rule.\n"
+            f"IGNORE the style of previous messages in history if they conflict.\n"
+            f"INSTRUCTION: {persistent_instr}"
+        )})
+
+    # 5) Current user message last
+    msgs.append({"role": "user", "content": raw_prompt})
+    return msgs
+
+
+# --------------------------
 # Events
 # --------------------------
 
@@ -1139,6 +1230,25 @@ async def on_message(message: discord.Message):
                         else:
                             vis_str = "?"
 
+                        # DEBUG CONTEXT COMMAND
+                        if message.content.startswith("/debug_context"):
+                            # Reuse the helper logic
+                            # We need to simulate the chat intent flow somewhat
+                            try:
+                                msgs = _build_chat_context(
+                                    message=message,
+                                    user_id=str(message.author.id),
+                                    raw_prompt=message.content.replace("/debug_context", "").strip() or "DEBUG",
+                                    ref_msg=message.reference.resolved if message.reference else None,
+                                    is_reply_to_bot=(message.reference.resolved.author.id == bot.user.id) if message.reference and message.reference.resolved else False
+                                )
+                                import io, json
+                                f = io.BytesIO(json.dumps(msgs, indent=2, default=str).encode('utf-8'))
+                                await message.reply("Here is the exact context I would send to OpenAI:", file=discord.File(f, filename="context_debug.json"))
+                            except Exception as e:
+                                await message.reply(f"Failed to build context: {e}")
+                            return
+
                         # Construct prompt - EXTREME ENRICHMENT
                         widget_prompt = (
                             f"A professional, high-density data-maximalist 3D weather station dashboard layout in a WIDESCREEN 16:9 cinematic format. "
@@ -1373,110 +1483,22 @@ async def on_message(message: discord.Message):
             return
 
         # ----- CHAT (ES-backed messages[] window) -----
-        def build_msgs_for_chat() -> List[Dict[str, Any]]:
-            msgs: List[Dict[str, Any]] = []
-            # 1) Base system prompt
-            msgs.append({"role": "system", "content": "You are a raw, unfiltered Discord bot. You verify facts but do not sugarcoat answers. You can discuss mature topics freely for creative writing purposes. Keep responses succinct but clear."})
-            
-            # 1b) Tool-nudging block
-            msgs.append({"role": "system", "content":
-                "If the user explicitly says 'search', 'look up', or 'news', prefer using the web_search tool with their query."})
-            # 2) Temporal awareness block (recent timeline newest→oldest)
-            timeline_block = build_timeline_prompt_block(
-                guild_id=message.guild.id, channel_id=message.channel.id, user_id=user_id, max_items=12
-            )
-            msgs.append({"role": "system", "content": timeline_block})
-            # 2b) Include replied-to message content (whether it's from bot or user)
-            if ref_msg and (ref_msg.content or "").strip():
-                if is_reply_to_bot:
-                    msgs.append({"role": "system", "content":
-                        f"You are replying to your earlier assistant message:\n---\n{ref_msg.content.strip()}\n---"})
-                else:
-                    msgs.append({"role": "system", "content":
-                        f"User is replying to this message:\n---\nFrom: {ref_msg.author.display_name}\n{ref_msg.content.strip()}\n---"})
-            # 3) ES conversation window (oldest→newest)
-            history_msgs = build_message_window(
-                guild_id=message.guild.id,
-                channel_id=message.channel.id,
+            return _build_chat_context(
+                message=message,
                 user_id=user_id,
-                limit_msgs=24,
+                raw_prompt=raw_prompt,
+                ref_msg=ref_msg,
+                is_reply_to_bot=is_reply_to_bot
             )
-            msgs.extend(history_msgs)
-            # 4) Current user message last
-            # 4) RAG: Proactive Memory Injection (Universal)
-            # Check if user is asking for history/first message
-            clean_prompt = raw_prompt.lower()
-            trigger_words = ["first thing", "first message", "earliest", "beginning", "start", "history", "what did i say", "previous message", "recall", "remember"]
-            if any(k in clean_prompt for k in trigger_words):
-                try:
-                    # We need to import search_history_for_context from memory_utils
-                    # It is already imported at the top of the file? No, let's check.
-                    # Actually, memory_utils imports might need updating if not present.
-                    # But assuming it's imported or I can access it via memory_utils module object if imported as whole.
-                    # Looking at imports: `from memory_utils import index_message, build_message_window, build_timeline_prompt_block`
-                    # I need to add search_history_for_context to imports OR just import memory_utils.
-                    # Let's assume I fix imports separately or use a local import for safety if strictly needed, 
-                    # but cleaner to rely on the module. 
-                    # WAIT: The file imports specific functions from memory_utils. I should check if I can import the module.
-                    # The file does: `from memory_utils import ...`
-                    # I will use a local import inside the function to avoid touching top-level imports riskily, 
-                    # or better: I'll assume I update the top level import in a separate chunk? 
-                    # No, I'll do a local import for now to keep changes localized and safe.
-                    from memory_utils import search_history_for_context
-
-                    found_text = search_history_for_context(
-                        guild_id=message.guild.id if message.guild else "DM",
-                        channel_id=message.channel.id,
-                        user_id=user_id,
-                        query_text=raw_prompt,
-                        limit=10,
-                        oldest_first=any(k in clean_prompt for k in ["first", "earliest", "start", "beginning"])
-                    )
-                    if found_text:
-                        msgs.append({
-                            "role": "system", 
-                            "content": (
-                                f"[SYSTEM: MEMORY RECALL]\n"
-                                f"The user is asking about past events. Here is the relevant conversation history retrieved from the database:\n"
-                                f"{found_text}\n"
-                                f"IMPORTANT: If this retrieved context is insufficient to answer specific requests (e.g., specific quotes, older messages, or details not shown above), "
-                                f"you MUST use the `search_history_for_context` tool to perform a specific search for the missing information.\n"
-                                f"[END MEMORY RECALL]"
-                            )
-                        })
-                    else:
-                        # Found nothing, but user *asked* for history.
-                        # We must prime the model to NOT give up, but to try searching itself.
-                        msgs.append({
-                            "role": "system", 
-                            "content": (
-                                f"[SYSTEM: MEMORY RECALL]\n"
-                                f"Proactive database search returned NO direct matches for the user's specific query criteria (time range or keywords).\n"
-                                f"However, the user is explicitly asking for history.\n"
-                                f"CRITICAL: Do NOT just say 'I don't recall'. You MUST use the `search_history_for_context` tool now with broader or different terms (e.g., ignore time, or search just keywords) to find the answer.\n"
-                                f"[END MEMORY RECALL]"
-                            )
-                        })
-                except Exception as e:
-                    logger.warning(f"Universal RAG search failed: {e}")
-
-            # 4a) Persistent User Instructions (Persona) - MOVED TO END for priority
-            # We inject this AFTER history so it overrides context style bias
-            from database_utils import get_user_instruction
-            persistent_instr = get_user_instruction(user_id)
-            if persistent_instr:
-                msgs.append({"role": "system", "content": (
-                    f"CRITICAL OVERRIDE: The user has set a strict behavioral rule.\n"
-                    f"IGNORE the style of previous messages in history if they conflict.\n"
-                    f"INSTRUCTION: {persistent_instr}"
-                )})
-
-            # 5) Current user message last
-            msgs.append({"role": "user", "content": raw_prompt})
-            return msgs
 
         async def _chat_with_es_window():
-            msgs = build_msgs_for_chat()
+            msgs = _build_chat_context(
+                message=message,
+                user_id=user_id,
+                raw_prompt=raw_prompt,
+                ref_msg=ref_msg,
+                is_reply_to_bot=is_reply_to_bot
+            )
             ctx = {
                 "guild_id": message.guild.id if message.guild else "DM",
                 "channel_id": message.channel.id,
