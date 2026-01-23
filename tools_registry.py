@@ -185,6 +185,23 @@ TOOL_SPECS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_behavioral_instruction",
+            "description": "Update your long-term behavioral instructions for the current user. Use this when the user asks you to change how you speak, behave, or interact with them permanently (e.g. 'always speak in uwu', 'be sassy', 'call me Captain').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "instruction": {
+                        "type": "string",
+                        "description": "The full behavioral instruction to store. e.g. 'Always answer in 1920s slang.' Set to empty string to clear."
+                    }
+                },
+                "required": ["instruction"],
+            },
+        },
+    },
 ]
 
 
@@ -385,6 +402,23 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "results": formatted}
 
 
+async def handle_update_behavioral_instruction(args: Dict[str, Any]) -> Dict[str, Any]:
+    from database_utils import set_user_instruction
+
+    ctx = args.get("_context", {})
+    user_id = ctx.get("user_id")
+    if not user_id:
+        return {"ok": False, "error": "missing_user_context"}
+
+    instruction = args.get("instruction", "")
+    
+    try:
+        set_user_instruction(user_id, instruction)
+        return {"ok": True, "status": "updated", "instruction": instruction}
+    except Exception as e:
+        return {"ok": False, "error": f"db_error: {e}"}
+
+
 TOOL_HANDLERS = {
     "get_weather": handle_get_weather,
     "get_stock_quote": handle_get_stock_quote,
@@ -398,5 +432,6 @@ TOOL_HANDLERS = {
     "git_file_list": handle_git_file_list,
     "git_repo_info": handle_git_repo_info,
     "search_memory": handle_search_memory,
+    "update_behavioral_instruction": handle_update_behavioral_instruction,
 }
 

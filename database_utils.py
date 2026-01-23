@@ -159,9 +159,43 @@ def set_message_expanded(message_id: int, expanded: bool):
         c = conn.cursor()
         c.execute("UPDATE message_expansions SET expanded=? WHERE message_id=?", (1 if expanded else 0, str(message_id)))
         conn.commit()
+# === User/Server Persistent Instructions ===
+def init_user_instructions():
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS user_instructions (
+                user_id TEXT PRIMARY KEY,
+                instruction TEXT,
+                updated_at TEXT
+            )
+        """)
+        conn.commit()
+
+def set_user_instruction(user_id: str, instruction: str):
+    """Set the system instruction for a specific user."""
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        if not instruction:
+            c.execute("DELETE FROM user_instructions WHERE user_id=?", (str(user_id),))
+        else:
+            c.execute("""
+                INSERT OR REPLACE INTO user_instructions (user_id, instruction, updated_at)
+                VALUES (?, ?, ?)
+            """, (str(user_id), instruction, datetime.utcnow().isoformat()))
+        conn.commit()
+
+def get_user_instruction(user_id: str) -> str | None:
+    """Get the persistent system instruction for a user."""
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        c.execute("SELECT instruction FROM user_instructions WHERE user_id=?", (str(user_id),))
+        row = c.fetchone()
+        return row[0] if row else None
 
 # === Initialize Tables ===
 initialize_logs_table()
 create_user_location_table()
 create_memory_consent_table()
 init_message_expansions()
+init_user_instructions()

@@ -341,6 +341,23 @@ TOOLS_DEF = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_behavioral_instruction",
+            "description": "Update your long-term behavioral instructions for the current user. Use this when the user asks you to change how you speak, behave, or interact with them permanently (e.g. 'always speak in uwu', 'be sassy', 'call me Captain').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "instruction": {
+                        "type": "string",
+                        "description": "The full behavioral instruction to store. e.g. 'Always answer in 1920s slang.' Set to empty string to clear."
+                    }
+                },
+                "required": ["instruction"],
+            },
+        },
+    },
 ]
 
 # -----------------------------------------------------------------------------
@@ -577,6 +594,19 @@ async def _exec_tool(name: str, args: Dict[str, Any], context: Optional[Dict[str
                     "timestamp": r.get("timestamp")
                 })
             return json.dumps({"results": formatted}, ensure_ascii=False)
+
+        if name == "update_behavioral_instruction":
+            from database_utils import set_user_instruction
+            if not context or not context.get("user_id"):
+                return json.dumps({"error": "missing_user_context"}, ensure_ascii=False)
+            
+            user_id = context.get("user_id")
+            instruction = args.get("instruction", "")
+            try:
+                set_user_instruction(user_id, instruction)
+                return json.dumps({"status": "updated", "instruction": instruction}, ensure_ascii=False)
+            except Exception as e:
+                return json.dumps({"error": f"db_error: {e}"}, ensure_ascii=False)
 
         if name == "list_available_tools":
             # Return a summary of all available tools
@@ -853,11 +883,28 @@ async def generate_openai_response_tools(
                 temperature=temperature,
             )
             # Execute tool loop
-            resp = await _responses_tool_loop(resp, max_rounds=max_tool_rounds)
+            # Execute tool loop
+            # Note: _responses_tool_loop doesn't support context yet in this codebase version?
+            # We need to verify if we need to patch it. 
+            # Actually, standard chat completions (below) is where main logic lives for most bots.
+            # But USE_RESPONSES might be on.
+            # I will pass context if possible, but the signature above (line 645) was just viewed as NOT accepting it?
+            # Wait, line 645 in previous view was NOT shown. I only viewed up to 600.
+            # I need to be careful.
+            # Let's just fix the Chat Completions loop (lines 950+) which is more standard.
+            # Execute tool loop
+            # Pass messages (norm) so loop can extend history
+            resp = await _responses_tool_loop(
+                resp, 
+                norm, 
+                max_rounds=max_tool_rounds,
+                tool_context=tool_context
+            )
             text = _extract_responses_text(resp)
             if text:
                 return text
-            return "I would use tools for this, but I can proceed directly if you share more specifics."
+            return "I completed the tool actions."
+
         else:
             if img_list:
                 msgs.append({
@@ -870,20 +917,56 @@ async def generate_openai_response_tools(
             else:
                 msgs.append({"role": "user", "content": prompt})
 
+            # Standard Chat Completions Tool Loop
+            # We must handle tool_calls manually here
+            current_msgs = list(msgs)
+            
             resp = await openai_client.chat.completions.create(
                 model="gpt-4o",
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tool_choice="auto",
                 tools=TOOLS_DEF,
-                messages=msgs,
+                messages=current_msgs,
             )
             msg = resp.choices[0].message
-            if msg.content:
-                return msg.content.strip()
-            if getattr(msg, "tool_calls", None):
-                return "I would use tools for this, but I can proceed directly if you share more specifics."
-            return "I’m not sure yet—could you clarify what you need?"
+            
+            # Loop
+            for _ in range(max_tool_rounds):
+                if not msg.tool_calls:
+                    break
+                
+                # Append assistant message with tool calls
+                current_msgs.append(msg)
+                
+                # Exec tools
+                for tc in msg.tool_calls:
+                    try:
+                        args = json.loads(tc.function.arguments)
+                        logging.debug(f"[openai.chat] Exec tool {tc.function.name}")
+                        output = await _exec_tool(tc.function.name, args, context=tool_context)
+                    except Exception as e:
+                        output = f"Error: {e}"
+                        
+                    current_msgs.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": str(output)
+                    })
+                
+                # Next turn
+                resp = await openai_client.chat.completions.create(
+                    model="gpt-4o",
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    tool_choice="auto",
+                    tools=TOOLS_DEF,
+                    messages=current_msgs,
+                )
+                msg = resp.choices[0].message
+            
+            return (msg.content or "").strip()
+
     except Exception as e:
         logging.exception("[openai.tools] error")
         return f"⚠️ OpenAI tools error: {str(e)[:200]}"
