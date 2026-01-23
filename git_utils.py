@@ -56,8 +56,10 @@ def _redact_secrets(text: str) -> str:
 def _run_git(*args, max_output: int = 8000) -> str:
     """Run a git command and return output (truncated if needed)."""
     try:
+        # Use -c safe.directory=* to avoid ownership errors in automated environments
+        cmd = ["git", "-c", "safe.directory=*"] + list(args)
         result = subprocess.run(
-            ["git"] + list(args),
+            cmd,
             cwd=REPO_PATH,
             capture_output=True,
             text=True,
