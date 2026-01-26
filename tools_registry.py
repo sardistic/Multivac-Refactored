@@ -202,7 +202,25 @@ TOOL_SPECS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_sora_video",
+            "description": "Generate a video using OpenAI Sora. STRICT LIMIT: 2 videos per user per hour.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "Detailed description of the video to generate."
+                    }
+                },
+                "required": ["prompt"],
+            },
+        },
+    },
 ]
+
 
 
 # ---- Handlers the bot calls when the model selects a tool ----
@@ -419,6 +437,37 @@ async def handle_update_behavioral_instruction(args: Dict[str, Any]) -> Dict[str
         return {"ok": False, "error": f"db_error: {e}"}
 
 
+async def handle_generate_sora_video(args: Dict[str, Any]) -> Dict[str, Any]:
+    from sora_utils import generate_sora_video
+    from database_utils import check_sora_limit, log_sora_usage
+
+    ctx = args.get("_context", {})
+    user_id = ctx.get("user_id")
+    if not user_id:
+        return {"ok": False, "error": "missing_user_context_for_rate_limit"}
+
+    # Rate Check (2 per hour = 3600s)
+    if not check_sora_limit(user_id, limit=2, window_seconds=3600):
+         return {
+             "ok": False, 
+             "error": "rate_limit_exceeded", 
+             "message": "You have reached the limit of 2 Sora videos per hour. Please try again later."
+         }
+
+    prompt = args.get("prompt", "")
+    if not prompt:
+        return {"ok": False, "error": "missing_prompt"}
+
+    # Generate
+    result = await generate_sora_video(prompt)
+    
+    # Log usage if successful
+    if result.get("ok"):
+        log_sora_usage(user_id)
+        
+    return result
+
+
 TOOL_HANDLERS = {
     "get_weather": handle_get_weather,
     "get_stock_quote": handle_get_stock_quote,
@@ -433,5 +482,7 @@ TOOL_HANDLERS = {
     "git_repo_info": handle_git_repo_info,
     "search_memory": handle_search_memory,
     "update_behavioral_instruction": handle_update_behavioral_instruction,
+    "generate_sora_video": handle_generate_sora_video,
 }
+
 

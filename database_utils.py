@@ -199,3 +199,59 @@ create_user_location_table()
 create_memory_consent_table()
 init_message_expansions()
 init_user_instructions()
+
+# === Sora Usage / Rate Limiting ===
+def init_sora_usage():
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS sora_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                timestamp TEXT
+            )
+        """)
+        conn.commit()
+
+init_sora_usage()
+
+def log_sora_usage(user_id: str):
+    """Log a successful Sora generation usage."""
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        c.execute("INSERT INTO sora_usage (user_id, timestamp) VALUES (?, ?)", 
+                  (str(user_id), datetime.utcnow().isoformat()))
+        conn.commit()
+
+def check_sora_limit(user_id: str, limit: int = 2, window_seconds: int = 3600) -> bool:
+    """
+    Check if user is within the rate limit.
+    Returns True if allowed, False if blocked.
+    """
+    with sqlite3.connect('conversation_history.db') as conn:
+        c = conn.cursor()
+        # Count usages in the last window_seconds
+        # We need to do date math in SQLite or Python. 
+        # SQLite's datetime functions are a bit tricky with isoformat strings usually works if they are proper.
+        # But safest is to fetch recent timestamps and filter in python or use sqlite datetime modifier.
+        
+        # Let's filter in SQL using datetime modifier
+        cutoff_time = datetime.utcnow().timestamp() - window_seconds
+        # We stored isoformat. SQLite 'datetime(timestamp)' expects 'YYYY-MM-DD HH:MM:SS'.
+        # Actually, let's just use Python for clarity if the volume is low.
+        
+        c.execute("SELECT timestamp FROM sora_usage WHERE user_id = ?", (str(user_id),))
+        rows = c.fetchall()
+        
+    now = datetime.utcnow()
+    count = 0
+    for (ts_str,) in rows:
+        try:
+            ts = datetime.fromisoformat(ts_str)
+            age = (now - ts).total_seconds()
+            if age < window_seconds:
+                count += 1
+        except ValueError:
+            pass
+            
+    return count < limit
