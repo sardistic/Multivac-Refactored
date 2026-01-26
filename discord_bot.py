@@ -1476,6 +1476,77 @@ async def on_message(message: discord.Message):
                 await status_msg.edit(content="❌ Generation failed.")
             return
 
+        # GENERATE VIDEO (Sora)
+        if intent == "generate_video":
+            from sora_utils import create_sora_job, get_sora_status, download_sora_content
+            from database_utils import check_sora_limit, log_sora_usage
+            import io
+            
+            # 1. Rate Check
+            if not check_sora_limit(str(user_id), limit=2, window_seconds=3600):
+                await message.reply("⏳ You have reached the limit of 2 Sora videos per hour. Please try again later.")
+                return
+
+            # 2. Start Logic
+            async def _generate_video_task():
+                # create job
+                job = await create_sora_job(prompt, model="sora-2-pro")
+                if not job.get("ok"):
+                    return None, f"Failed to start job: {job.get('error')}"
+                
+                video_id = job["data"].get("id")
+                # Poll loop
+                import time
+                start_time = time.time()
+                while True:
+                    await asyncio.sleep(5) # Poll interval
+                    if time.time() - start_time > 600: # 10 min timeout
+                        return None, "Timeout waiting for video generation."
+                        
+                    status_res = await get_sora_status(video_id)
+                    if not status_res.get("ok"):
+                         return None, f"Polling error: {status_res.get('error')}"
+                         
+                    status_data = status_res["data"]
+                    status = status_data.get("status")
+                    
+                    if status == "completed":
+                        break
+                    elif status == "failed":
+                        err_msg = status_data.get("error", {}).get("message", "Unknown error")
+                        return None, f"Video generation failed: {err_msg}"
+                
+                # Download
+                content = await download_sora_content(video_id)
+                if not content:
+                    return None, "Failed to download video content."
+                    
+                # Success
+                f = io.BytesIO(content)
+                log_sora_usage(str(user_id))
+                return f, None
+
+
+            status_msg, result = await live_status_with_progress(
+                message,
+                action_label="Generating Video",
+                emoji="🎥",
+                coro=_generate_video_task(),
+                duration_estimate=60, 
+                summarizer=(lambda: "Sending request to Sora... Processing frames...") if STREAM_OK else None,
+            )
+            
+            if result and isinstance(result, tuple):
+                 file_obj, err = result
+                 if file_obj:
+                     await status_msg.reply(file=discord.File(file_obj, filename="sora_video.mp4"))
+                     await status_msg.edit(content=f"✅ Video generated for **{prompt[:50]}...**")
+                 else:
+                     await status_msg.edit(content=f"❌ {err or 'Generation failed.'}")
+            else:
+                 await status_msg.edit(content="❌ Unknown error during generation.")
+            return
+
         # STOCK
         if intent == "get_stock" and prompt.lower().startswith("stock"):
             async with message.channel.typing():
