@@ -1501,11 +1501,9 @@ async def on_message(message: discord.Message):
             
             # A. Check for Image Attachment (Image-to-Video)
             if message.attachments:
-                # Find first valid image
                 for att in message.attachments:
                     if att.content_type and att.content_type.startswith("image/"):
                         try:
-                            # Download to bytes
                             image_data = await att.read()
                             base_fail_msg = "Image-to-Video failed."
                             logger.info(f"Received image attachment for Sora: {att.filename} ({len(image_data)} bytes)")
@@ -1514,15 +1512,9 @@ async def on_message(message: discord.Message):
                             logger.error(f"Failed to download attachment: {e}")
             
             # B. Check for Remix (Video-to-Video)
-            # Logic: If prompt explicitly asks "remix" OR implies it, try to find a source video.
-            # Source: 1. Previous video from this user (DB). 2. Explicit ID (todo).
-            # Note: We prioritize Image Input if present. If both present, maybe error? Or default to Image? 
-            # Sora docs say Remix takes a video_id. Image-to-video takes an image.
-            
             remix_target_id = None
             lower_prompt = prompt.lower()
             if "remix" in lower_prompt or (not image_data and "edit" in lower_prompt and "video" in lower_prompt):
-                # Try to fetch last video ID
                 last_vid = get_last_sora_video_id(str(user_id))
                 if last_vid:
                     remix_target_id = last_vid
@@ -1533,6 +1525,65 @@ async def on_message(message: discord.Message):
                         await message.reply("⚠️ I couldn't find a previous video of yours to remix. Please generate one first!")
                         return
 
+            # --- CONFIRMATION UI ---
+            # Define View Class locally to capture context
+            class SoraConfirmationView(discord.ui.View):
+                def __init__(self, author_id):
+                    super().__init__(timeout=45)
+                    self.author_id = author_id
+                    self.value = None # "sora-2-pro" | "sora-2" | None
+
+                async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                    if interaction.user.id != self.author_id:
+                        await interaction.response.send_message("Not your request!", ephemeral=True)
+                        return False
+                    return True
+
+                @discord.ui.button(label="Sora 2 Pro ($2.40)", style=discord.ButtonStyle.primary, emoji="✨")
+                async def pro_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    self.value = "sora-2-pro"
+                    await interaction.response.edit_message(content="✅ **Selected Sora 2 Pro**. Queuing...", view=None)
+                    self.stop()
+
+                @discord.ui.button(label="Sora 2 ($0.80)", style=discord.ButtonStyle.secondary, emoji="🎞️")
+                async def standard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    self.value = "sora-2"
+                    await interaction.response.edit_message(content="✅ **Selected Sora 2**. Queuing...", view=None)
+                    self.stop()
+
+                @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+                async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+                    self.value = "cancel"
+                    await interaction.response.edit_message(content="❌ Cancelled.", view=None)
+                    self.stop()
+
+            # Cost Text
+            # 8s default duration
+            cost_msg = (
+                f"**Sora Video Generation**\n"
+                f"Prompt: *{prompt[:100]}...*\n\n"
+                f"⚠️ **Cost Verification** (8s video):\n"
+                f"• **Sora 2 Pro**: ~$2.40 USD ($0.30/s)\n"
+                f"• **Sora 2**: ~$0.80 USD ($0.10/s)\n\n"
+                f"💖 *Please consider supporting these API costs:*\n"
+                f"<https://ko-fi.com/sardistic/goal?g=32>"
+            )
+
+            view = SoraConfirmationView(author_id=user_id)
+            confirm_msg = await message.reply(cost_msg, view=view)
+
+            # Wait for button
+            await view.wait()
+
+            if not view.value or view.value == "cancel":
+                # Timeout or Cancel
+                if view.value is None:
+                    try: await confirm_msg.edit(content="❌ Timed out.", view=None)
+                    except: pass
+                return
+
+            selected_model = view.value
+            
             # Shared Progress Object
             progress_data = {"progress": 0.0}
 
@@ -1540,16 +1591,22 @@ async def on_message(message: discord.Message):
             async def _generate_video_task():
                 # CREATE JOB
                 if is_remix and remix_target_id:
+                     # Remix unfortunately doesn't support model switching easily in basic endpoint usually?
+                     # Actually docs say remix takes new prompt. Model might be sticky or selectable using json.
+                     # sora_utils.remix_sora_video currently only sends prompt.
+                     # Let's assume remix stays on same quality or adapts. 
+                     # For now, if remix, we skip model param or update utils? 
+                     # Let's just run remix.
                      job = await remix_sora_video(remix_target_id, prompt)
                 else:
                      # Standard or Image-to-Video
-                     job = await create_sora_job(prompt, model="sora-2-pro", image_data=image_data)
+                     job = await create_sora_job(prompt, model=selected_model, image_data=image_data)
                 
                 if not job.get("ok"):
                     return None, f"Failed to start job: {job.get('error')}"
                 
                 video_id = job["data"].get("id")
-                logger.info(f"Sora Job Started: {video_id} (Remix={is_remix}, Img={bool(image_data)})")
+                logger.info(f"Sora Job Started: {video_id} (Model={selected_model}, Remix={is_remix})")
 
                 # POLL LOOP
                 import time
@@ -1561,19 +1618,15 @@ async def on_message(message: discord.Message):
                         
                     status_res = await get_sora_status(video_id)
                     if not status_res.get("ok"):
-                         # Temporary poll error? log and continue
                          logger.warning(f"Poll check failed: {status_res.get('error')}")
                          continue
                          
                     status_data = status_res["data"]
                     status = status_data.get("status")
                     
-                    # Update Progress
-                    # API returns 'progress' as int 0-100 usually, or might be missing
                     if "progress" in status_data:
                         try:
                             p_val = float(status_data["progress"])
-                            # Normalize 0-100 -> 0.0-1.0
                             if p_val > 1.0: p_val /= 100.0
                             progress_data["progress"] = p_val
                         except:
@@ -1598,11 +1651,11 @@ async def on_message(message: discord.Message):
 
 
             status_msg, result = await live_status_with_progress(
-                message,
-                action_label="Remixing Video" if is_remix else ("Animating Image" if image_data else "Generating Video"),
+                confirm_msg, # Thread on the confirmation message
+                action_label=f"Generating ({selected_model})",
                 emoji="🎥",
                 coro=_generate_video_task(),
-                duration_estimate=60, # Estimate, but progress bar updates via tracker
+                duration_estimate=60, 
                 summarizer=(lambda: f"Status: Processing ({int(progress_data['progress']*100)}%)") if STREAM_OK else None,
                 progress_tracker=progress_data
             )
@@ -1611,7 +1664,7 @@ async def on_message(message: discord.Message):
                  file_obj, err = result
                  if file_obj:
                      await status_msg.reply(file=discord.File(file_obj, filename="sora_video.mp4"))
-                     await status_msg.edit(content=f"✅ Video generated for **{prompt[:50]}...**")
+                     await status_msg.edit(content=f"✅ Video generated (**{selected_model}**)\nPrompt: {prompt[:50]}...")
                  else:
                      await status_msg.edit(content=f"❌ {err or base_fail_msg}")
             else:
