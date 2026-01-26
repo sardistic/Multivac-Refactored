@@ -9,7 +9,7 @@ logger = logging.getLogger("sora_utils")
 # API Constants
 API_BASE = "https://api.openai.com/v1"
 
-async def create_sora_job(prompt: str, model: str = "sora-2-pro", size: str = "1280x720", seconds: int = 5) -> Dict[str, Any]:
+async def create_sora_job(prompt: str, model: str = "sora-2-pro", size: str = "1280x720", seconds: int = 8) -> Dict[str, Any]:
     """
     Start a video generation job.
     """
@@ -22,7 +22,7 @@ async def create_sora_job(prompt: str, model: str = "sora-2-pro", size: str = "1
         "model": model,
         "prompt": prompt,
         "size": size,
-        "seconds": str(seconds) # Docs show string "8"
+        "seconds": str(seconds) 
     }
     
     logger.info(f"Creating Sora job: {payload}")
