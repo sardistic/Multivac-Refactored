@@ -1683,9 +1683,8 @@ async def on_message(message: discord.Message):
                          cost = selected_seconds * 0.10
                      
                      final_msg = (
-                         f"✅ **Video generated** (**{selected_model}**, {selected_seconds}s)\n"
-                         f"💵 **Est. Cost:** ${cost:.2f}\n"
-                         f"💖 **Support:** <https://ko-fi.com/sardistic/goal?g=32>\n"
+                         f"**Video generated** ({selected_model}, {selected_seconds}s)\n"
+                         f"Est. Cost: ${cost:.2f} | Support: <https://ko-fi.com/sardistic/goal?g=32>\n"
                          f"Prompt: {prompt[:100]}..."
                      )
                      
