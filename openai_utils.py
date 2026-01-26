@@ -358,7 +358,25 @@ TOOLS_DEF = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_sora_video",
+            "description": "Generate a video using OpenAI Sora. STRICT LIMIT: 2 videos per user per hour.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "Detailed description of the video to generate."
+                    }
+                },
+                "required": ["prompt"],
+            },
+        },
+    },
 ]
+
 
 # -----------------------------------------------------------------------------
 # Tool normalization for Responses API
@@ -618,6 +636,20 @@ async def _exec_tool(name: str, args: Dict[str, Any], context: Optional[Dict[str
                     "description": fn.get("description"),
                 })
             return json.dumps({"tools": tool_summaries}, ensure_ascii=False)
+
+        if name == "generate_sora_video":
+            # Delegate to tools_registry handler
+            from tools_registry import handle_generate_sora_video
+            # _exec_tool args are just the dict. The handler expects 'args' and optionally injects context if we pass it.
+            # But wait, handle_generate_sora_video expects 'args' to contain '_context' if needed.
+            # _exec_tool receives 'context' as a separate arg.
+            # We need to merge them.
+            call_args = args.copy()
+            if context:
+                call_args["_context"] = context
+                
+            result = await handle_generate_sora_video(call_args)
+            return json.dumps(result, ensure_ascii=False)
 
         return f"tool_error: unknown tool '{name}'"
     except Exception as e:
