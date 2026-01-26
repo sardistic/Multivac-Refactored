@@ -1637,13 +1637,18 @@ async def on_message(message: discord.Message):
                     status_data = status_res["data"]
                     status = status_data.get("status")
                     
+                    # Update Progress
+                    # API returns 'progress' as int 0-100 usually, or might be missing
                     if "progress" in status_data:
                         try:
-                            p_val = float(status_data["progress"])
+                            raw_p = str(status_data["progress"]).strip().replace('%', '')
+                            p_val = float(raw_p)
+                            # Normalize 0-100 -> 0.0-1.0
                             if p_val > 1.0: p_val /= 100.0
                             progress_data["progress"] = p_val
-                        except:
-                            pass
+                            logger.debug(f"Sora Poll: {p_val*100:.1f}% (Raw: {status_data['progress']})")
+                        except Exception as e:
+                            logger.warning(f"Failed to parse progress: {status_data['progress']} - {e}")
                     
                     if status == "completed":
                         progress_data["progress"] = 1.0
