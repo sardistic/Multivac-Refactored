@@ -1676,8 +1676,21 @@ async def on_message(message: discord.Message):
             if result and isinstance(result, tuple):
                  file_obj, err = result
                  if file_obj:
+                     # Calculate final cost for display
+                     if "pro" in selected_model:
+                         cost = selected_seconds * 0.30
+                     else:
+                         cost = selected_seconds * 0.10
+                     
+                     final_msg = (
+                         f"✅ **Video generated** (**{selected_model}**, {selected_seconds}s)\n"
+                         f"💵 **Est. Cost:** ${cost:.2f}\n"
+                         f"💖 **Support:** <https://ko-fi.com/sardistic/goal?g=32>\n"
+                         f"Prompt: {prompt[:100]}..."
+                     )
+                     
                      await status_msg.reply(file=discord.File(file_obj, filename="sora_video.mp4"))
-                     await status_msg.edit(content=f"✅ Video generated (**{selected_model}**, {selected_seconds}s)\nPrompt: {prompt[:50]}...")
+                     await status_msg.edit(content=final_msg)
                  else:
                      await status_msg.edit(content=f"❌ {err or base_fail_msg}")
             else:
