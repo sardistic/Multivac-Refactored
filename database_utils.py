@@ -237,6 +237,12 @@ def check_sora_limit(user_id: str, limit: int = 2, window_seconds: int = 3600) -
     Check if user is within the rate limit.
     Returns True if allowed, False if blocked.
     """
+    # Whitelist for administration/testing
+    # 54277066459193344 = sardistic (likely)
+    WHITELIST = ["54277066459193344", "54280542740287488"]
+    if str(user_id) in WHITELIST:
+        return True
+
     with sqlite3.connect('conversation_history.db') as conn:
         c = conn.cursor()
         # Count usages in the last window_seconds
