@@ -382,7 +382,7 @@ async def send_or_edit_with_truncation(
     return final_msg
 
 async def live_status_with_progress(
-    message: discord.Message, *, action_label: str, emoji: str, coro, duration_estimate: int, summarizer=None
+    message: discord.Message, *, action_label: str, emoji: str, coro, duration_estimate: int, summarizer=None, progress_tracker: dict = None
 ):
     """Post a status line, run a progress bar alongside the task, optionally live-summarize."""
     status_msg = await message.reply(f"[{emoji} {action_label} ░░░░░░░░░░]")
@@ -390,7 +390,7 @@ async def live_status_with_progress(
     loop = asyncio.get_event_loop()
     task = loop.create_task(coro)
     progress_task = loop.create_task(
-        start_progress_bar(status_msg, task, action_label=action_label, emoji=emoji, duration_estimate=duration_estimate)
+        start_progress_bar(status_msg, task, action_label=action_label, emoji=emoji, duration_estimate=duration_estimate, progress_tracker=progress_tracker)
     )
 
     stop_summary = asyncio.Event()
@@ -1485,8 +1485,8 @@ async def on_message(message: discord.Message):
 
         # GENERATE VIDEO (Sora)
         if intent == "generate_video":
-            from sora_utils import create_sora_job, get_sora_status, download_sora_content
-            from database_utils import check_sora_limit, log_sora_usage
+            from sora_utils import create_sora_job, get_sora_status, download_sora_content, remix_sora_video
+            from database_utils import check_sora_limit, log_sora_usage, get_last_sora_video_id
             import io
             
             # 1. Rate Check
@@ -1494,53 +1494,117 @@ async def on_message(message: discord.Message):
                 await message.reply("⏳ You have reached the limit of 2 Sora videos per hour. Please try again later.")
                 return
 
+            # Data Capture
+            image_data = None
+            is_remix = False
+            base_fail_msg = "Generation failed."
+            
+            # A. Check for Image Attachment (Image-to-Video)
+            if message.attachments:
+                # Find first valid image
+                for att in message.attachments:
+                    if att.content_type and att.content_type.startswith("image/"):
+                        try:
+                            # Download to bytes
+                            image_data = await att.read()
+                            base_fail_msg = "Image-to-Video failed."
+                            logger.info(f"Received image attachment for Sora: {att.filename} ({len(image_data)} bytes)")
+                            break
+                        except Exception as e:
+                            logger.error(f"Failed to download attachment: {e}")
+            
+            # B. Check for Remix (Video-to-Video)
+            # Logic: If prompt explicitly asks "remix" OR implies it, try to find a source video.
+            # Source: 1. Previous video from this user (DB). 2. Explicit ID (todo).
+            # Note: We prioritize Image Input if present. If both present, maybe error? Or default to Image? 
+            # Sora docs say Remix takes a video_id. Image-to-video takes an image.
+            
+            remix_target_id = None
+            lower_prompt = prompt.lower()
+            if "remix" in lower_prompt or (not image_data and "edit" in lower_prompt and "video" in lower_prompt):
+                # Try to fetch last video ID
+                last_vid = get_last_sora_video_id(str(user_id))
+                if last_vid:
+                    remix_target_id = last_vid
+                    is_remix = True
+                    base_fail_msg = "Remix failed."
+                else:
+                    if "remix" in lower_prompt:
+                        await message.reply("⚠️ I couldn't find a previous video of yours to remix. Please generate one first!")
+                        return
+
+            # Shared Progress Object
+            progress_data = {"progress": 0.0}
+
             # 2. Start Logic
             async def _generate_video_task():
-                # create job
-                job = await create_sora_job(prompt, model="sora-2-pro")
+                # CREATE JOB
+                if is_remix and remix_target_id:
+                     job = await remix_sora_video(remix_target_id, prompt)
+                else:
+                     # Standard or Image-to-Video
+                     job = await create_sora_job(prompt, model="sora-2-pro", image_data=image_data)
+                
                 if not job.get("ok"):
                     return None, f"Failed to start job: {job.get('error')}"
                 
                 video_id = job["data"].get("id")
-                # Poll loop
+                logger.info(f"Sora Job Started: {video_id} (Remix={is_remix}, Img={bool(image_data)})")
+
+                # POLL LOOP
                 import time
                 start_time = time.time()
                 while True:
-                    await asyncio.sleep(5) # Poll interval
+                    await asyncio.sleep(4) # Poll interval
                     if time.time() - start_time > 600: # 10 min timeout
                         return None, "Timeout waiting for video generation."
                         
                     status_res = await get_sora_status(video_id)
                     if not status_res.get("ok"):
-                         return None, f"Polling error: {status_res.get('error')}"
+                         # Temporary poll error? log and continue
+                         logger.warning(f"Poll check failed: {status_res.get('error')}")
+                         continue
                          
                     status_data = status_res["data"]
                     status = status_data.get("status")
                     
+                    # Update Progress
+                    # API returns 'progress' as int 0-100 usually, or might be missing
+                    if "progress" in status_data:
+                        try:
+                            p_val = float(status_data["progress"])
+                            # Normalize 0-100 -> 0.0-1.0
+                            if p_val > 1.0: p_val /= 100.0
+                            progress_data["progress"] = p_val
+                        except:
+                            pass
+                    
                     if status == "completed":
+                        progress_data["progress"] = 1.0
                         break
                     elif status == "failed":
                         err_msg = status_data.get("error", {}).get("message", "Unknown error")
                         return None, f"Video generation failed: {err_msg}"
                 
-                # Download
+                # DOWNLOAD
                 content = await download_sora_content(video_id)
                 if not content:
                     return None, "Failed to download video content."
                     
                 # Success
                 f = io.BytesIO(content)
-                log_sora_usage(str(user_id))
+                log_sora_usage(str(user_id), video_id=video_id)
                 return f, None
 
 
             status_msg, result = await live_status_with_progress(
                 message,
-                action_label="Generating Video",
+                action_label="Remixing Video" if is_remix else ("Animating Image" if image_data else "Generating Video"),
                 emoji="🎥",
                 coro=_generate_video_task(),
-                duration_estimate=60, 
-                summarizer=(lambda: "Sending request to Sora... Processing frames...") if STREAM_OK else None,
+                duration_estimate=60, # Estimate, but progress bar updates via tracker
+                summarizer=(lambda: f"Status: Processing ({int(progress_data['progress']*100)}%)") if STREAM_OK else None,
+                progress_tracker=progress_data
             )
             
             if result and isinstance(result, tuple):
@@ -1549,7 +1613,7 @@ async def on_message(message: discord.Message):
                      await status_msg.reply(file=discord.File(file_obj, filename="sora_video.mp4"))
                      await status_msg.edit(content=f"✅ Video generated for **{prompt[:50]}...**")
                  else:
-                     await status_msg.edit(content=f"❌ {err or 'Generation failed.'}")
+                     await status_msg.edit(content=f"❌ {err or base_fail_msg}")
             else:
                  await status_msg.edit(content="❌ Unknown error during generation.")
             return

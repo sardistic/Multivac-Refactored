@@ -17,7 +17,7 @@ PARTIAL_BLOCKS = [
 ]
 FADE_BLOCKS = ['.', ':', '-', '░', '▒', '▓']
 
-async def start_progress_bar(message, task: asyncio.Task, action_label="Working", emoji="💬", duration_estimate=40):
+async def start_progress_bar(message, task: asyncio.Task, action_label="Working", emoji="💬", duration_estimate=40, progress_tracker: dict = None):
     width = 24
     animation_update_interval = 0.1     # Local animation refresh (every 100ms)
     discord_edit_interval = 1.5          # Only push .edit() every 1.5s to Discord
@@ -29,7 +29,11 @@ async def start_progress_bar(message, task: asyncio.Task, action_label="Working"
         while not task.done():
             now = task._loop.time()
             elapsed = now - start_time
-            progress = min(elapsed / duration_estimate, 1.0)
+            if progress_tracker and "progress" in progress_tracker:
+                 progress = float(progress_tracker["progress"]) # 0.0 to 1.0 expected
+                 # If API returns integer 0-100, normalize it before putting in tracker
+            else:
+                 progress = min(elapsed / duration_estimate, 1.0)
 
             bar = build_progress_bar(progress, width, fancy=True)
             render = f"{emoji} {action_label} {bar}"
