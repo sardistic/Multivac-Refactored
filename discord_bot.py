@@ -815,14 +815,21 @@ async def on_message(message: discord.Message):
     has_attachments = bool(message.attachments or (ref_msg and ref_msg.attachments))
     
     # Intent
+    # 1. Determine Intent
     # Fix for "gemini imagine" being grabbed by chat intent
     if raw_prompt.lower().strip().startswith("gemini imagine"):
         intent = "generate_image"
         # We don't strip "gemini" here because stability_utils expects it? 
         # Actually stability_utils checks if content.startswith("gemini").
     else:
-        intent = await classify_intent(raw_prompt, has_images=has_attachments)
-    logger.debug(f"Intent classified as: {intent} (has_attachments={has_attachments})")
+        # Quick override for video
+        lower_prompt = prompt.lower()
+        if "generate" in lower_prompt and ("video" in lower_prompt or "movie" in lower_prompt or "clip" in lower_prompt or "sora" in lower_prompt):
+             intent = "generate_video"
+        else:
+             intent = await classify_intent(prompt, has_images=has_attachments)
+        
+    logger.info(f"Intent identified as: {intent} (has_attachments={has_attachments})")
 
     # Collect image inputs (replied image FIRST, then attachments, then URLs)
     image_urls: List[str] = []
