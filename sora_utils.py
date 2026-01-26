@@ -17,7 +17,7 @@ async def generate_sora_video(prompt: str, size: str = "1024x1024") -> Dict[str,
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "sora-1.0-turbo",
+        "model": "sora-2",
         "prompt": prompt,
         "size": size,
         "quality": "standard"
