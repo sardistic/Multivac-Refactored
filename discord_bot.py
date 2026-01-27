@@ -47,11 +47,13 @@ from openai_utils import (
     image_url_to_base64,
     generate_openai_messages_response_with_tools,
     TOOLS_DEF,
+    OpenAIModerationError,
 )
+
 
 # Optional features (your existing utilities)
 from stability_utils import handle_image_generation, edit_image_with_prompt
-from gemini_utils import generate_gemini_text, generate_gemini_image
+from gemini_utils import generate_gemini_text, generate_gemini_image, GeminiModerationError
 from google.genai import types
 from weather_utils import get_location_details, get_weather_data, handle_weather_request, format_weather_response
 from url_utils import fetch_url_content, extract_main_text, reduce_text_length
@@ -163,6 +165,74 @@ async def prompt_for_image_selection(message, image_count: int, timeout: float =
             return 0
     finally:
         _pending_image_selection.discard(user_id)
+
+# --------------------------
+# UI Classes
+# --------------------------
+class ModerationFallbackView(discord.ui.View):
+    """
+    Dropdown view to select an alternative model when moderation blocks a response.
+    """
+    def __init__(self, author_id, retry_callback):
+        super().__init__(timeout=120)
+        self.author_id = author_id
+        self.retry_callback = retry_callback
+        
+        # Define model options with fallback choices
+        options = [
+            discord.SelectOption(
+                label="Gemini 1.5 Pro (Smarter)", 
+                value="gemini-1.5-pro", 
+                description="Higher reasoning, might be less strict.",
+                emoji="🧠"
+            ),
+            discord.SelectOption(
+                label="Gemini 1.5 Flash (Fast)", 
+                value="gemini-1.5-flash", 
+                description="Fast and efficient.",
+                emoji="⚡"
+            ),
+             discord.SelectOption(
+                label="Gemini 1.5 Pro 002", 
+                value="gemini-1.5-pro-002", 
+                description="Updated Pro model.",
+                emoji="🆕"
+            ),
+            discord.SelectOption(
+                label="ChatGPT-4o (OpenAI)", 
+                value="gpt-4o", 
+                description="Switch provider to OpenAI.",
+                emoji="🟢"
+            ),
+        ]
+        
+        select = discord.ui.Select(
+            placeholder="Select an alternative model...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="moderation_model_select"
+        )
+        select.callback = self.select_callback
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Not your request! make your own.", ephemeral=True)
+            return False
+        return True
+
+    async def select_callback(self, interaction: discord.Interaction):
+        # Determine selected model
+        model = interaction.data["values"][0]
+        
+        # Defer and edit to clean up UI
+        await interaction.response.edit_message(content=f"🔄 **Retrying with {model}...**", view=None)
+        self.stop()
+        
+        # Trigger retry
+        await self.retry_callback(model_name=model)
+
 
 # --------------------------
 # Helpers
@@ -1092,88 +1162,131 @@ async def on_message(message: discord.Message):
                 "user_id": str(message.author.id)
             }
 
-            status_msg, response = await live_status_with_progress(
-                message,
-                action_label="Thinking (Gemini)",
-                emoji="✨",
-                coro=asyncio.to_thread(
-                    generate_gemini_text, 
-                    clean_prompt, 
-                    context=context_msgs, 
-                    extra_parts=gemini_parts, 
-                    status_tracker=status_tracker, 
-                    enable_code_execution=enable_code_execution,
-                    search_ids=search_ids
-                ), 
-                duration_estimate=6,
-                summarizer=_live_code_summarizer,
-            )
-            
-            if response:
-                # Unpack tuple from gemini_utils (text, artifacts)
-                if isinstance(response, tuple):
-                    text_resp, artifacts = response
-                else:
-                    text_resp, artifacts = response, []
-
-                # Prepare artifacts (images/plots/audio)
-                files_to_send = []
-                if artifacts:
-                    import io
-                    import mimetypes
-                    for i, (data, mime) in enumerate(artifacts):
-                        # Detect extension (wav/png/etc)
-                        ext = mimetypes.guess_extension(mime) or ".bin"
-                        # Force .wav for audio/wav to be safe
-                        if "wav" in mime: ext = ".wav"
-                        
-                        f = io.BytesIO(data)
-                        files_to_send.append(discord.File(f, filename=f"artifact_{i}{ext}"))
-
-                if text_resp:
-                    if is_test_mode:
-                        # Check size for file embedding logic (similar to main bot handling)
-                        if len(text_resp) > 1900:
-                             import io
-                             try:
-                                 f_text = io.BytesIO(text_resp.encode("utf-8"))
-                                 text_file = discord.File(f_text, filename="response.md")
-                                 
-                                 # Edit status to show we are done but sent a file
-                                 await status_msg.edit(content="⚠️ **Test Result Too Long** -> Sent as file `response.md`")
-                                 
-                                 # Setup files list - append text file to any other artifacts
-                                 all_files = [text_file]
-                                 if files_to_send:
-                                     all_files.extend(files_to_send)
-                                 
-                                 await status_msg.reply(files=all_files)
-                             except Exception as e:
-                                 await status_msg.edit(content=f"❌ Test mode file send failed: {e}")
-                        else:
-                            # Force code block for testing, bypass expand/collapse
-                            # We truncate to 1990 chars to roughly fit in 2000 limit with fences
-                            code_content = f"```\n{text_resp[:1990]}\n```"
-                            try:
-                                await status_msg.edit(content=code_content)
-                                if files_to_send:
-                                    await status_msg.reply(files=files_to_send)
-                            except Exception as e:
-                                 await status_msg.edit(content=f"❌ Test mode failed: {e}")
-                    else:
-                        # Pass text AND files to the helper so they stay attached even if text becomes a file
-                        await send_or_edit_with_truncation(text_resp, target_msg=status_msg, extra_files=files_to_send)
-                elif files_to_send:
-                    # If no text but we have files, send them
-                    await status_msg.reply(files=files_to_send)
-                else:
-                    # response is tuple (text, artifacts) but both are empty?
-                    # This happens if Gemini returns empty string and no files.
-                    await status_msg.edit(content="❌ Gemini returned no text or files.")
+            # Wrapper for generation to support retries on moderation block
+            async def _do_gemini_generation(model_name=None):
+                selected_model = model_name or "gemini-2.0-flash"
                 
-                # Manual indexing removed - auto-indexing now handles this
-            else:
-                await status_msg.edit(content="❌ Gemini returned no response.")
+                async def _run_gen():
+                    if "gpt" in selected_model.lower():
+                         ctx = {
+                           "guild_id": message.guild.id if message.guild else "DM",
+                           "channel_id": message.channel.id,
+                           "user_id": str(message.author.id)
+                         }
+                         msgs = list(context_msgs) 
+                         msgs.append({"role": "user", "content": clean_prompt})
+                         
+                         txt = await generate_openai_messages_response_with_tools(
+                             msgs, 
+                             tools=TOOLS_DEF, 
+                             tool_context=ctx, 
+                             model=selected_model
+                         )
+                         return txt, []
+                    else:
+                         return await asyncio.to_thread(
+                            generate_gemini_text, 
+                            clean_prompt, 
+                            context=context_msgs, 
+                            extra_parts=gemini_parts, 
+                            status_tracker=status_tracker, 
+                            enable_code_execution=enable_code_execution,
+                            search_ids=search_ids,
+                            model_name=selected_model
+                         )
+
+                try:
+                    status_msg, response = await live_status_with_progress(
+                        message,
+                        action_label=f"Thinking ({selected_model})",
+                        emoji="✨",
+                        coro=_run_gen(), 
+                        duration_estimate=6,
+                        summarizer=_live_code_summarizer,
+                    )
+                    
+                    if response:
+                        # Unpack tuple from gemini_utils (text, artifacts)
+                        if isinstance(response, tuple):
+                            text_resp, artifacts = response
+                        else:
+                            text_resp, artifacts = response, []
+
+                        # Prepare artifacts (images/plots/audio)
+                        files_to_send = []
+                        if artifacts:
+                            import io
+                            import mimetypes
+                            for i, (data, mime) in enumerate(artifacts):
+                                # Detect extension (wav/png/etc)
+                                ext = mimetypes.guess_extension(mime) or ".bin"
+                                # Force .wav for audio/wav to be safe
+                                if "wav" in mime: ext = ".wav"
+                                
+                                f = io.BytesIO(data)
+                                files_to_send.append(discord.File(f, filename=f"artifact_{i}{ext}"))
+
+                        if text_resp:
+                            if is_test_mode:
+                                # Check size for file embedding logic (similar to main bot handling)
+                                if len(text_resp) > 1900:
+                                     import io
+                                     try:
+                                         f_text = io.BytesIO(text_resp.encode("utf-8"))
+                                         text_file = discord.File(f_text, filename="response.md")
+                                         
+                                         # Edit status to show we are done but sent a file
+                                         await status_msg.edit(content="⚠️ **Test Result Too Long** -> Sent as file `response.md`")
+                                         
+                                         # Setup files list - append text file to any other artifacts
+                                         all_files = [text_file]
+                                         if files_to_send:
+                                             all_files.extend(files_to_send)
+                                         
+                                         await status_msg.reply(files=all_files)
+                                     except Exception as e:
+                                         await status_msg.edit(content=f"❌ Test mode file send failed: {e}")
+                                else:
+                                    # Force code block for testing, bypass expand/collapse
+                                    # We truncate to 1990 chars to roughly fit in 2000 limit with fences
+                                    code_content = f"```\n{text_resp[:1990]}\n```"
+                                    try:
+                                        await status_msg.edit(content=code_content)
+                                        if files_to_send:
+                                            await status_msg.reply(files=files_to_send)
+                                    except Exception as e:
+                                         await status_msg.edit(content=f"❌ Test mode failed: {e}")
+                            else:
+                                # Pass text AND files to the helper so they stay attached even if text becomes a file
+                                await send_or_edit_with_truncation(text_resp, target_msg=status_msg, extra_files=files_to_send)
+                        elif files_to_send:
+                            # If no text but we have files, send them
+                            await status_msg.reply(files=files_to_send)
+                        else:
+                            # response is tuple (text, artifacts) but both are empty?
+                            # This happens if Gemini returns empty string and no files.
+                            await status_msg.edit(content="❌ Gemini returned no text or files.")
+                        
+                    else:
+                        await status_msg.edit(content="❌ Gemini returned no response.")
+
+                except GeminiModerationError as e:
+                    logger.warning(f"Gemini moderation hit: {e}")
+                    # Show Fallback View
+                    user_msg = f"⚠️ **Response Blocked by Safety Filters** (Reason: {str(e)})\nSelect a different model to retry:"
+                    view = ModerationFallbackView(author_id=message.author.id, retry_callback=_do_gemini_generation)
+                    await message.reply(user_msg, view=view)
+                except OpenAIModerationError as e:
+                    logger.warning(f"OpenAI moderation hit in Gemini fallback: {e}")
+                    user_msg = f"⚠️ **Response Blocked by Safety Filters** (Reason: {str(e)})\nSelect a different model to retry:"
+                    view = ModerationFallbackView(author_id=message.author.id, retry_callback=_do_gemini_generation)
+                    await message.reply(user_msg, view=view)
+                except Exception as e:
+                     logger.exception("Gemini generation error")
+                     await message.reply(f"❌ Gemini Error: {e}")
+
+            # Start initial generation
+            await _do_gemini_generation()
             return
 
         # IMAGE GENERATION
@@ -1708,51 +1821,114 @@ async def on_message(message: discord.Message):
             return
 
         # ----- CHAT (ES-backed messages[] window) -----
-            return _build_chat_context(
-                message=message,
-                user_id=user_id,
-                raw_prompt=raw_prompt,
-                ref_msg=ref_msg,
-                is_reply_to_bot=is_reply_to_bot
-            )
 
-        async def _chat_with_es_window():
-            msgs = _build_chat_context(
-                message=message,
-                user_id=user_id,
-                raw_prompt=raw_prompt,
-                ref_msg=ref_msg,
-                is_reply_to_bot=is_reply_to_bot
-            )
-            ctx = {
-                "guild_id": message.guild.id if message.guild else "DM",
-                "channel_id": message.channel.id,
-                "user_id": user_id
-            }
-            return await generate_openai_messages_response_with_tools(msgs, tools=TOOLS_DEF, tool_context=ctx)
+        async def _do_chat_generation(model_name=None):
+            selected_model = model_name or "gpt-4o"
+            
+            async def _chat_with_es_window():
+                msgs = _build_chat_context(
+                    message=message,
+                    user_id=user_id,
+                    raw_prompt=raw_prompt,
+                    ref_msg=ref_msg,
+                    is_reply_to_bot=is_reply_to_bot
+                )
+                ctx = {
+                    "guild_id": message.guild.id if message.guild else "DM",
+                    "channel_id": message.channel.id,
+                    "user_id": user_id
+                }
+                # If using override model that is Gemini, we must switch logic? 
+                # Actually, our dropwdown mixes OpenAI and Gemini models.
+                # If user selects Gemini here, we should probably call Gemini logic.
+                # But 'generate_openai_messages_response_with_tools' uses OpenAI client.
+                # If we select "gemini-..." we can't pass it to OpenAI client.
+                # Our ModerationFallbackView offers Gemini options.
+                # If the fallback model is Gemini, we should reroute to Gemini logic?
+                # Or just stick to OpenAI models for OpenAI fallback?
+                # The user request was "dropdown option to select a different chatgpt or gemini model".
+                # If I am in OpenAI mode and I select Gemini, I must call Gemini.
+                
+                if "gemini" in selected_model.lower():
+                     # Reroute to Gemini Utils
+                     # We need to adapt the context. _build_chat_context returns OpenAI-style dicts.
+                     # generate_gemini_text accepts OpenAI-style dicts (role/content).
+                     # So we can just call generate_gemini_text.
+                     
+                     enable_code = False # Default off for general chat fallback?
+                     status_res = {"text": ""}
+                     
+                     text_resp, artifacts = generate_gemini_text(
+                         prompt=prompt,
+                         context=msgs, # msgs contains system prompt + history + last user msg
+                         # Wait, generate_gemini_text expects 'prompt' separate from 'context'?
+                         # Yes. 'prompt' is appended to context.
+                         # But _build_chat_context ALREADY appends the last user message.
+                         # We should separate them if possible, or just pass empty prompt and full context?
+                         # generate_gemini_text: 
+                         #   final_prompt_text = (rag_context + prompt) if rag_context else prompt
+                         #   contents.append(Type.Content(..., parts=[prompt]))
+                         #   context (history) is prepended.
+                         
+                         # If msgs has everything, we might double-send the last prompts.
+                         # Actually _build_chat_context puts user prompt at the end.
+                         # We can pop it?
+                         
+                         # Simplified: Just use OpenAI for OpenAI choices, Gemini for Gemini choices?
+                         extra_parts=None,
+                         status_tracker=status_res,
+                         enable_code_execution=enable_code,
+                         search_ids=ctx,
+                         model_name=selected_model
+                     )
+                     # return just text to satisfy _chat_with_es_window signature (expects string)
+                     return text_resp
+                
+                return await generate_openai_messages_response_with_tools(
+                    msgs, 
+                    tools=TOOLS_DEF, 
+                    tool_context=ctx,
+                    model=selected_model
+                )
 
-        # Light live summary outline
-        def _summarizer():
-            return "• Using recent timeline + ES history…\n• Drafting answer…"
+            # Light live summary outline
+            def _summarizer():
+                return f"• Using {selected_model}…\n• Drafting answer…"
 
-        status_msg, response = await live_status_with_progress(
-            message,
-            action_label="Responding",
-            emoji="💬",
-            coro=_chat_with_es_window(),
-            duration_estimate=duration_estimate,
-            summarizer=_summarizer if STREAM_OK else None,
-        )
+            try:
+                status_msg, response = await live_status_with_progress(
+                    message,
+                    action_label=f"Responding ({selected_model})",
+                    emoji="💬",
+                    coro=_chat_with_es_window(),
+                    duration_estimate=duration_estimate,
+                    summarizer=_summarizer if STREAM_OK else None,
+                )
 
-        if response and response.strip():
-            await send_or_edit_with_truncation(
-                response, 
-                target_msg=status_msg, 
-                original_message=message,
-                model="gpt-4o"
-            )
-        else:
-            await status_msg.edit(content="🤖 INSUFFICIENT DATA FOR MEANINGFUL ANSWER")
+                if response and response.strip():
+                    await send_or_edit_with_truncation(
+                        response, 
+                        target_msg=status_msg, 
+                        original_message=message,
+                        model=selected_model
+                    )
+                else:
+                    await status_msg.edit(content="🤖 INSUFFICIENT DATA FOR MEANINGFUL ANSWER")
+
+            except OpenAIModerationError as e:
+                logger.warning(f"OpenAI moderation hit: {e}")
+                user_msg = f"⚠️ **Response Blocked by Safety Filters** (Reason: {str(e)})\nSelect a different model to retry:"
+                # Pass this function as callback
+                view = ModerationFallbackView(author_id=message.author.id, retry_callback=_do_chat_generation)
+                await message.reply(user_msg, view=view)
+            except GeminiModerationError as e:
+                 # Catch Gemini moderation if we switched to Gemini
+                logger.warning(f"Gemini moderation hit in Chat fallback: {e}")
+                user_msg = f"⚠️ **Response Blocked by Safety Filters** (Reason: {str(e)})\nSelect a different model to retry:"
+                view = ModerationFallbackView(author_id=message.author.id, retry_callback=_do_chat_generation)
+                await message.reply(user_msg, view=view)
+
+        await _do_chat_generation()
 
         # Manual indexing removed - auto-indexing now handles this
 

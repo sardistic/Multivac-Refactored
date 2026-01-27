@@ -15,6 +15,12 @@ except ImportError:
     SDK_AVAILABLE = False
     logging.warning("google-genai SDK not found. Install it to use Gemini features.")
 
+class GeminiModerationError(Exception):
+    """Raised when Gemini content generation is blocked by safety filters."""
+    def __init__(self, message, safety_ratings=None):
+        super().__init__(message)
+        self.safety_ratings = safety_ratings
+
 logger = logging.getLogger("gemini_utils")
 
 def _get_client():
@@ -238,7 +244,8 @@ def generate_gemini_text(
     extra_parts: Optional[List[Any]] = None, 
     status_tracker: Optional[Dict[str, str]] = None, 
     enable_code_execution: bool = False,
-    search_ids: Optional[Dict[str, Any]] = None
+    search_ids: Optional[Dict[str, Any]] = None,
+    model_name: str = "gemini-2.0-flash" 
 ) -> Tuple[Optional[str], List[Tuple[bytes, str]]]:
     """
     Generate text using Gemini (Chat). Supports context history, multiple parts (images, text, documents), streaming, and optional code execution.
@@ -251,7 +258,7 @@ def generate_gemini_text(
     try:
         # Config for tools
         # Reverting to stable gemini-2.0-flash now that we know the issue was tool combination
-        model = "gemini-2.0-flash"
+        model = model_name
         logger.info(f"Generating text with model: {model} (extra_parts={len(extra_parts) if extra_parts else 0}, code={enable_code_execution})")
 
         # RAG context injection
@@ -460,6 +467,16 @@ def generate_gemini_text(
         for chunk in response_stream:
             # Process each chunk
             logger.info(f"Chunk received: candidates={len(chunk.candidates) if chunk.candidates else 0}")
+            
+            # Check for safety blocks/finish reasons
+            if chunk.candidates:
+                cand = chunk.candidates[0]
+                if cand.finish_reason in ["SAFETY", "kFinishReasonSafety"]:
+                     safety_ratings = getattr(cand, "safety_ratings", [])
+                     msg = f"Response blocked by safety filters (reason={cand.finish_reason})."
+                     logger.warning(msg)
+                     raise GeminiModerationError(msg, safety_ratings)
+
             if chunk.candidates:
                 for part in chunk.candidates[0].content.parts:
                     logger.info(f"Part details: text={bool(part.text)}, func={bool(part.function_call)}, code={bool(part.executable_code)}, result={bool(part.code_execution_result)}")

@@ -27,6 +27,11 @@ import aiohttp
 from openai import AsyncOpenAI
 from config import OPENAI_API_KEY
 
+class OpenAIModerationError(Exception):
+    """Raised when OpenAI content generation is blocked by moderation filters."""
+    def __init__(self, message):
+        super().__init__(message)
+
 # Optional tool backends
 try:
     from search_utils import web_search as _tool_web_search
@@ -866,8 +871,14 @@ async def generate_openai_response(
                 max_tokens=max_tokens,
                 messages=msgs,
             )
-            return (resp.choices[0].message.content or "").strip()
+            choice = resp.choices[0]
+            if choice.finish_reason == "content_filter":
+                raise OpenAIModerationError("Response blocked by OpenAI content filter.")
+            
+            return (choice.message.content or "").strip()
     except Exception as e:
+        if isinstance(e, OpenAIModerationError):
+            raise
         logging.exception("[openai.chat] error")
         return f"⚠️ OpenAI error: {str(e)[:200]}"
 
@@ -998,10 +1009,14 @@ async def generate_openai_response_tools(
                     messages=current_msgs,
                 )
                 msg = resp.choices[0].message
+                if resp.choices[0].finish_reason == "content_filter":
+                     raise OpenAIModerationError("Response blocked by OpenAI content filter.")
             
             return (msg.content or "").strip()
 
     except Exception as e:
+        if isinstance(e, OpenAIModerationError):
+            raise
         logging.exception("[openai.tools] error")
         return f"⚠️ OpenAI tools error: {str(e)[:200]}"
 
@@ -1034,8 +1049,14 @@ async def generate_openai_messages_response(
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
-            return (resp.choices[0].message.content or "").strip()
+            choice = resp.choices[0]
+            if choice.finish_reason == "content_filter":
+                raise OpenAIModerationError("Response blocked by OpenAI content filter.")
+            
+            return (choice.message.content or "").strip()
     except Exception as e:
+        if isinstance(e, OpenAIModerationError):
+            raise
         logging.exception("[openai.messages] error")
         return f"⚠️ OpenAI error: {str(e)[:200]}"
 
@@ -1112,12 +1133,18 @@ async def generate_openai_messages_response_with_tools(
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
-            msg = resp.choices[0].message
+            choice = resp.choices[0]
+            if choice.finish_reason == "content_filter":
+                raise OpenAIModerationError("Response blocked by OpenAI content filter.")
+
+            msg = choice.message
             if msg.content:
                 return msg.content.strip()
             if getattr(msg, "tool_calls", None):
                 return "I would use tools for this, but I can proceed directly if you share more specifics."
             return "I’m not sure yet—could you clarify what you need?"
     except Exception as e:
+        if isinstance(e, OpenAIModerationError):
+            raise
         logging.exception("[openai.messages+tools] error")
         return f"⚠️ OpenAI tools error: {str(e)[:200]}"
