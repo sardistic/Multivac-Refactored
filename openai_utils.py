@@ -27,6 +27,26 @@ import aiohttp
 from openai import AsyncOpenAI
 from config import OPENAI_API_KEY
 
+REFUSAL_PATTERNS = [
+    r"I cannot help you with that",
+    r"I can't help you with that",
+    r"I cannot provide that information",
+    r"I can't provide that information",
+    r"I am unable to provide",
+    r"I cannot fulfill this request",
+    r"I can't fulfill this request",
+    r"I'm sorry, I can't help",
+    r"I cannot discuss this topic",
+]
+
+def _check_soft_refusal(text: str):
+    if not text or len(text) > 400: # detailed explanations are usually safe
+        return
+    for pat in REFUSAL_PATTERNS:
+        if re.search(pat, text, re.IGNORECASE):
+             logging.warning(f"Detected soft refusal in OpenAI text: {text}")
+             raise OpenAIModerationError(f"Model refused: {text}")
+
 class OpenAIModerationError(Exception):
     """Raised when OpenAI content generation is blocked by moderation filters."""
     def __init__(self, message):
@@ -875,7 +895,9 @@ async def generate_openai_response(
             if choice.finish_reason == "content_filter":
                 raise OpenAIModerationError("Response blocked by OpenAI content filter.")
             
-            return (choice.message.content or "").strip()
+            text = (choice.message.content or "").strip()
+            _check_soft_refusal(text)
+            return text
     except Exception as e:
         if isinstance(e, OpenAIModerationError):
             raise
@@ -1012,7 +1034,9 @@ async def generate_openai_response_tools(
                 if resp.choices[0].finish_reason == "content_filter":
                      raise OpenAIModerationError("Response blocked by OpenAI content filter.")
             
-            return (msg.content or "").strip()
+            text = (msg.content or "").strip()
+            _check_soft_refusal(text)
+            return text
 
     except Exception as e:
         if isinstance(e, OpenAIModerationError):
@@ -1053,7 +1077,9 @@ async def generate_openai_messages_response(
             if choice.finish_reason == "content_filter":
                 raise OpenAIModerationError("Response blocked by OpenAI content filter.")
             
-            return (choice.message.content or "").strip()
+            text = (choice.message.content or "").strip()
+            _check_soft_refusal(text)
+            return text
     except Exception as e:
         if isinstance(e, OpenAIModerationError):
             raise
@@ -1137,10 +1163,11 @@ async def generate_openai_messages_response_with_tools(
             if choice.finish_reason == "content_filter":
                 raise OpenAIModerationError("Response blocked by OpenAI content filter.")
 
-            msg = choice.message
-            if msg.content:
-                return msg.content.strip()
-            if getattr(msg, "tool_calls", None):
+            text = (choice.message.content or "").strip()
+            if text:
+                _check_soft_refusal(text)
+                return text
+            if getattr(choice.message, "tool_calls", None):
                 return "I would use tools for this, but I can proceed directly if you share more specifics."
             return "I’m not sure yet—could you clarify what you need?"
     except Exception as e:

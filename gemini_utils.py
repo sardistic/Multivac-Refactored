@@ -12,14 +12,28 @@ try:
     from PIL import Image as PILImage
     SDK_AVAILABLE = True
 except ImportError:
-    SDK_AVAILABLE = False
-    logging.warning("google-genai SDK not found. Install it to use Gemini features.")
 
-class GeminiModerationError(Exception):
-    """Raised when Gemini content generation is blocked by safety filters."""
-    def __init__(self, message, safety_ratings=None):
-        super().__init__(message)
-        self.safety_ratings = safety_ratings
+import re
+
+REFUSAL_PATTERNS = [
+    r"I cannot help you with that",
+    r"I can't help you with that",
+    r"I cannot provide that information",
+    r"I can't provide that information",
+    r"I am unable to provide",
+    r"I cannot fulfill this request",
+    r"I can't fulfill this request",
+    r"I'm sorry, I can't help",
+    r"I cannot discuss this topic",
+]
+
+def _check_soft_refusal(text: str):
+    if not text or len(text) > 300: # detailed explanations are usually safe
+        return
+    for pat in REFUSAL_PATTERNS:
+        if re.search(pat, text, re.IGNORECASE):
+             logger.warning(f"Detected soft refusal in text: {text}")
+             raise GeminiModerationError(f"Model refused: {text}", safety_ratings=[])
 
 logger = logging.getLogger("gemini_utils")
 
@@ -558,11 +572,17 @@ def generate_gemini_text(
         if final_text or generated_artifacts:
             # Join text, ensure string
             full_text = "".join(final_text) if final_text else None
+            
+            # Check for soft refusal
+            _check_soft_refusal(full_text)
+
             return full_text, generated_artifacts
             
         logger.warning(f"Gemini text generation returned no text in stream.")
 
     except Exception as e:
+        if isinstance(e, GeminiModerationError):
+            raise
         logger.error(f"Gemini text generation failed: {e}")
         return None, []
 
