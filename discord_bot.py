@@ -199,8 +199,8 @@ class ModerationFallbackView(discord.ui.View):
                 emoji="🆕"
             ),
             discord.SelectOption(
-                label="ChatGPT-4o (OpenAI)", 
-                value="gpt-4o", 
+                label="GPT-5.2 (OpenAI)", 
+                value="gpt-5.2", 
                 description="Switch provider to OpenAI.",
                 emoji="🟢"
             ),
@@ -1823,7 +1823,7 @@ async def on_message(message: discord.Message):
         # ----- CHAT (ES-backed messages[] window) -----
 
         async def _do_chat_generation(model_name=None):
-            selected_model = model_name or "gpt-4o"
+            selected_model = model_name or "gpt-5.2"
             
             async def _chat_with_es_window():
                 msgs = _build_chat_context(
