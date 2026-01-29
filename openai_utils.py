@@ -760,7 +760,7 @@ async def _responses_tool_loop(
     first_resp, 
     messages: List[Any], 
     *, 
-    model: str = "gpt-4o",
+    model: str = "gpt-5.2",
     temperature: float = 0.6,
     max_tokens: int = 700,
     max_rounds: int = 3, 
@@ -855,7 +855,7 @@ async def generate_openai_response(
     *,
     image_urls: Optional[List[str]] = None,
     context: Optional[str] = None,
-    model: str = "gpt-4o",
+    model: str = "gpt-5.2",
     temperature: float = 0.6,
     max_tokens: int = 800,
 ) -> str:
@@ -943,7 +943,7 @@ async def generate_openai_response_tools(
                 msgs.append({"role": "user", "content": [{"type": "input_text", "text": prompt}]})
 
             resp = await openai_client.responses.create(
-                model="gpt-4o",
+                model="gpt-5.2",
                 input=msgs,
                 tools=_normalize_tools(None),
                 max_output_tokens=max_tokens,
@@ -989,7 +989,7 @@ async def generate_openai_response_tools(
             current_msgs = list(msgs)
             
             resp = await openai_client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-5.2",
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tool_choice="auto",
@@ -1023,7 +1023,7 @@ async def generate_openai_response_tools(
                 
                 # Next turn
                 resp = await openai_client.chat.completions.create(
-                    model="gpt-4o",
+                    model="gpt-5.2",
                     temperature=temperature,
                     max_tokens=max_tokens,
                     tool_choice="auto",
@@ -1051,7 +1051,7 @@ async def generate_openai_response_tools(
 async def generate_openai_messages_response(
     messages: List[Dict[str, Any]],
     *,
-    model: str = "gpt-4o",
+    model: str = "gpt-5.2",
     max_tokens: int = 700,
     temperature: float = 0.6,
 ) -> str:
@@ -1091,7 +1091,7 @@ async def generate_openai_messages_response_with_tools(
     *,
     tools: Optional[list] = None,
     tool_context: Optional[Dict[str, Any]] = None,
-    model: str = "gpt-4o",
+    model: str = "gpt-5.2",
     max_tokens: int = 700,
     temperature: float = 0.6,
 ) -> str:
