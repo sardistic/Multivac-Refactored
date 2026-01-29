@@ -12,6 +12,7 @@ try:
     from PIL import Image as PILImage
     SDK_AVAILABLE = True
 except ImportError:
+    SDK_AVAILABLE = False
 
 import re
 
