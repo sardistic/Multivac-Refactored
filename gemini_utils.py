@@ -16,6 +16,11 @@ except ImportError:
 
 import re
 
+class GeminiModerationError(Exception):
+    def __init__(self, message, safety_ratings=None):
+        super().__init__(message)
+        self.safety_ratings = safety_ratings or []
+
 REFUSAL_PATTERNS = [
     r"I cannot help you with that",
     r"I can't help you with that",
