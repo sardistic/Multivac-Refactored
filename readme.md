@@ -1,53 +1,91 @@
-![vector header image, simple, with robot and multivac tube connotations, dark backgroun2d](https://i.imgur.com/Ruo7oC1.png)
+![Multivac Header](https://i.imgur.com/Ruo7oC1.png)
 
-# Multivac
-A python Discord bot powered by GPT4 to provide natural language conversations, responses, and image generation, while interacting with other API services.
-If you'd like to use this bot for other models, you should be able to change that in the "model="gpt-4", replace "gpt-4" with "gpt-3.5-turbo" or "text-davinci-002" for example. You can also adjust the max_tokens found under that to increase prompt and completion length.
+# Multivac: Modular AI Agent
 
-Help fund the API costs by supporting me on https://ko-fi.com/sardistic 🍵🤖
+**Multivac** is a state-of-the-art, modular Discord bot designed to act as a unified AI assistant. By orchestrating multiple Large Language Models (LLMs) and a suite of live tools, it provides a persistent, intelligent, and multimodal experience that goes far beyond standard chatbots.
 
+## 🚀 Key Features
 
->Could you give me a brief description what this script does, like a github readme
+### 🧠 Multi-Model Intelligence
+Multivac is not tied to a single provider. It dynamically leverages the best model for the task:
+- **Google Gemini (1.5 Pro / Flash)**: Primary engine for reasoning, multimodal understanding (vision), and large context windows.
+- **OpenAI (GPT-4o)**: Fallback and specialized tasks.
+- **Anthropic Claude (3.5 Sonnet)**: High-quality creative writing and complex instruction following.
+- **Stability AI**: Professional-grade image generation.
 
-Title: Python Discord Weather Bot with GPT-4
+### 📚 Deep Memory (RAG)
+Powered by an **Elasticsearch** backend, Multivac processes and indexes conversation history.
+- **Proactive Memory Injection**: Deep retrieval mechanisms automatically find relevant context from past conversations—whether they happened yesterday or months ago.
+- **Persistent Persona**: Remembers user preferences and instructions across sessions.
 
-Description: A Discord bot, built using Python, discord.py, and OpenAI's GPT-4, that provides weather information in a natural language based on user requests.
+### 🛠️ Live Tool Ecosystem
+Multivac isn't just a chatbot; it's an agent that can *do* things:
+- **Web Search**: Real-time access to Google Search for the latest news, weather, and data.
+- **Code Execution**: A sandboxed Python environment for complex math, data analysis, plotting, and file generation.
+- **Vision & Imaging**:
+  - **Generation**: Create stunning images using Imagen 3 or Stable Diffusion (`imagine ...`).
+  - **Editing**: Edit images using natural language prompts (`edit ...`).
+  - **Analysis**: "See" and analyze image attachments in chat.
+- **Utilities**:
+  - **Weather**: live forecasts via OpenWeatherMap.
+  - **Stocks**: Financial data via AlphaVantage/Polygon.
+  - **Summarization**: Unfurls and summarizes linked articles automatically.
 
-Features:
-- Responds to weather-related queries with data fetched from OpenWeatherMap API.
-- Generates a natural language response using OpenAI's GPT-4 model.
-- Extracts the location from the user's query using SpaCy.
+### ✨ Rich User Interface
+Built for a clean and premium Discord experience:
+- **Smart Expansion**: Long responses are automatically collapsed with a "preview" and can be expanded interactively to prevent chat clutter.
+- **Live Progress Bars**: Visual feedback for long-running generations (Images, Research).
+- **Interactive Views**: Custom UI components for model selection and moderation handling.
 
-Dependencies:
-- discord.py
-- openai
-- asyncio
-- spacy
-- requests
+## ⚙️ Architecture
 
-Usage:
-1. Set up a Discord bot and obtain your bot token.
-2. Replace `DISCORD_TOKEN` with your Discord bot token.
-3. Replace `OPENAI_API_KEY` with your OpenAI API key.
-4. Replace `OPENWEATHER_API_KEY` with your OpenWeatherMap API key.
-5. Install the required dependencies using `pip install -r requirements.txt`.
-6. Run the script using `python weather_bot.py`.
+The project is structured as a modular Python application:
+- **`discord_bot.py`**: The core event loop and interaction handler.
+- **`context_broker.py`**: Manages context windows and model routing.
+- **`*_utils.py`**: Specialized modules for each service (Gemini, OpenAI, Memory, Search, etc.).
+- **`memory_utils.py`**: Handles Elasticsearch indexing and retrieval (RAG).
 
-Commands:
-Mention the bot with a message containing the word "weather" followed by the city name to get the weather information in a natural language response:
+## 🔧 Setup & Configuration
 
-`@bot_user weather in New York`
+### Prerequisites
+- Python 3.10+
+- poetry (recommended) or pip
 
-Example response:
+### Environment Variables
+Configure the following keys in your environment (or `.env`):
+```bash
+# Core
+DISCORD_TOKEN=...
 
-"Currently, in New York, the weather is mostly cloudy with a temperature of 18°C. Make sure to take an umbrella if you're going out, as it might rain later in the day."
+# AI Providers
+OPENAI_API_KEY=...
+GEMINI_API_KEY=...
+ANTHROPIC_API_KEY=...
+STABILITY_KEY=...
 
+# Search & Tools
+GOOGLE_API_KEY=...
+GOOGLE_CSE_ID=...
+OPENWEATHER_API_KEY=...
+```
 
-**Update Summary: Added multivacv2.py**
+### Installation
+```bash
+# Install dependencies
+poetry install
 
-1. Enhanced reply functionality: The bot now replies directly to the user who initiated the prompt, providing a more conversational experience.
-2. Improved image generation response: The bot now sends a "Generating image, please wait..." message before generating the image. Once the image is generated, the initial message is deleted, and the bot replies with the generated image.
-3. Added support for bot image generation using Dalle: The bot now responds to image generation requests if it's mentioned after the word "imagine" is used at the begining of the prompt(e.g., "imagine a beautiful sunset @Bot").
-4. Removed weather functions for this script temporarily.
+# Run the bot
+poetry run python main.py
+```
 
-These updates enhance the bot's user experience by providing more intuitive replies, better messaging during image generation, and support for image generation using Dalle.
+## 🎮 Usage
+
+- **Chat**: Just mention `@Multivac` or reply to its messages.
+- **Image Generation**: "imagine a cyberpunk city" (defaults to best model) or "stable imagine ..."
+- **Context Search**: "What did we discuss about the project last week?" (Triggers RAG search)
+- **Commands**:
+  - `/ping`: Check latency.
+  - `/memory_fetch_more`: Backfill history into the searchable database.
+
+---
+*Built with ❤️ by Sardistic*
