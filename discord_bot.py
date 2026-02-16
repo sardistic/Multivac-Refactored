@@ -22,6 +22,7 @@ import mimetypes
 import asyncio
 import io
 import contextlib
+import collections
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
 from datetime import datetime, timezone
@@ -81,6 +82,12 @@ if "--verbose" in sys.argv:
 else:
     logging.basicConfig(level=logging.INFO)
 
+# Suppress noisy libraries
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("elastic_transport").setLevel(logging.WARNING)
+
 def _redact(s: Optional[str], keep: int = 6) -> str:
     if not s:
         return "(missing)"
@@ -129,6 +136,9 @@ def _state_key(guild_id: int | None, channel_id: int) -> str:
     return f"{g}:{channel_id}"
 
 # ---- Multi-Image Selection ----
+# Track messages recently processed to prevent gateway replays / feedback loops
+_processed_msg_ids = collections.deque(maxlen=100)
+
 # Track users currently being prompted (to prevent on_message from double-processing)
 _pending_image_selection: set[int] = set()  # user IDs awaiting reply
 
@@ -593,14 +603,14 @@ def _build_chat_context(message, user_id, raw_prompt, ref_msg=None, is_reply_to_
         else:
             msgs.append({"role": "system", "content":
                 f"User is replying to this message:\n---\nFrom: {ref_msg.author.display_name}\n{ref_msg.content.strip()}\n---"})
-    # 3) ES conversation window (oldest→newest)
-    history_msgs = build_message_window(
-        guild_id=message.guild.id if message.guild else "DM",
-        channel_id=message.channel.id,
-        user_id=user_id,
-        limit_msgs=24,
-    )
-    msgs.extend(history_msgs)
+    # 3) REMOVED: ES conversation window (oldest→newest) to avoid duplication with timeline
+    # history_msgs = build_message_window(
+    #     guild_id=message.guild.id if message.guild else "DM",
+    #     channel_id=message.channel.id,
+    #     user_id=user_id,
+    #     limit_msgs=24,
+    # )
+    # msgs.extend(history_msgs)
     
     # 4) RAG: Proactive Memory Injection (Universal)
     # Check if user is asking for history/first message
@@ -810,8 +820,12 @@ def _has_google_search() -> bool:
 
 @bot.event
 async def on_message(message: discord.Message):
-    if message.author == bot.user:
+    if message.author.bot:
         return
+    
+    if message.id in _processed_msg_ids:
+        return
+    _processed_msg_ids.append(message.id)
 
     # Pass-through slash/! commands
     if message.content.startswith(bot.command_prefix):
