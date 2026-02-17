@@ -142,6 +142,9 @@ _processed_msg_ids = collections.deque(maxlen=100)
 # Track users currently being prompted (to prevent on_message from double-processing)
 _pending_image_selection: set[int] = set()  # user IDs awaiting reply
 
+# Track message IDs currently being expanded to prevent race conditions
+_expansion_locks: set[int] = set()
+
 async def prompt_for_image_selection(message, image_count: int, timeout: float = 30.0):
     """
     Ask user which image to process when multiple are present.
@@ -732,44 +735,52 @@ async def on_raw_reaction_add(payload):
     # We can use payload.member if in guild.
     member = payload.member or user
 
-    if emoji == EXPAND_EMOJI and not rec["expanded"]:
-        full = rec["full_text"]
-        footer = f"\n\n(react {COLLAPSE_EMOJI} to collapse)"
-        
-        if len(full) + len(footer) > 2000:
-            # Too big for one message -> Send as file
-            import io
-            try:
-                f = io.BytesIO(full.encode("utf-8"))
-                await msg.reply(
-                    "⚠️ Response too long to expand inline. Sending as file.",
-                    file=discord.File(f, filename="response.md")
-                )
-                if member:
-                    with contextlib.suppress(Exception):
-                        await msg.remove_reaction(emoji, member)
-            except Exception as e:
-                logger.error(f"Failed to send long response file: {e}")
-        else:
-            with contextlib.suppress(Exception):
-                await msg.edit(content=f"{full}{footer}")
-            set_message_expanded(msg.id, True)
-            with contextlib.suppress(Exception):
-                await msg.clear_reaction(EXPAND_EMOJI)
-            with contextlib.suppress(Exception):
-                await msg.add_reaction(COLLAPSE_EMOJI)
+    # Expansion lock check
+    if payload.message_id in _expansion_locks:
+        return
+    _expansion_locks.add(payload.message_id)
 
-    elif emoji == COLLAPSE_EMOJI and rec["expanded"]:
-        full = rec["full_text"]
-        preview, _ = make_preview(full, LINE_TRUNCATE_AT)
-        footer = f"\n\n(react {EXPAND_EMOJI} to expand)"
-        with contextlib.suppress(Exception):
-            await msg.edit(content=f"{preview}{footer}")
-        set_message_expanded(msg.id, False)
-        with contextlib.suppress(Exception):
-            await msg.clear_reaction(COLLAPSE_EMOJI)
-        with contextlib.suppress(Exception):
-            await msg.add_reaction(EXPAND_EMOJI)
+    try:
+        if emoji == EXPAND_EMOJI and not rec["expanded"]:
+            full = rec["full_text"]
+            footer = f"\n\n(react {COLLAPSE_EMOJI} to collapse)"
+            
+            if len(full) + len(footer) > 2000:
+                # Too big for one message -> Send as file
+                import io
+                try:
+                    f = io.BytesIO(full.encode("utf-8"))
+                    await msg.reply(
+                        "⚠️ Response too long to expand inline. Sending as file.",
+                        file=discord.File(f, filename="response.md")
+                    )
+                    if member:
+                        with contextlib.suppress(Exception):
+                            await msg.remove_reaction(emoji, member)
+                except Exception as e:
+                    logger.error(f"Failed to send long response file: {e}")
+            else:
+                with contextlib.suppress(Exception):
+                    await msg.edit(content=f"{full}{footer}")
+                set_message_expanded(msg.id, True)
+                with contextlib.suppress(Exception):
+                    await msg.clear_reaction(EXPAND_EMOJI)
+                with contextlib.suppress(Exception):
+                    await msg.add_reaction(COLLAPSE_EMOJI)
+
+        elif emoji == COLLAPSE_EMOJI and rec["expanded"]:
+            full = rec["full_text"]
+            preview, _ = make_preview(full, LINE_TRUNCATE_AT)
+            footer = f"\n\n(react {EXPAND_EMOJI} to expand)"
+            with contextlib.suppress(Exception):
+                await msg.edit(content=f"{preview}{footer}")
+            set_message_expanded(msg.id, False)
+            with contextlib.suppress(Exception):
+                await msg.clear_reaction(COLLAPSE_EMOJI)
+            with contextlib.suppress(Exception):
+                await msg.add_reaction(EXPAND_EMOJI)
+    finally:
+        _expansion_locks.discard(payload.message_id)
 
 # --------------------------
 # Commands
