@@ -684,9 +684,24 @@ async def on_ready():
 
 @bot.event
 async def on_raw_reaction_add(payload):
+    # - [x] Add idempotency check (LRU cache) in `discord_bot.py` <!-- id: 4 -->
+    # - [x] Debug/Strictify `on_raw_reaction_add` to ignore ALL bots <!-- id: 5 -->
     # Ignore bot's own reactions
     if payload.user_id == bot.user.id:
         return
+
+    # Ignore ANY bot reaction (if member is available, e.g. in guild)
+    if payload.member and payload.member.bot:
+        return
+    
+    # If member not in payload (DM? or uncached), try to fetch user
+    if not payload.member:
+        try:
+            u = bot.get_user(payload.user_id) or await bot.fetch_user(payload.user_id)
+            if u.bot:
+                return
+        except Exception:
+            pass  # If we can't fetch, assume user? Or safe to ignore? Let's process.
 
     # Check if this message is a truncatable message (fast DB check)
     rec = get_message_expansion(payload.message_id)
