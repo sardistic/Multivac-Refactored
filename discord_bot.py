@@ -106,6 +106,7 @@ logger.info(f"Anthropic Key: ANTHROPIC_API_KEY={_redact(ANTHROPIC_API_KEY)}")
 intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
+intents.members = True
 bot = commands.Bot(command_prefix="/", intents=intents)
 
 # ---- Expand/Collapse UI ----
@@ -687,8 +688,6 @@ async def on_ready():
 
 @bot.event
 async def on_raw_reaction_add(payload):
-    # - [x] Add idempotency check (LRU cache) in `discord_bot.py` <!-- id: 4 -->
-    # - [x] Debug/Strictify `on_raw_reaction_add` to ignore ALL bots <!-- id: 5 -->
     # Ignore bot's own reactions
     if payload.user_id == bot.user.id:
         return
@@ -757,6 +756,8 @@ async def on_raw_reaction_add(payload):
                     if member:
                         with contextlib.suppress(Exception):
                             await msg.remove_reaction(emoji, member)
+                    # Mark as expanded so we don't try to expand again for the same message
+                    set_message_expanded(msg.id, True)
                 except Exception as e:
                     logger.error(f"Failed to send long response file: {e}")
             else:
