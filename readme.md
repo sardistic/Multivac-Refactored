@@ -1,68 +1,70 @@
 # Multivac
 
-Multivac is a Discord bot that routes chat and tool requests across multiple AI providers and local service modules.
+Multivac is a modular Discord bot with multiple chat providers, image and video generation flows, tool-calling, and optional long-term memory.
 
-Current runtime capabilities include:
-- Discord mention/reply chat
-- OpenAI, Gemini, and Claude chat paths
+## Features
+
+- Discord mention and reply based chat
+- OpenAI, Gemini, and Claude chat routing
 - Image generation, image editing, and image description
-- Sora video generation flow
-- Weather, stock, URL summarization, web search, and repo self-inspection tools
-- Optional Elasticsearch/OpenSearch-backed memory
+- Sora video generation and remix flow
+- Weather, stock, URL summarization, search, and repo inspection tools
+- Optional Elasticsearch/OpenSearch backed memory and timeline recall
 
-## Layout
-
-The repo is organized into a few top-level areas:
+## Current Layout
 
 - `main.py`
-  Starts the Discord bot.
+  Boot entrypoint.
 - `discord_bot.py`
-  Main Discord event/controller layer.
+  Thin Discord event adapter and top-level bot wiring.
 - `config.py`
-  Reads environment variables and metadata-backed configuration.
+  Environment and metadata-backed configuration.
 - `bot/`
-  Discord-facing runtime helpers:
-  chat routing, image routing, video routing, UI helpers, context assembly.
+  Discord runtime behavior:
+  context building, intent dispatch, provider intent handlers, UI, and message parsing.
 - `providers/`
-  External provider integrations:
+  External AI and media integrations:
   OpenAI, Gemini, Claude, Stability, and Sora.
+  Most `*_utils.py` files here are now compatibility facades over smaller provider modules.
 - `services/`
-  Internal service layer:
-  memory, database, search, weather, stock, URL, git, progress, and tool registry.
+  Internal app services:
+  SQLite storage, memory client/query layers, tool specs/handlers/dispatch, search, weather, stock, URL, git, streaming, and progress helpers.
 - `scripts/`
   Probe, inspection, and migration scripts.
 - `dev/`
   Local verification and maintenance helpers.
 - `docs/`
-  Notes, walkthroughs, and reference docs.
+  Notes and reference docs.
 - `assets/`
-  Repo assets.
+  Static project assets.
 
-## Runtime Notes
+## Runtime Behavior
 
-The bot can run with partial configuration, but some features will disable themselves if keys are missing.
+The bot is designed to boot with partial configuration. Missing keys disable only the related feature.
 
-Common examples:
-- no `STABILITY_KEY`: Stability image features are disabled
-- no `GOOGLE_API_KEY` or `GOOGLE_CSE_ID`: Google CSE search is disabled
-- no `OPENAI_API_KEY`: OpenAI-backed paths cannot run
-- no Elasticsearch/OpenSearch server: memory falls back to disabled mode
+Examples:
+- no `OPENAI_API_KEY`: OpenAI chat and OpenAI image paths are unavailable
+- no `GEMINI_API_KEY`: Gemini chat and Gemini image paths are unavailable
+- no `ANTHROPIC_API_KEY`: Claude path is unavailable
+- no `STABILITY_KEY`: Stability image backend is unavailable
+- no `GOOGLE_API_KEY` or `GOOGLE_CSE_ID`: Google CSE search is unavailable
+- no OpenSearch server: memory auto-disables and the bot continues running
 
-If you do not want memory at all, set:
+To disable memory explicitly:
 
 ```powershell
 $env:OPENSEARCH_ENABLED="false"
 ```
 
-## Required Environment
+## Environment
 
-Minimum for a basic Discord bot boot:
+Minimum boot requirement:
 
 ```bash
 DISCORD_TOKEN=...
 ```
 
-Common provider/tool variables:
+Common optional variables:
 
 ```bash
 OPENAI_API_KEY=...
@@ -81,24 +83,14 @@ OPENSEARCH_ENABLED=true
 
 ## Install
 
-This repo currently runs fine with a normal pip-based install even if Poetry is not available:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-There is no generated `requirements.txt` committed right now, so in practice you will either:
-- install from `pyproject.toml` with Poetry, or
-- install the needed packages manually with pip
-
-If you use Poetry:
+This repo is defined by `pyproject.toml`. Use Poetry if you want dependency management from the repo metadata:
 
 ```bash
 poetry install
 poetry run python main.py
 ```
 
-If you use plain pip:
+If you are using plain pip, install the runtime packages you need and run:
 
 ```bash
 python main.py
@@ -113,24 +105,25 @@ $env:DISCORD_TOKEN="your-token"
 python main.py
 ```
 
-## Current Warnings You May See
+## Expected Warnings
 
-These are expected unless you configure the related feature:
+These warnings are normal unless you intend to use the related feature:
 
 - `STABILITY_KEY not set`
 - `Google CSE credentials not fully resolved`
 - `PyNaCl is not installed, voice will NOT be supported`
 
-If you want voice support:
+For Discord voice support:
 
 ```bash
 python -m pip install pynacl
 ```
 
-## Smoke-Test Status
+## Validation Status
 
-The refactored runtime currently passes:
-- AST parsing across root modules, `bot/`, `providers/`, `services/`, and `scripts/`
-- import smoke tests for the main runtime modules
+The current refactored codebase passes:
 
-The bot has also been started successfully with a Discord token after the refactor. The main remaining runtime dependency is whether optional external services like OpenSearch, Stability, or Google CSE are configured.
+- `compileall` across root runtime files, `bot/`, `providers/`, and `services/`
+- import smoke tests for the runtime modules
+
+The main remaining runtime dependency is external configuration, not code structure.
