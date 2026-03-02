@@ -50,11 +50,13 @@ OS_USER = _CFG_USER or os.environ.get("OPENSEARCH_USER") or os.environ.get("ELAS
 OS_PASS = _CFG_PASS or os.environ.get("OPENSEARCH_PASS") or os.environ.get("ELASTIC_PASSWORD") or ""
 OS_VERIFY = _get_bool("OPENSEARCH_VERIFY_CERTS", bool(_CFG_VERIFY) if _CFG_VERIFY is not None else False)
 OPENSEARCH_INDEX = _CFG_INDEX or os.environ.get("OPENSEARCH_INDEX", "discord_chat_memory")
+OPENSEARCH_ENABLED = _get_bool("OPENSEARCH_ENABLED", True)
 
 # ------------------------------------------------------------
 # Module-global client handle
 # ------------------------------------------------------------
 es: Optional[Elasticsearch] = None
+_es_disabled = not OPENSEARCH_ENABLED
 
 def _now_utc() -> datetime:
     return datetime.now(tz=timezone.utc)
@@ -65,12 +67,21 @@ def _now_iso() -> str:
 def conversation_key(guild_id: str | int, channel_id: str | int, user_id: str | int) -> str:
     return f"{guild_id}:{channel_id}:{user_id}"
 
+
+def _disable_es(reason: str) -> None:
+    global es, _es_disabled
+    es = None
+    _es_disabled = True
+    logger.warning("[ES] disabling ES-backed memory: %s", reason)
+
 # ------------------------------------------------------------
 # Client init & index management
 # ------------------------------------------------------------
 def init_es_client(force: bool = False) -> Optional[Elasticsearch]:
     """Create global client if missing. Safe to call often."""
-    global es
+    global es, _es_disabled
+    if _es_disabled and not force:
+        return None
     if es is not None and not force:
         return es
 
@@ -93,11 +104,14 @@ def init_es_client(force: bool = False) -> Optional[Elasticsearch]:
         )
     except Exception as e:
         logger.warning("[ES] Failed to initialize client: %r", e)
-        es = None
+        _disable_es(f"client_init_failed: {e!r}")
         return None
 
-    # Try an immediate authenticate() so we fail fast if creds/env aren’t wired
+    # Try an immediate ping/auth so we fail fast if the server isn't reachable.
     try:
+        if not es.ping():
+            _disable_es("ping_failed")
+            return None
         who = es.security.authenticate()
         logger.info(
             "[ES] startup auth OK as %s (realms %s/%s)",
@@ -107,22 +121,20 @@ def init_es_client(force: bool = False) -> Optional[Elasticsearch]:
         )
     except Exception as e:
         logger.error("[ES] startup auth FAILED: %r", e)
-        # Leave 'es' set so callers can decide; we’ll additionally guard ensure_index.
-        # If you’d rather hard-disable, uncomment:
-        # es = None
-        # return None
+        _disable_es(f"startup_auth_failed: {e!r}")
+        return None
 
     # Best-effort ensure index exists
     try:
         ensure_index()
     except AuthenticationException as e:
         logger.warning("[ES] ensure_index auth failed: %r", e)
-        # Hard guard so bot continues working without ES memory.
-        logger.error("[ES] disabling ES-backed memory due to init error.")
-        es = None
+        _disable_es(f"ensure_index_auth_failed: {e!r}")
         return None
     except Exception as e:
-        logger.warning("[ES] ensure_index failed (continuing): %r", e)
+        logger.warning("[ES] ensure_index failed: %r", e)
+        _disable_es(f"ensure_index_failed: {e!r}")
+        return None
 
     return es
 
@@ -221,6 +233,7 @@ def index_message(
         return None
     except Exception as e:
         logger.warning("[ES] index_message error: %r", e)
+        _disable_es(f"index_message_failed: {e!r}")
         return None
 
 # ------------------------------------------------------------
@@ -244,7 +257,12 @@ def _search_raw(query: Dict[str, Any], *, index: Optional[str] = None, size: int
         pass
 
     # ES 8.x allows body=; also supports query= but we keep body for parity with existing code.
-    resp = client.search(index=target_index, body=body)  # type: ignore[attr-defined]
+    try:
+        resp = client.search(index=target_index, body=body)  # type: ignore[attr-defined]
+    except Exception as e:
+        logger.warning("[ES] search error: %r", e)
+        _disable_es(f"search_failed: {e!r}")
+        return {"hits": {"total": {"value": 0}, "hits": []}}
 
     try:
         logger.debug("es.search [%s] < %r", target_index, resp)

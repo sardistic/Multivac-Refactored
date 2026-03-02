@@ -41,7 +41,7 @@ Built for a clean and premium Discord experience:
 
 The project is structured as a modular Python application:
 - **`discord_bot.py`**: The core event loop and interaction handler.
-- **`context_broker.py`**: Manages context windows and model routing.
+- **`bot/`**: Chat, image, video, UI, and context helper modules for the Discord runtime.
 - **`*_utils.py`**: Specialized modules for each service (Gemini, OpenAI, Memory, Search, etc.).
 - **`memory_utils.py`**: Handles Elasticsearch indexing and retrieval (RAG).
 

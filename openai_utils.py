@@ -26,6 +26,7 @@ from typing import List, Optional, Dict, Any
 import aiohttp
 from openai import AsyncOpenAI
 from config import OPENAI_API_KEY
+from tools_registry import TOOL_SPECS, execute_tool
 
 REFUSAL_PATTERNS = [
     r"I cannot help you with that",
@@ -52,28 +53,13 @@ class OpenAIModerationError(Exception):
     def __init__(self, message):
         super().__init__(message)
 
-# Optional tool backends
-try:
-    from search_utils import web_search as _tool_web_search
-except Exception:
-    _tool_web_search = None
+openai_client: AsyncOpenAI | None = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-try:
-    from url_utils import fetch_url_content, extract_main_text, reduce_text_length
-except Exception:
-    fetch_url_content = extract_main_text = reduce_text_length = None
 
-try:
-    from weather_utils import get_weather_data as _tool_weather
-except Exception:
-    _tool_weather = None
-
-try:
-    from stock_utils import simple_stock_quote as _tool_stock_quote  # optional
-except Exception:
-    _tool_stock_quote = None
-
-openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+def get_openai_client() -> AsyncOpenAI:
+    if openai_client is None:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+    return openai_client
 
 # -----------------------------------------------------------------------------
 # Global toggle: flip to the Responses API by setting OPENAI_USE_RESPONSES=1
@@ -133,7 +119,7 @@ async def classify_intent(text: str, has_images: bool = False) -> str:
         else:
             system_prompt = _INTENT_SYSTEM
         
-        resp = await openai_client.chat.completions.create(
+        resp = await get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             temperature=0,
             max_tokens=10,
@@ -201,208 +187,7 @@ async def image_url_to_base64(url: str, timeout: int = 15) -> Optional[str]:
 # Shared tools definition (Chat Completions shape)
 # -----------------------------------------------------------------------------
 
-TOOLS_DEF = [
-    {
-        "type": "function",
-        "function": {
-            "name": "web_search",
-            "description": "Search the web for fresh information. Returns top results (title, URL, snippet).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "q":   {"type": "string", "description": "Search query"},
-                    "num": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
-                    "safe": {"type": "string", "enum": ["off", "active"], "default": "off"},
-                    "gl": {"type": "string", "description": "Country code, e.g., 'us'"},
-                    "lr": {"type": "string", "description": "Language restrict, e.g., 'lang_en'"},
-                    "image": {"type": "boolean", "description": "Image search", "default": False},
-                },
-                "required": ["q"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "summarize_url",
-            "description": "Fetch a URL, extract the main article content, and return condensed text for further summarization.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string"},
-                    "max_len": {"type": "integer", "default": 3000}
-                },
-                "required": ["url"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "Get current weather or a short forecast for a place name or address.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string", "description": "Place or address, e.g., 'Raleigh NC'."},
-                    "range": {
-                        "type": "string",
-                        "enum": ["current", "24h", "7d"],
-                        "description": "current conditions, next 24 hours, or next 7 days.",
-                        "default": "current",
-                    },
-                },
-                "required": ["location"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_stock_quote",
-            "description": "Fetch latest stock price and change for a ticker.",
-            "parameters": {
-                "type": "object",
-                "properties": {"ticker": {"type": "string", "description": "Ticker symbol, e.g., 'AAPL'."}},
-                "required": ["ticker"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_youtube_transcript",
-            "description": "Return the raw transcript text for a YouTube URL if available.",
-            "parameters": {
-                "type": "object",
-                "properties": {"url": {"type": "string", "description": "YouTube watch URL or youtu.be short link."}},
-                "required": ["url"],
-            },
-        },
-    },
-    # ---- Git self-awareness tools ----
-    {
-        "type": "function",
-        "function": {
-            "name": "git_recent_commits",
-            "description": "Get my recent git commits. Use to answer questions about what I've changed recently.",
-            "parameters": {
-                "type": "object",
-                "properties": {"count": {"type": "integer", "description": "Number of commits (max 50)", "default": 10}},
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "git_commit_diff",
-            "description": "Get the diff/changes for a specific commit by SHA.",
-            "parameters": {
-                "type": "object",
-                "properties": {"sha": {"type": "string", "description": "Commit SHA (short or full)"}},
-                "required": ["sha"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "git_read_file",
-            "description": "Read content of one of my source files to explain my own code.",
-            "parameters": {
-                "type": "object",
-                "properties": {"path": {"type": "string", "description": "File path, e.g. 'discord_bot.py'"}},
-                "required": ["path"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "git_search_code",
-            "description": "Search my codebase for a pattern. Returns matching lines.",
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string", "description": "Search query"}},
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "git_file_list",
-            "description": "List all files in my repository.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "git_repo_info",
-            "description": "Get basic info about my repository: branch, remote, last commit.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_memory",
-            "description": "Search my long-term memory (Elasticsearch) for past conversations or context. Use to remember things.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query"},
-                    "limit": {"type": "integer", "description": "Results (max 20)", "default": 5},
-                },
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_available_tools",
-            "description": "List all my available tools and what they do. Call this to see what capabilities I have.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "update_behavioral_instruction",
-            "description": "Update your long-term behavioral instructions for the current user. Use this when the user asks you to change how you speak, behave, or interact with them permanently (e.g. 'always speak in uwu', 'be sassy', 'call me Captain').",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "instruction": {
-                        "type": "string",
-                        "description": "The full behavioral instruction to store. e.g. 'Always answer in 1920s slang.' Set to empty string to clear."
-                    }
-                },
-                "required": ["instruction"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_sora_video",
-            "description": "Generate a video using OpenAI Sora. STRICT LIMIT: 2 videos per user per hour.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "Detailed description of the video to generate."
-                    }
-                },
-                "required": ["prompt"],
-            },
-        },
-    },
-]
+TOOLS_DEF = TOOL_SPECS
 
 
 # -----------------------------------------------------------------------------
@@ -525,160 +310,10 @@ def _normalize_messages_for_responses(messages: List[Dict[str, Any]]) -> List[Di
 async def _exec_tool(name: str, args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
     logging.debug(f"[openai.tools] Executing {name} with args={list(args.keys())}")  # don't log full args for privacy/size
     try:
-        if name == "web_search":
-            if _tool_web_search is None:
-                return "tool_unavailable: web_search backend not configured"
-            q = args.get("q", "")
-            num = int(args.get("num") or 5)
-            rows = _tool_web_search(q, max_results=num)
-            return json.dumps(rows, ensure_ascii=False)
-
-        if name == "summarize_url":
-            if not (fetch_url_content and extract_main_text and reduce_text_length):
-                return "tool_unavailable: summarize_url backend not configured"
-            url = args.get("url", "")
-            max_len = int(args.get("max_len") or 3000)
-            html = fetch_url_content(url)
-            title, text = extract_main_text(html)
-            condensed = reduce_text_length(text, max_chars=max_len)
-            return json.dumps({"title": title, "text": condensed}, ensure_ascii=False)
-
-        if name == "get_weather":
-            if _tool_weather is None:
-                return "tool_unavailable: weather backend not configured"
-            loc = args.get("location", "")
-            rng = args.get("range", "current")
-            data = _tool_weather(loc, range=rng)  # type: ignore
-            return json.dumps(data, ensure_ascii=False)
-
-        if name == "get_stock_quote":
-            if _tool_stock_quote is None:
-                return "tool_unavailable: stock backend not configured"
-            ticker = args.get("ticker", "")
-            data = _tool_stock_quote(ticker)  # type: ignore
-            return json.dumps(data, ensure_ascii=False)
-
-        if name == "get_youtube_transcript":
-            return "tool_unavailable: youtube transcript not configured"
-
-        # ---- Git self-awareness tools ----
-        if name == "git_recent_commits":
-            from git_utils import get_recent_commits
-            count = int(args.get("count", 10))
-            commits = get_recent_commits(count)
-            return json.dumps({"commits": commits}, ensure_ascii=False)
-
-        if name == "git_commit_diff":
-            from git_utils import get_commit_diff
-            sha = args.get("sha", "")
-            if not sha:
-                return json.dumps({"error": "missing 'sha'"})
-            diff = get_commit_diff(sha)
-            return json.dumps({"diff": diff}, ensure_ascii=False)
-
-        if name == "git_read_file":
-            from git_utils import get_file_content
-            path = args.get("path", "")
-            if not path:
-                return json.dumps({"error": "missing 'path'"})
-            content = get_file_content(path)
-            return json.dumps({"content": content}, ensure_ascii=False)
-
-        if name == "git_search_code":
-            from git_utils import search_code
-            query = args.get("query", "")
-            if not query:
-                return json.dumps({"error": "missing 'query'"})
-            results = search_code(query)
-            return json.dumps({"results": results}, ensure_ascii=False)
-
-        if name == "git_file_list":
-            from git_utils import get_file_list
-            files = get_file_list()
-            return json.dumps({"files": files}, ensure_ascii=False)
-
-        if name == "git_repo_info":
-            from git_utils import get_repo_info
-            info = get_repo_info()
-            return json.dumps({"info": info}, ensure_ascii=False)
-
-        if name == "search_memory":
-            if not context:
-                return json.dumps({"error": "missing_context_for_memory"}, ensure_ascii=False)
-            
-            # Inject context into args for handler or handle directly here
-            # Since tools_registry handler needs imports, let's keep it here or call tools_registry
-            # Ideally we keep logic in tools_registry, but passing context is tricky.
-            # We'll just define the logic here for simplicity as we did with git tools.
-            from memory_utils import fetch_matches_recent
-            
-            guild_id = context.get("guild_id")
-            channel_id = context.get("channel_id")
-            user_id = context.get("user_id")
-            
-            if not (guild_id and channel_id and user_id):
-                return json.dumps({"error": "incomplete_context_for_memory"}, ensure_ascii=False)
-                
-            query = args.get("query", "")
-            limit = int(args.get("limit", 5))
-            
-            results = fetch_matches_recent(
-                guild_id=guild_id,
-                channel_id=channel_id,
-                user_id=user_id,
-                query=query,
-                size=limit
-            )
-            
-            # Format minimal results
-            formatted = []
-            for r in results:
-                formatted.append({
-                    "role": r.get("role"),
-                    "content": r.get("content"),
-                    "timestamp": r.get("timestamp")
-                })
-            return json.dumps({"results": formatted}, ensure_ascii=False)
-
-        if name == "update_behavioral_instruction":
-            from database_utils import set_user_instruction
-            if not context or not context.get("user_id"):
-                return json.dumps({"error": "missing_user_context"}, ensure_ascii=False)
-            
-            user_id = context.get("user_id")
-            instruction = args.get("instruction", "")
-            try:
-                set_user_instruction(user_id, instruction)
-                return json.dumps({"status": "updated", "instruction": instruction}, ensure_ascii=False)
-            except Exception as e:
-                return json.dumps({"error": f"db_error: {e}"}, ensure_ascii=False)
-
-        if name == "list_available_tools":
-            # Return a summary of all available tools
-            tool_summaries = []
-            for t in TOOLS_DEF:
-                fn = t.get("function", {})
-                tool_summaries.append({
-                    "name": fn.get("name"),
-                    "description": fn.get("description"),
-                })
-            return json.dumps({"tools": tool_summaries}, ensure_ascii=False)
-
-        if name == "generate_sora_video":
-            # Delegate to tools_registry handler
-            from tools_registry import handle_generate_sora_video
-            # _exec_tool args are just the dict. The handler expects 'args' and optionally injects context if we pass it.
-            # But wait, handle_generate_sora_video expects 'args' to contain '_context' if needed.
-            # _exec_tool receives 'context' as a separate arg.
-            # We need to merge them.
-            call_args = args.copy()
-            if context:
-                call_args["_context"] = context
-                
-            result = await handle_generate_sora_video(call_args)
-            return json.dumps(result, ensure_ascii=False)
-
-        return f"tool_error: unknown tool '{name}'"
+        result = await execute_tool(name, args, context=context, tool_specs=TOOLS_DEF)
+        if isinstance(result, str):
+            return result
+        return json.dumps(result, ensure_ascii=False)
     except Exception as e:
         return f"tool_error: {name}: {e}"
 
@@ -802,7 +437,7 @@ async def _responses_tool_loop(
             })
 
         # Generate next response
-        resp = await openai_client.responses.create(
+        resp = await get_openai_client().responses.create(
             model=model,
             input=current_input,
             tools=_normalize_tools(None), # Tools are still available? Yes.
@@ -875,7 +510,7 @@ async def generate_openai_response(
 
         if USE_RESPONSES:
             msgs.append({"role": "user", "content": _build_user_content_responses(prompt, img_norm)})
-            resp = await openai_client.responses.create(
+            resp = await get_openai_client().responses.create(
                 model=model,
                 input=msgs,
                 temperature=temperature,
@@ -885,7 +520,7 @@ async def generate_openai_response(
             return text or "I’m not sure yet—could you clarify what you need?"
         else:
             msgs.append({"role": "user", "content": _build_user_content_chat(prompt, img_norm)})
-            resp = await openai_client.chat.completions.create(
+            resp = await get_openai_client().chat.completions.create(
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -942,7 +577,7 @@ async def generate_openai_response_tools(
             else:
                 msgs.append({"role": "user", "content": [{"type": "input_text", "text": prompt}]})
 
-            resp = await openai_client.responses.create(
+            resp = await get_openai_client().responses.create(
                 model="gpt-5.2",
                 input=msgs,
                 tools=_normalize_tools(None),
@@ -988,7 +623,7 @@ async def generate_openai_response_tools(
             # We must handle tool_calls manually here
             current_msgs = list(msgs)
             
-            resp = await openai_client.chat.completions.create(
+            resp = await get_openai_client().chat.completions.create(
                 model="gpt-5.2",
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -1022,7 +657,7 @@ async def generate_openai_response_tools(
                     })
                 
                 # Next turn
-                resp = await openai_client.chat.completions.create(
+                resp = await get_openai_client().chat.completions.create(
                     model="gpt-5.2",
                     temperature=temperature,
                     max_tokens=max_tokens,
@@ -1058,7 +693,7 @@ async def generate_openai_messages_response(
     try:
         if USE_RESPONSES:
             norm = _normalize_messages_for_responses(messages)
-            resp = await openai_client.responses.create(
+            resp = await get_openai_client().responses.create(
                 model=model,
                 input=norm,
                 max_output_tokens=max_tokens,
@@ -1067,7 +702,7 @@ async def generate_openai_messages_response(
             text = _extract_responses_text(resp)
             return text or "I’m not sure yet—could you clarify what you need?"
         else:
-            resp = await openai_client.chat.completions.create(
+            resp = await get_openai_client().chat.completions.create(
                 model=model,
                 messages=messages,
                 max_tokens=max_tokens,
@@ -1109,7 +744,7 @@ async def generate_openai_messages_response_with_tools(
             messages_with_instruction = [tool_instruction] + messages
             
             norm = _normalize_messages_for_responses(messages_with_instruction)
-            resp = await openai_client.responses.create(
+            resp = await get_openai_client().responses.create(
                 model=model,
                 input=norm,
                 tools=_normalize_tools(tools),
@@ -1151,7 +786,7 @@ async def generate_openai_messages_response_with_tools(
 
             return "I tried to use my tools but couldn't get a response. Could you rephrase?"
         else:
-            resp = await openai_client.chat.completions.create(
+            resp = await get_openai_client().chat.completions.create(
                 model=model,
                 messages=messages,
                 tools=tools or TOOLS_DEF,

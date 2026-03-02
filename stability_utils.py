@@ -28,7 +28,13 @@ else:
     logging.warning("STABILITY_KEY not set; Stability image generation/editing will be disabled.")
 
 # OpenAI Async Client
-openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+openai_client: AsyncOpenAI | None = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+
+def get_openai_image_client() -> AsyncOpenAI:
+    if openai_client is None:
+        raise RuntimeError("OPENAI_API_KEY is not configured")
+    return openai_client
 
 # Try to import stability only if we have a key; keep optional
 _STABILITY_AVAILABLE = False
@@ -210,7 +216,7 @@ async def generate_gpt_image(prompt: str) -> Optional[BytesIO]:
 
         # NOTE: These params match current OpenAI Images API; if your SDK version
         # lacks 'background' or 'quality', remove them (the call will still work).
-        result = await openai_client.images.generate(
+        result = await get_openai_image_client().images.generate(
             model="gpt-image-1.5",
             prompt=prompt,
             size="1024x1024",
@@ -352,7 +358,7 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
                 
                 # We'll stick to exactly what was there: client.images.edit(image=..., prompt=...)
                 # If it fails due to missing mask, that's an OpenAI issue, but it seems it fell back and ran.
-                result = await openai_client.images.edit(
+                result = await get_openai_image_client().images.edit(
                     model="gpt-image-1", # Likely DALL-E 2
                     prompt=prompt,
                     image=[img_file], # SDK weirdness, sometimes takes file-like

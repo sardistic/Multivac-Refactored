@@ -4,7 +4,7 @@ Tool registry for model tool-calling.
 - Keep tools fast and deterministic; return JSON-serializable objects.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import json
 import re
 
@@ -19,9 +19,41 @@ def _safe_get_quote(ticker: str) -> Dict[str, Any]:
         return {"ok": False, "error": f"quote_lookup_failed: {e}"}
 
 
+def _list_tool_summaries(tool_specs=None) -> Dict[str, Any]:
+    specs = tool_specs or TOOL_SPECS
+    return {
+        "tools": [
+            {
+                "name": t.get("function", {}).get("name"),
+                "description": t.get("function", {}).get("description"),
+            }
+            for t in specs
+        ]
+    }
+
+
 # ---- Tool specs (OpenAI function tools shape) ----
 
 TOOL_SPECS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web for fresh information. Returns top results (title, URL, snippet).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "q": {"type": "string", "description": "Search query"},
+                    "num": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5},
+                    "safe": {"type": "string", "enum": ["off", "active"], "default": "off"},
+                    "gl": {"type": "string", "description": "Country code, e.g., 'us'"},
+                    "lr": {"type": "string", "description": "Language restrict, e.g., 'lang_en'"},
+                    "image": {"type": "boolean", "description": "Image search", "default": False},
+                },
+                "required": ["q"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -205,6 +237,14 @@ TOOL_SPECS = [
     {
         "type": "function",
         "function": {
+            "name": "list_available_tools",
+            "description": "List all my available tools and what they do. Call this to see what capabilities I have.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "generate_sora_video",
             "description": "Generate a video using OpenAI Sora. STRICT LIMIT: 2 videos per user per hour.",
             "parameters": {
@@ -233,6 +273,22 @@ async def handle_get_weather(args: Dict[str, Any]) -> Dict[str, Any]:
     if not loc:
         return {"ok": False, "error": "missing 'location'"}
     return {"ok": True, "intent": "get_weather", "location": loc, "range": rng}
+
+
+async def handle_web_search(args: Dict[str, Any]) -> Dict[str, Any] | list:
+    try:
+        from search_utils import web_search
+    except Exception as e:
+        return {"ok": False, "error": f"search_unavailable: {e}"}
+
+    q = (args or {}).get("q", "")
+    if not q:
+        return {"ok": False, "error": "missing 'q'"}
+    num = int((args or {}).get("num", 5))
+    gl = (args or {}).get("gl")
+    lr = (args or {}).get("lr")
+    safe = (args or {}).get("safe")
+    return web_search(q, max_results=num, gl=gl, lr=lr, safe=safe)
 
 
 async def handle_get_stock_quote(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -438,7 +494,7 @@ async def handle_update_behavioral_instruction(args: Dict[str, Any]) -> Dict[str
 
 
 async def handle_generate_sora_video(args: Dict[str, Any]) -> Dict[str, Any]:
-    from sora_utils import generate_sora_video
+    from sora_utils import create_sora_job
     from database_utils import check_sora_limit, log_sora_usage
 
     ctx = args.get("_context", {})
@@ -458,17 +514,25 @@ async def handle_generate_sora_video(args: Dict[str, Any]) -> Dict[str, Any]:
     if not prompt:
         return {"ok": False, "error": "missing_prompt"}
 
-    # Generate
-    result = await generate_sora_video(prompt)
-    
-    # Log usage if successful
+    result = await create_sora_job(prompt)
     if result.get("ok"):
-        log_sora_usage(user_id)
-        
+        video_id = ((result.get("data") or {}).get("id"))
+        log_sora_usage(user_id, video_id=video_id)
+        return {
+            "ok": True,
+            "status": "queued",
+            "video_id": video_id,
+            "data": result.get("data"),
+        }
     return result
 
 
+async def handle_list_available_tools(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _list_tool_summaries()
+
+
 TOOL_HANDLERS = {
+    "web_search": handle_web_search,
     "get_weather": handle_get_weather,
     "get_stock_quote": handle_get_stock_quote,
     "summarize_url": handle_summarize_url,
@@ -482,7 +546,21 @@ TOOL_HANDLERS = {
     "git_repo_info": handle_git_repo_info,
     "search_memory": handle_search_memory,
     "update_behavioral_instruction": handle_update_behavioral_instruction,
+    "list_available_tools": handle_list_available_tools,
     "generate_sora_video": handle_generate_sora_video,
 }
 
+
+async def execute_tool(name: str, args: Dict[str, Any], context: Optional[Dict[str, Any]] = None, tool_specs=None):
+    if name == "list_available_tools":
+        return _list_tool_summaries(tool_specs=tool_specs)
+
+    handler = TOOL_HANDLERS.get(name)
+    if handler is None:
+        return {"ok": False, "error": f"unknown_tool: {name}"}
+
+    call_args = dict(args or {})
+    if context:
+        call_args["_context"] = context
+    return await handler(call_args)
 

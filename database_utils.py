@@ -79,51 +79,9 @@ def has_opted_in_memory(user_id):
     row = log_cursor.fetchone()
     return row and row[0] == 1
 
-# === Elasticsearch Index Hook (Optional) ===
-try:
-    from elasticsearch import Elasticsearch
-
-    es = Elasticsearch(
-        "https://localhost:9200",
-        basic_auth=("elastic", "ZzxpijeG=eR=eqfe1=Be"),
-        verify_certs=False
-    )
-
-    def ensure_index():
-        try:
-            if not es.indices.exists(index="discord_chat_memory"):
-                es.indices.create(index="discord_chat_memory", body={
-                    "mappings": {
-                        "properties": {
-                            "user_id": {"type": "keyword"},
-                            "channel_id": {"type": "keyword"},
-                            "guild_id": {"type": "keyword"},
-                            "content": {"type": "text"},
-                            "timestamp": {"type": "date"}
-                        }
-                    }
-                })
-        except Exception as e:
-            print(f"[WARNING] Failed to ensure ES index: {e}")
-
-    def index_user_message(user_id, channel_id, guild_id, content, timestamp):
-        try:
-            doc = {
-                "user_id": str(user_id),
-                "channel_id": str(channel_id),
-                "guild_id": str(guild_id),
-                "content": content,
-                "timestamp": timestamp
-            }
-            es.index(index="discord_chat_memory", document=doc)
-        except Exception as e:
-            print(f"[ERROR] Failed to index message: {e}")
-
-    ensure_index()
-
-except ImportError:
-    def index_user_message(*args, **kwargs):
-        pass
+# Legacy compatibility stub. ES-backed message indexing now lives in memory_utils.py.
+def index_user_message(*args, **kwargs):
+    return None
 
 # === Message Expansions (truncate/expand store) ===
 def init_message_expansions():
