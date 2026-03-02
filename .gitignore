@@ -8,6 +8,7 @@ venv/
 # Local app data
 conversation_history.db
 user_locations.db
+archive/
 
 # OS
 .DS_Store
