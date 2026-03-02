@@ -1,8 +1,8 @@
 import logging
 
 from bot.chat_context import build_chat_context
-from gemini_utils import GeminiModerationError, generate_gemini_text
-from openai_utils import OpenAIModerationError, TOOLS_DEF, generate_openai_messages_response_with_tools
+from providers.gemini_utils import GeminiModerationError, generate_gemini_text
+from providers.openai_utils import OpenAIModerationError, TOOLS_DEF, generate_openai_messages_response_with_tools
 
 logger = logging.getLogger("discord_bot")
 

@@ -9,10 +9,10 @@ import re
 import discord
 
 from bot.chat_context import build_chat_context
-from gemini_utils import generate_gemini_image
-from openai_utils import generate_openai_messages_response_with_tools, get_openai_client
-from stability_utils import handle_image_generation
-from weather_utils import get_location_details, get_weather_data
+from providers.gemini_utils import generate_gemini_image
+from providers.openai_utils import generate_openai_messages_response_with_tools, get_openai_client
+from providers.stability_utils import handle_image_generation
+from services.weather_utils import get_location_details, get_weather_data
 
 logger = logging.getLogger("discord_bot")
 

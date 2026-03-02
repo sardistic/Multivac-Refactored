@@ -36,13 +36,13 @@ from discord.ext import commands
 from config import DISCORD_TOKEN, GOOGLE_API_KEY, GOOGLE_CSE_ID
 
 # Memory / Elasticsearch helpers
-from memory_utils import (
+from services.memory_utils import (
     index_message,                  # (message_id, guild_id, channel_id, user_id, role, content, timestamp?, reply_to_id?)
     build_message_window,           # (guild_id, channel_id, user_id, limit_msgs=24) -> List[{role, content}]
 )
 
 # OpenAI helpers
-from openai_utils import (
+from providers.openai_utils import (
     classify_intent,
     image_url_to_base64,
     generate_openai_messages_response_with_tools,
@@ -52,12 +52,12 @@ from openai_utils import (
 
 
 # Optional features (your existing utilities)
-from gemini_utils import generate_gemini_text, GeminiModerationError
+from providers.gemini_utils import generate_gemini_text, GeminiModerationError
 from google.genai import types
-from weather_utils import get_location_details, get_weather_data, handle_weather_request, format_weather_response
-from url_utils import fetch_url_content, extract_main_text, reduce_text_length
-from database_utils import get_message_expansion
-from claude_utils import generate_claude_response, ANTHROPIC_API_KEY
+from services.weather_utils import get_location_details, get_weather_data, handle_weather_request, format_weather_response
+from services.url_utils import fetch_url_content, extract_main_text, reduce_text_length
+from services.database_utils import get_message_expansion
+from providers.claude_utils import generate_claude_response, ANTHROPIC_API_KEY
 from bot.chat_handler import handle_chat_intent
 from bot.image_handler import (
     handle_describe_image_intent,
@@ -76,13 +76,13 @@ from bot.ui_messages import (
 
 # NEW: direct search fast-path (kept, but now properly gated)
 try:
-    from search_utils import web_search
+    from services.search_utils import web_search
 except Exception:
     web_search = None
 
 # Streaming niceties (optional)
 try:
-    from stream_utils import ThrottledEditor
+    from services.stream_utils import ThrottledEditor
     STREAM_OK = True
 except Exception:
     STREAM_OK = False
@@ -808,7 +808,7 @@ async def on_message(message: discord.Message):
 
         # GEMINI CHAT
         if intent == "gemini_chat":
-            from gemini_utils import generate_gemini_text
+            from providers.gemini_utils import generate_gemini_text
             # Strip 'gemini' prefix if present to clean up prompt
             clean_prompt = re.sub(r"^gemini\s*", "", prompt, flags=re.IGNORECASE).strip()
             

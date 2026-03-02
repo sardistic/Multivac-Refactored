@@ -4,8 +4,8 @@ import logging
 
 import discord
 
-from database_utils import check_sora_limit, get_last_sora_video_id, log_sora_usage
-from sora_utils import create_sora_job, download_sora_content, get_sora_status, remix_sora_video
+from services.database_utils import check_sora_limit, get_last_sora_video_id, log_sora_usage
+from providers.sora_utils import create_sora_job, download_sora_content, get_sora_status, remix_sora_video
 
 logger = logging.getLogger("discord_bot")
 

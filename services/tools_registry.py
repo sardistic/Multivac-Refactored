@@ -8,12 +8,12 @@ from typing import Dict, Any, Optional
 import json
 import re
 
-from url_utils import fetch_url_content, extract_main_text, reduce_text_length
+from services.url_utils import fetch_url_content, extract_main_text, reduce_text_length
 
 # Stock helper is optional; fail gracefully if missing
 def _safe_get_quote(ticker: str) -> Dict[str, Any]:
     try:
-        from stock_utils import get_realtime_quote  # provided by your latest stock_utils
+        from services.stock_utils import get_realtime_quote  # provided by your latest stock_utils
         return get_realtime_quote(ticker)
     except Exception as e:
         return {"ok": False, "error": f"quote_lookup_failed: {e}"}
@@ -277,7 +277,7 @@ async def handle_get_weather(args: Dict[str, Any]) -> Dict[str, Any]:
 
 async def handle_web_search(args: Dict[str, Any]) -> Dict[str, Any] | list:
     try:
-        from search_utils import web_search
+        from services.search_utils import web_search
     except Exception as e:
         return {"ok": False, "error": f"search_unavailable: {e}"}
 
@@ -353,14 +353,14 @@ async def handle_summarize_url(args: Dict[str, Any]) -> Dict[str, Any]:
 # ---- Git tool handlers ----
 
 async def handle_git_recent_commits(args: Dict[str, Any]) -> Dict[str, Any]:
-    from git_utils import get_recent_commits
+    from services.git_utils import get_recent_commits
     count = int((args or {}).get("count", 10))
     commits = get_recent_commits(count)
     return {"ok": True, "commits": commits}
 
 
 async def handle_git_commit_diff(args: Dict[str, Any]) -> Dict[str, Any]:
-    from git_utils import get_commit_diff
+    from services.git_utils import get_commit_diff
     sha = (args or {}).get("sha", "")
     if not sha:
         return {"ok": False, "error": "missing 'sha'"}
@@ -369,7 +369,7 @@ async def handle_git_commit_diff(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def handle_git_read_file(args: Dict[str, Any]) -> Dict[str, Any]:
-    from git_utils import get_file_content
+    from services.git_utils import get_file_content
     path = (args or {}).get("path", "")
     if not path:
         return {"ok": False, "error": "missing 'path'"}
@@ -378,7 +378,7 @@ async def handle_git_read_file(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def handle_git_search_code(args: Dict[str, Any]) -> Dict[str, Any]:
-    from git_utils import search_code
+    from services.git_utils import search_code
     query = (args or {}).get("query", "")
     if not query:
         return {"ok": False, "error": "missing 'query'"}
@@ -387,13 +387,13 @@ async def handle_git_search_code(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def handle_git_file_list(args: Dict[str, Any]) -> Dict[str, Any]:
-    from git_utils import get_file_list
+    from services.git_utils import get_file_list
     files = get_file_list()
     return {"ok": True, "files": files}
 
 
 async def handle_git_repo_info(args: Dict[str, Any]) -> Dict[str, Any]:
-    from git_utils import get_repo_info
+    from services.git_utils import get_repo_info
     info = get_repo_info()
     return {"ok": True, "info": info}
 
@@ -442,7 +442,7 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
     # For this file modification, I'll just write the handler assuming `_context` might be in args
     # (injected by the caller) or we'll fail.
     # Actually, let's just write the handler and then fix the plumbing in `openai_utils`.
-    from memory_utils import fetch_matches_recent
+    from services.memory_utils import fetch_matches_recent
     
     # Check if context was injected
     ctx =  args.get("_context", {})
@@ -477,7 +477,7 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def handle_update_behavioral_instruction(args: Dict[str, Any]) -> Dict[str, Any]:
-    from database_utils import set_user_instruction
+    from services.database_utils import set_user_instruction
 
     ctx = args.get("_context", {})
     user_id = ctx.get("user_id")
@@ -494,8 +494,8 @@ async def handle_update_behavioral_instruction(args: Dict[str, Any]) -> Dict[str
 
 
 async def handle_generate_sora_video(args: Dict[str, Any]) -> Dict[str, Any]:
-    from sora_utils import create_sora_job
-    from database_utils import check_sora_limit, log_sora_usage
+    from providers.sora_utils import create_sora_job
+    from services.database_utils import check_sora_limit, log_sora_usage
 
     ctx = args.get("_context", {})
     user_id = ctx.get("user_id")
@@ -563,4 +563,3 @@ async def execute_tool(name: str, args: Dict[str, Any], context: Optional[Dict[s
     if context:
         call_args["_context"] = context
     return await handler(call_args)
-

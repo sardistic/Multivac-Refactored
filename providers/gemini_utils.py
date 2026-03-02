@@ -4,7 +4,7 @@ import json
 from io import BytesIO
 from typing import Optional, List, Dict, Any, Tuple
 from config import GEMINI_API_KEY
-import memory_utils
+import services.memory_utils as memory_utils
 
 try:
     from google import genai
@@ -249,7 +249,7 @@ def search_elasticsearch_resource(query_string: str, index: str = "discord_chat_
     Use this to pull historical logs, messages, or structured data directly into your context.
     'query_string' follows Lucene syntax. 'index' is the ES index name.
     """
-    from memory_utils import _search_raw
+    from services.memory_utils import _search_raw
     try:
         # Map query_string to a simple ES query_string query
         resp = _search_raw({"query_string": {"query": query_string}}, index=index, size=max_results)

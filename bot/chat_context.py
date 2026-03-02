@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Dict, List
 
-from database_utils import get_user_instruction
-from memory_utils import build_timeline_prompt_block, search_history_for_context
+from services.database_utils import get_user_instruction
+from services.memory_utils import build_timeline_prompt_block, search_history_for_context
 
 logger = logging.getLogger("discord_bot")
 

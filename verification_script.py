@@ -3,7 +3,7 @@ import os
 import sys
 import logging
 from io import BytesIO
-from gemini_utils import generate_gemini_image, edit_gemini_image
+from providers.gemini_utils import generate_gemini_image, edit_gemini_image
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

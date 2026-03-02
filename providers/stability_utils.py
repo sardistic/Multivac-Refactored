@@ -49,7 +49,7 @@ if STABILITY_KEY:
         _STABILITY_AVAILABLE = False
 
 
-from gemini_utils import generate_gemini_image, edit_gemini_image
+from providers.gemini_utils import generate_gemini_image, edit_gemini_image
 
 # -- CORE IMAGE FUNCTIONS ------------------------------------------------------
 
@@ -137,7 +137,7 @@ async def handle_image_generation(message, prompt: str, reply_msg=None) -> Optio
                     logging.error(f"Failed to download URL {url}: {e}")
 
             if ref_images:
-                from gemini_utils import generate_gemini_with_references
+                from providers.gemini_utils import generate_gemini_with_references
                 img = generate_gemini_with_references(image_prompt, ref_images)
                 if img:
                     return img
@@ -292,7 +292,7 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
                 if b:
                     ref_bytes.append(b)
             
-            from gemini_utils import generate_gemini_with_references, edit_gemini_image
+            from providers.gemini_utils import generate_gemini_with_references, edit_gemini_image
             
             if ref_bytes:
                 # Multimodal with multiple images

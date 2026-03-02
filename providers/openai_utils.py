@@ -26,7 +26,7 @@ from typing import List, Optional, Dict, Any
 import aiohttp
 from openai import AsyncOpenAI
 from config import OPENAI_API_KEY
-from tools_registry import TOOL_SPECS, execute_tool
+from services.tools_registry import TOOL_SPECS, execute_tool
 
 REFUSAL_PATTERNS = [
     r"I cannot help you with that",

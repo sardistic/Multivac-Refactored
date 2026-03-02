@@ -5,8 +5,8 @@ from typing import List, Optional
 
 import discord
 
-from database_utils import get_message_expansion, save_message_expansion, set_message_expanded
-from progress import start_progress_bar
+from services.database_utils import get_message_expansion, save_message_expansion, set_message_expanded
+from services.progress import start_progress_bar
 
 LINE_TRUNCATE_AT = 2
 EXPAND_EMOJI = "🧾"
