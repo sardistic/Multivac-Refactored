@@ -56,6 +56,7 @@ from bot.message_inputs import (
     collect_image_inputs,
     extract_search_query,
     has_google_search,
+    has_visual_inputs,
     looks_like_search,
     resolve_reference_message,
     strip_mention_and_trigger,
@@ -462,8 +463,9 @@ async def on_message(message: discord.Message):
         return
     # If not configured, we do NOT send “No results found” — we let the model’s web_search tool handle it.
 
-    # Quick check for images BEFORE intent classification
-    has_attachments = bool(message.attachments or (ref_msg and ref_msg.attachments))
+    image_urls = await collect_image_inputs(message, ref_msg, image_url_to_base64)
+    gemini_parts = await collect_gemini_parts(message, ref_msg, image_urls)
+    has_attachments = has_visual_inputs(message, ref_msg) or bool(image_urls or gemini_parts)
     
     # Intent
     # 1. Determine Intent
@@ -480,10 +482,7 @@ async def on_message(message: discord.Message):
         else:
              intent = await classify_intent(prompt, has_images=has_attachments)
         
-    logger.info(f"Intent identified as: {intent} (has_attachments={has_attachments})")
-
-    image_urls = await collect_image_inputs(message, ref_msg, image_url_to_base64)
-    gemini_parts = await collect_gemini_parts(message, ref_msg, image_urls)
+    logger.info(f"Intent identified as: {intent} (has_attachments={has_attachments}, image_inputs={len(image_urls)})")
 
     # Any URL (for summarize)
     general_url_match = re.search(r"https?://[^\s]+", message.content)

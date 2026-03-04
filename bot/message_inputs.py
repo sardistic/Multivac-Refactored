@@ -59,6 +59,28 @@ async def resolve_reference_message(message, bot_user):
     return ref_msg, is_reply_to_bot
 
 
+def _embed_image_candidates(embeds) -> List[str]:
+    candidates: List[str] = []
+    for embed in embeds or []:
+        if getattr(embed, "image", None) and embed.image.url:
+            candidates.append(embed.image.url)
+        if getattr(embed, "thumbnail", None) and embed.thumbnail.url:
+            candidates.append(embed.thumbnail.url)
+    return candidates
+
+
+def has_visual_inputs(message, ref_msg=None) -> bool:
+    if message.attachments or (ref_msg and ref_msg.attachments):
+        return True
+    if _embed_image_candidates(getattr(message, "embeds", None)):
+        return True
+    if ref_msg and _embed_image_candidates(getattr(ref_msg, "embeds", None)):
+        return True
+    if re.search(r"https?://[^\s]+(?:\.(?:png|jpg|jpeg|webp|gif)|cdn\.discordapp\.com/attachments/[^\s]+)", message.content):
+        return True
+    return False
+
+
 async def collect_image_inputs(message, ref_msg, image_url_to_base64) -> List[str]:
     image_urls: List[str] = []
 
@@ -70,11 +92,10 @@ async def collect_image_inputs(message, ref_msg, image_url_to_base64) -> List[st
                     image_urls.append(b64)
 
     if ref_msg and ref_msg.embeds:
-        for embed in ref_msg.embeds:
-            if embed.image and embed.image.url:
-                b64 = await image_url_to_base64(embed.image.url)
-                if b64:
-                    image_urls.append(b64)
+        for url in _embed_image_candidates(ref_msg.embeds):
+            b64 = await image_url_to_base64(url)
+            if b64:
+                image_urls.append(b64)
 
     if message.attachments:
         for attachment in message.attachments:
@@ -82,6 +103,12 @@ async def collect_image_inputs(message, ref_msg, image_url_to_base64) -> List[st
                 b64 = await image_url_to_base64(attachment.url)
                 if b64:
                     image_urls.append(b64)
+
+    if message.embeds:
+        for url in _embed_image_candidates(message.embeds):
+            b64 = await image_url_to_base64(url)
+            if b64:
+                image_urls.append(b64)
 
     matches = re.findall(
         r"https?://[^\s]+(?:\.(?:png|jpg|jpeg|webp|gif)|cdn\.discordapp\.com/attachments/[^\s]+)",

@@ -15,6 +15,8 @@ async def handle_chat_intent(
     user_id,
     ref_msg,
     is_reply_to_bot: bool,
+    image_urls,
+    gemini_parts,
     duration_estimate: int,
     stream_ok: bool,
     live_status_with_progress,
@@ -43,13 +45,22 @@ async def handle_chat_intent(
                 text_resp, artifacts = generate_gemini_text(
                     prompt=prompt,
                     context=msgs,
-                    extra_parts=None,
+                    extra_parts=gemini_parts or None,
                     status_tracker=status_res,
                     enable_code_execution=False,
                     search_ids=ctx,
                     model_name=selected_model,
                 )
                 return text_resp
+
+            if image_urls:
+                msgs = list(msgs)
+                msgs[-1] = {
+                    "role": "user",
+                    "content": [{"type": "text", "text": raw_prompt}] + [
+                        {"type": "image_url", "image_url": {"url": u}} for u in image_urls
+                    ],
+                }
 
             return await generate_openai_messages_response_with_tools(
                 msgs,

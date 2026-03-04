@@ -157,6 +157,8 @@ async def dispatch_intent(
         user_id=user_id,
         ref_msg=ref_msg,
         is_reply_to_bot=is_reply_to_bot,
+        image_urls=image_urls,
+        gemini_parts=gemini_parts,
         duration_estimate=duration_estimate,
         stream_ok=stream_ok,
         live_status_with_progress=live_status_with_progress,
