@@ -212,7 +212,7 @@ async def _responses_tool_loop(
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
-    return resp
+    return resp, current_input
 
 
 async def generate_openai_response(
@@ -330,7 +330,7 @@ async def generate_openai_messages_response_with_tools(
                 max_output_tokens=max_tokens,
                 temperature=temperature,
             )
-            resp = await _responses_tool_loop(
+            resp, current_input = await _responses_tool_loop(
                 resp,
                 messages=norm,
                 model=model,
@@ -340,6 +340,26 @@ async def generate_openai_messages_response_with_tools(
                 tool_context=tool_context,
             )
             text = _extract_responses_text(resp)
+            if text:
+                return text
+            final_resp = await get_openai_client().responses.create(
+                model=model,
+                input=current_input
+                + [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "Using the tool results above, answer the user's request directly in plain text. Do not call more tools.",
+                            }
+                        ],
+                    }
+                ],
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            )
+            text = _extract_responses_text(final_resp)
             if text:
                 return text
             return "I tried to use my tools but couldn't get a response. Could you rephrase?"

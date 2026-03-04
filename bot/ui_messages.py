@@ -88,15 +88,10 @@ async def handle_expansion_reaction(msg: discord.Message, emoji: str, rec, membe
     if emoji == EXPAND_EMOJI and not rec["expanded"]:
         full = rec["full_text"]
         footer = f"\n\n(react {COLLAPSE_EMOJI} to collapse)"
-
-        if len(full) + len(footer) > 2000:
-            if member:
-                with contextlib.suppress(Exception):
-                    await msg.remove_reaction(emoji, member)
-            return
+        content = _fit_discord_limit(f"{full}{footer}")
 
         with contextlib.suppress(Exception):
-            await msg.edit(content=_fit_discord_limit(f"{full}{footer}"))
+            await msg.edit(content=content)
         set_message_expanded(msg.id, True)
         with contextlib.suppress(Exception):
             await msg.clear_reaction(EXPAND_EMOJI)
@@ -135,48 +130,27 @@ async def send_or_edit_with_truncation(
     preview, did_trunc = make_preview(full_text, LINE_TRUNCATE_AT)
 
     if did_trunc:
-        footer_expand = f"\n\n(react {EXPAND_EMOJI} to expand)"
         footer_collapse = f"\n\n(react {COLLAPSE_EMOJI} to collapse)"
+        content = _fit_discord_limit(f"{full_text}{footer_collapse}")
 
-        if len(full_text) + len(footer_collapse) <= DISCORD_MESSAGE_LIMIT:
-            content = _fit_discord_limit(f"{full_text}{footer_collapse}")
-
-            if target_msg:
-                sent = target_msg
-                await target_msg.edit(content=content)
-            else:
-                sent = await channel.send(content, reference=reply_to, files=extra_files)
-
-            save_message_expansion(sent.id, full_text, expanded=True)
-
-            with contextlib.suppress(Exception):
-                await sent.clear_reactions()
-            with contextlib.suppress(Exception):
-                await sent.add_reaction(COLLAPSE_EMOJI)
-
-            asyncio.create_task(auto_collapse_task(sent, delay=600))
-
-            if target_msg and extra_files:
-                with contextlib.suppress(Exception):
-                    await target_msg.reply(files=extra_files)
+        if target_msg:
+            sent = target_msg
+            await target_msg.edit(content=content)
         else:
-            content = _fit_discord_limit(f"{preview}{footer_expand}")
+            sent = await channel.send(content, reference=reply_to, files=extra_files)
 
-            if target_msg:
-                sent = target_msg
-                await target_msg.edit(content=content)
-                if extra_files:
-                    with contextlib.suppress(Exception):
-                        await target_msg.reply(files=extra_files)
-            else:
-                sent = await channel.send(content, reference=reply_to, files=extra_files)
+        save_message_expansion(sent.id, full_text, expanded=True)
 
-            save_message_expansion(sent.id, full_text, expanded=False)
+        with contextlib.suppress(Exception):
+            await sent.clear_reactions()
+        with contextlib.suppress(Exception):
+            await sent.add_reaction(COLLAPSE_EMOJI)
 
+        asyncio.create_task(auto_collapse_task(sent, delay=600))
+
+        if target_msg and extra_files:
             with contextlib.suppress(Exception):
-                await sent.clear_reactions()
-            with contextlib.suppress(Exception):
-                await sent.add_reaction(EXPAND_EMOJI)
+                await target_msg.reply(files=extra_files)
 
         if auto_index and index_callback:
             await index_callback(sent, full_text, original_message=original_message, reply_to=reply_to, model=model)

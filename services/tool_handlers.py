@@ -147,6 +147,17 @@ async def handle_git_search_code(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "results": results}
 
 
+async def handle_git_search_history(args: Dict[str, Any]) -> Dict[str, Any]:
+    from services.git_utils import search_history
+
+    query = (args or {}).get("query", "")
+    if not query:
+        return {"ok": False, "error": "missing 'query'"}
+    max_results = int((args or {}).get("max_results", 10))
+    results = search_history(query, max_results=max_results)
+    return {"ok": True, "results": results}
+
+
 async def handle_git_file_list(args: Dict[str, Any]) -> Dict[str, Any]:
     from services.git_utils import get_file_list
 
@@ -249,6 +260,7 @@ TOOL_HANDLERS = {
     "git_commit_diff": handle_git_commit_diff,
     "git_read_file": handle_git_read_file,
     "git_search_code": handle_git_search_code,
+    "git_search_history": handle_git_search_history,
     "git_file_list": handle_git_file_list,
     "git_repo_info": handle_git_repo_info,
     "search_memory": handle_search_memory,

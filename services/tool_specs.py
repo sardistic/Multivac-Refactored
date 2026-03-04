@@ -138,6 +138,21 @@ TOOL_SPECS = [
     {
         "type": "function",
         "function": {
+            "name": "git_search_history",
+            "description": "Search git commit history for a pattern. Use this for leaked secrets, old code, or questions about past commits, not just the current tree.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Regex or text pattern to search through commit history."},
+                    "max_results": {"type": "integer", "description": "Maximum commits to return", "default": 10},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "git_file_list",
             "description": "List all files in my repository.",
             "parameters": {"type": "object", "properties": {}, "required": []},

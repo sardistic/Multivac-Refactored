@@ -170,6 +170,58 @@ def search_code(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
     return results
 
 
+def search_history(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
+    """Search git history for a regex/pattern and return matching commits/files."""
+    if not query or len(query) < 2:
+        return [{"error": "query too short"}]
+
+    max_results = max(1, min(max_results, 20))
+    output = _run_git(
+        "log",
+        "--all",
+        "--pickaxe-regex",
+        f"-G{query}",
+        "--pretty=format:__COMMIT__%H|%s|%an|%ar",
+        "--name-only",
+        max_output=12000,
+    )
+
+    if output.startswith("[error:"):
+        return [{"error": output}]
+
+    results: List[Dict[str, Any]] = []
+    current: Optional[Dict[str, Any]] = None
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("__COMMIT__"):
+            if current:
+                results.append(current)
+                if len(results) >= max_results:
+                    break
+            payload = line[len("__COMMIT__") :]
+            parts = payload.split("|", 3)
+            if len(parts) == 4:
+                current = {
+                    "sha": parts[0],
+                    "message": parts[1],
+                    "author": parts[2],
+                    "date": parts[3],
+                    "files": [],
+                }
+            else:
+                current = None
+            continue
+        if current is not None and not _is_blocked_file(line):
+            current["files"].append(line)
+
+    if current and len(results) < max_results:
+        results.append(current)
+
+    return results
+
+
 def get_file_list() -> List[str]:
     """Get list of all tracked files in the repo."""
     output = _run_git("ls-files")
