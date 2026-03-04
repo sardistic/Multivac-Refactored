@@ -169,6 +169,24 @@ TOOL_SPECS = [
     {
         "type": "function",
         "function": {
+            "name": "git_find_api_calls",
+            "description": "Find concrete API call sites in the current codebase and related commits in git history. Use this for requests like 'check git for API calls', 'find OpenAI/Gemini call sites', or blue-team reviews.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string",
+                        "description": "Optional provider filter such as 'openai', 'gemini', 'anthropic', 'sora', or 'stability'."
+                    },
+                    "max_results": {"type": "integer", "description": "Maximum results to return", "default": 12},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_memory",
             "description": "Search my long-term memory (Elasticsearch) for past conversations or context. Use this to remember things the user told you previously.",
             "parameters": {

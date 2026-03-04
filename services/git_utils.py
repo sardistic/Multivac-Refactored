@@ -14,8 +14,8 @@ import os
 from typing import List, Dict, Any, Optional
 from fnmatch import fnmatch
 
-# Repository path - assumes bot runs from its own repo directory
-REPO_PATH = os.path.dirname(os.path.abspath(__file__))
+# Repository root
+REPO_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ---- Security: File Blocklist ----
 BLOCKED_PATTERNS = [
@@ -32,6 +32,11 @@ def _is_blocked_file(path: str) -> bool:
             return True
     return False
 
+
+def _is_internal_tool_file(path: str) -> bool:
+    normalized = path.replace("\\", "/").lower()
+    return normalized.endswith("services/git_utils.py") or normalized == "git_utils.py"
+
 # ---- Security: Content Redaction ----
 REDACT_PATTERNS = [
     (r"sk-[a-zA-Z0-9]{20,}", "[REDACTED_OPENAI_KEY]"),
@@ -44,6 +49,17 @@ REDACT_PATTERNS = [
     (r"Bearer [a-zA-Z0-9_-]{20,}", "[REDACTED_BEARER]"),
     (r"token[\"']?\s*[:=]\s*[\"'][^\"']{20,}[\"']", "[REDACTED_TOKEN_ASSIGNMENT]"),
 ]
+
+API_CALL_PATTERNS = {
+    "openai_responses": r"responses\.create",
+    "openai_chat": r"chat\.completions\.create",
+    "openai_http": r"api\.openai\.com|/v1/(chat/completions|responses|images|video|videos|sora)",
+    "gemini_client": r"genai\.Client|google\.genai",
+    "anthropic_client": r"AsyncAnthropic|anthropic\.",
+    "sora_http": r"sora_headers|/videos?/|/sora/",
+    "stability_sdk": r"stability_client\.StabilityInference|stability_sdk",
+    "requests_http": r"requests\.(get|post|put|delete|patch)",
+}
 
 def _redact_secrets(text: str) -> str:
     """Scrub potential API keys and tokens from text."""
@@ -107,8 +123,8 @@ def get_commit_diff(sha: str) -> str:
         return "[error: invalid SHA format]"
     
     output = _run_git("show", "--stat", sha, max_output=6000)
-    # Also get the actual diff but limit it
-    diff = _run_git("show", "--no-stat", "-p", sha, max_output=4000)
+    # Get the actual patch using a command that works across older Git builds.
+    diff = _run_git("diff", f"{sha}^!", "--", max_output=4000)
     
     return f"{output}\n\n--- Diff ---\n{diff}"
 
@@ -159,7 +175,7 @@ def search_code(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
             parts = line.split(":", 2)
             if len(parts) >= 3:
                 file_path = parts[0]
-                if _is_blocked_file(file_path):
+                if _is_blocked_file(file_path) or _is_internal_tool_file(file_path):
                     continue  # Skip blocked files
                 results.append({
                     "file": file_path,
@@ -219,6 +235,77 @@ def search_history(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         results.append(current)
 
     return results
+
+
+def _grep_regex(pattern: str, max_results: int = 20) -> List[Dict[str, Any]]:
+    output = _run_git("grep", "-n", "-i", "-E", "--", pattern, max_output=12000)
+    if output.startswith("[error:"):
+        return [{"error": output}]
+
+    results: List[Dict[str, Any]] = []
+    for line in output.strip().split("\n")[:max_results]:
+        if ":" not in line:
+            continue
+        parts = line.split(":", 2)
+        if len(parts) < 3:
+            continue
+        file_path = parts[0]
+        if _is_blocked_file(file_path) or _is_internal_tool_file(file_path):
+            continue
+        results.append(
+            {
+                "file": file_path,
+                "line": parts[1],
+                "content": _redact_secrets(parts[2][:200]),
+            }
+        )
+    return results
+
+
+def find_api_calls(provider: str | None = None, max_results: int = 20) -> Dict[str, Any]:
+    """Find API/SDK call sites in current code and relevant history."""
+    provider = (provider or "").strip().lower()
+    patterns = {
+        name: regex
+        for name, regex in API_CALL_PATTERNS.items()
+        if not provider or provider in name
+    }
+    if not patterns:
+        patterns = API_CALL_PATTERNS
+
+    current_matches: List[Dict[str, Any]] = []
+    history_matches: List[Dict[str, Any]] = []
+
+    for name, pattern in patterns.items():
+        for match in _grep_regex(pattern, max_results=max_results):
+            if "error" in match:
+                continue
+            current_matches.append({"pattern": name, **match})
+            if len(current_matches) >= max_results:
+                break
+        if len(current_matches) >= max_results:
+            break
+
+    seen_shas = set()
+    per_pattern_history = max(1, min(3, max_results // max(1, len(patterns))))
+    for name, pattern in patterns.items():
+        for hit in search_history(pattern, max_results=per_pattern_history):
+            sha = hit.get("sha")
+            if not sha or sha in seen_shas or "error" in hit:
+                continue
+            seen_shas.add(sha)
+            history_matches.append({"pattern": name, **hit})
+            if len(history_matches) >= max_results:
+                break
+        if len(history_matches) >= max_results:
+            break
+
+    return {
+        "ok": True,
+        "provider": provider or "all",
+        "current_matches": current_matches[:max_results],
+        "history_matches": history_matches[:max_results],
+    }
 
 
 def get_file_list() -> List[str]:

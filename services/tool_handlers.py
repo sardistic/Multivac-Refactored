@@ -170,6 +170,14 @@ async def handle_git_repo_info(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "info": get_repo_info()}
 
 
+async def handle_git_find_api_calls(args: Dict[str, Any]) -> Dict[str, Any]:
+    from services.git_utils import find_api_calls
+
+    provider = (args or {}).get("provider")
+    max_results = int((args or {}).get("max_results", 12))
+    return find_api_calls(provider=provider, max_results=max_results)
+
+
 async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
     from services.memory_utils import fetch_matches_recent
 
@@ -262,6 +270,7 @@ TOOL_HANDLERS = {
     "git_search_code": handle_git_search_code,
     "git_search_history": handle_git_search_history,
     "git_file_list": handle_git_file_list,
+    "git_find_api_calls": handle_git_find_api_calls,
     "git_repo_info": handle_git_repo_info,
     "search_memory": handle_search_memory,
     "update_behavioral_instruction": handle_update_behavioral_instruction,
