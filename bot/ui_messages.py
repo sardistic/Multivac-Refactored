@@ -9,10 +9,20 @@ from services.database_utils import get_message_expansion, save_message_expansio
 from services.progress import start_progress_bar
 
 LINE_TRUNCATE_AT = 2
+DISCORD_MESSAGE_LIMIT = 2000
 EXPAND_EMOJI = "🧾"
 COLLAPSE_EMOJI = "🔼"
 
 logger = logging.getLogger("discord_bot")
+
+
+def _fit_discord_limit(text: str, reserve: int = 0) -> str:
+    max_len = max(0, DISCORD_MESSAGE_LIMIT - reserve)
+    if len(text) <= max_len:
+        return text
+    if max_len <= 1:
+        return text[:max_len]
+    return text[: max_len - 1].rstrip() + "…"
 
 
 def make_preview(full_text: str, max_lines: int = LINE_TRUNCATE_AT):
@@ -37,16 +47,18 @@ def make_preview(full_text: str, max_lines: int = LINE_TRUNCATE_AT):
                 break
 
         if summary_lines:
-            preview = "\n".join(summary_lines).rstrip()
+            preview = _fit_discord_limit("\n".join(summary_lines).rstrip(), reserve=1)
             return preview + "… (Summary)", True
 
     if len(lines) > max_lines:
-        preview = "\n".join(lines[:max_lines]).rstrip()
+        preview = _fit_discord_limit("\n".join(lines[:max_lines]).rstrip(), reserve=1)
         code_fence_count = preview.count("```")
         if code_fence_count % 2 != 0:
             preview += "\n```"
 
         return preview + "…", True
+    if len(full_text) > DISCORD_MESSAGE_LIMIT:
+        return _fit_discord_limit(full_text, reserve=1) + "…", True
     return full_text, False
 
 
@@ -61,7 +73,7 @@ async def auto_collapse_task(message: discord.Message, delay: float = 600.0):
         full_text = rec["full_text"]
         preview, _ = make_preview(full_text, LINE_TRUNCATE_AT)
         footer = f"\n\n(react {EXPAND_EMOJI} to expand)"
-        await message.edit(content=f"{preview}{footer}")
+        await message.edit(content=_fit_discord_limit(f"{preview}{footer}"))
         set_message_expanded(message.id, False)
 
         with contextlib.suppress(Exception):
@@ -78,24 +90,13 @@ async def handle_expansion_reaction(msg: discord.Message, emoji: str, rec, membe
         footer = f"\n\n(react {COLLAPSE_EMOJI} to collapse)"
 
         if len(full) + len(footer) > 2000:
-            import io
-
-            try:
-                f = io.BytesIO(full.encode("utf-8"))
-                await msg.reply(
-                    "⚠️ Response too long to expand inline. Sending as file.",
-                    file=discord.File(f, filename="response.md"),
-                )
-                if member:
-                    with contextlib.suppress(Exception):
-                        await msg.remove_reaction(emoji, member)
-                set_message_expanded(msg.id, True)
-            except Exception as e:
-                logger.error(f"Failed to send long response file: {e}")
+            if member:
+                with contextlib.suppress(Exception):
+                    await msg.remove_reaction(emoji, member)
             return
 
         with contextlib.suppress(Exception):
-            await msg.edit(content=f"{full}{footer}")
+            await msg.edit(content=_fit_discord_limit(f"{full}{footer}"))
         set_message_expanded(msg.id, True)
         with contextlib.suppress(Exception):
             await msg.clear_reaction(EXPAND_EMOJI)
@@ -108,7 +109,7 @@ async def handle_expansion_reaction(msg: discord.Message, emoji: str, rec, membe
         preview, _ = make_preview(full, LINE_TRUNCATE_AT)
         footer = f"\n\n(react {EXPAND_EMOJI} to expand)"
         with contextlib.suppress(Exception):
-            await msg.edit(content=f"{preview}{footer}")
+            await msg.edit(content=_fit_discord_limit(f"{preview}{footer}"))
         set_message_expanded(msg.id, False)
         with contextlib.suppress(Exception):
             await msg.clear_reaction(COLLAPSE_EMOJI)
@@ -137,8 +138,8 @@ async def send_or_edit_with_truncation(
         footer_expand = f"\n\n(react {EXPAND_EMOJI} to expand)"
         footer_collapse = f"\n\n(react {COLLAPSE_EMOJI} to collapse)"
 
-        if len(full_text) + len(footer_collapse) <= 2000:
-            content = f"{full_text}{footer_collapse}"
+        if len(full_text) + len(footer_collapse) <= DISCORD_MESSAGE_LIMIT:
+            content = _fit_discord_limit(f"{full_text}{footer_collapse}")
 
             if target_msg:
                 sent = target_msg
@@ -159,7 +160,7 @@ async def send_or_edit_with_truncation(
                 with contextlib.suppress(Exception):
                     await target_msg.reply(files=extra_files)
         else:
-            content = f"{preview}{footer_expand}"
+            content = _fit_discord_limit(f"{preview}{footer_expand}")
 
             if target_msg:
                 sent = target_msg
@@ -185,19 +186,19 @@ async def send_or_edit_with_truncation(
     if target_msg:
         if extra_files:
             try:
-                await target_msg.edit(content=full_text)
+                await target_msg.edit(content=_fit_discord_limit(full_text))
                 await target_msg.reply(files=extra_files)
             except Exception:
-                await channel.send(full_text, reference=reply_to, files=extra_files)
+                await channel.send(_fit_discord_limit(full_text), reference=reply_to, files=extra_files)
         else:
-            await target_msg.edit(content=full_text)
+            await target_msg.edit(content=_fit_discord_limit(full_text))
 
         with contextlib.suppress(Exception):
             await target_msg.clear_reactions()
         save_message_expansion(target_msg.id, full_text, expanded=True)
         final_msg = target_msg
     else:
-        final_msg = await channel.send(full_text, reference=reply_to, files=extra_files)
+        final_msg = await channel.send(_fit_discord_limit(full_text), reference=reply_to, files=extra_files)
 
     if auto_index and final_msg and index_callback:
         await index_callback(final_msg, full_text, original_message=original_message, reply_to=reply_to, model=model)
