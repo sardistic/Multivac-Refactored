@@ -179,7 +179,6 @@ def search_history(query: str, max_results: int = 10) -> List[Dict[str, Any]]:
     output = _run_git(
         "log",
         "--all",
-        "--pickaxe-regex",
         f"-G{query}",
         "--pretty=format:__COMMIT__%H|%s|%an|%ar",
         "--name-only",
