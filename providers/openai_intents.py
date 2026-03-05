@@ -55,20 +55,33 @@ async def classify_intent(text: str, has_images: bool = False) -> str:
         else:
             system_prompt = _INTENT_SYSTEM
 
-        resp = await get_openai_client().chat.completions.create(
-            model=OPENAI_INTENT_MODEL,
-            temperature=0,
-            max_tokens=10,
-            messages=[
+        payload = {
+            "model": OPENAI_INTENT_MODEL,
+            "temperature": 0,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text.strip()},
             ],
-        )
+        }
+        try:
+            resp = await get_openai_client().chat.completions.create(
+                **payload,
+                max_completion_tokens=16,
+            )
+        except Exception as e:
+            msg = str(e).lower()
+            if "max_completion_tokens" in msg and ("unsupported" in msg or "unknown" in msg):
+                resp = await get_openai_client().chat.completions.create(
+                    **payload,
+                    max_tokens=16,
+                )
+            else:
+                raise
         label = (resp.choices[0].message.content or "").strip().lower()
         label = re.sub(r"[^a-z_]", "", label)
         return label if label in {
             "edit_image", "generate_image", "summarize_url",
-            "describe_image", "get_weather", "get_stock", "gemini_chat", "claude_chat", "chat"
+            "describe_image", "get_weather", "get_stock", "gemini_chat", "claude_chat", "generate_video", "chat"
         } else "chat"
     except Exception as e:
         if isinstance(e, OpenAIModerationError):

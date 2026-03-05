@@ -470,13 +470,19 @@ async def on_message(message: discord.Message):
     # Intent
     # 1. Determine Intent
     # Fix for "gemini imagine" being grabbed by chat intent
-    if raw_prompt.lower().strip().startswith("gemini imagine"):
+    lowered_raw = raw_prompt.lower().strip()
+    lowered_prompt = prompt.lower().strip()
+    if lowered_raw.startswith("gemini imagine"):
         intent = "generate_image"
         # We don't strip "gemini" here because stability_utils expects it? 
         # Actually stability_utils checks if content.startswith("gemini").
+    elif lowered_prompt.startswith("claude") or lowered_raw.startswith("claude"):
+        intent = "claude_chat"
+    elif lowered_prompt.startswith("gemini") or lowered_raw.startswith("gemini"):
+        intent = "gemini_chat"
     else:
         # Quick override for video
-        lower_prompt = prompt.lower()
+        lower_prompt = lowered_prompt
         if "generate" in lower_prompt and ("video" in lower_prompt or "movie" in lower_prompt or "clip" in lower_prompt or "sora" in lower_prompt):
              intent = "generate_video"
         else:
