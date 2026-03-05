@@ -6,7 +6,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from services.memory_client import OPENSEARCH_INDEX, conversation_key, init_es_client, search_raw, runtime, _now_iso, _now_utc
 
-_SORT_RECENT = [{"timestamp": {"order": "desc"}}, {"message_id": {"order": "desc"}}]
+# Keep sorting compatible with older indices where message_id may be mapped as text.
+_SORT_RECENT = [{"timestamp": {"order": "desc"}}]
 
 
 def build_message_window(
