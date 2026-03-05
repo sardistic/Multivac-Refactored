@@ -190,6 +190,35 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
 
     query = args.get("query", "")
     limit = int(args.get("limit", 5))
+    lowered = query.lower()
+    is_temporal_query = any(
+        k in lowered
+        for k in ["ago", "week", "month", "year", "first", "earliest", "history", "what did i talk", "what did i say"]
+    )
+
+    if is_temporal_query and query:
+        recalled = search_history_for_context(
+            guild_id=guild_id,
+            channel_id=channel_id,
+            user_id=user_id,
+            query_text=query,
+            limit=limit,
+            oldest_first=any(k in lowered for k in ["first", "earliest", "start", "beginning"]),
+        )
+        if recalled:
+            recalled_rows = []
+            for line in recalled.splitlines():
+                if ": " in line:
+                    ts_role, content = line.split(": ", 1)
+                    role = "unknown"
+                    timestamp = ""
+                    if "] " in ts_role:
+                        timestamp, role = ts_role.split("] ", 1)
+                        timestamp = timestamp.lstrip("[")
+                    recalled_rows.append({"role": role, "content": content, "timestamp": timestamp})
+            if recalled_rows:
+                return {"ok": True, "results": recalled_rows}
+
     results = fetch_matches_recent(
         guild_id=guild_id,
         channel_id=channel_id,
@@ -198,8 +227,7 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
         size=limit,
     )
     if not results and query:
-        lowered = query.lower()
-        if any(k in lowered for k in ["ago", "week", "month", "year", "first", "earliest", "history", "what did i talk"]):
+        if is_temporal_query:
             recalled = search_history_for_context(
                 guild_id=guild_id,
                 channel_id=channel_id,
