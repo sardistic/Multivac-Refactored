@@ -319,6 +319,8 @@ async def generate_openai_messages_response_with_tools(
                     "You have access to tools. When the user asks about your code, commits, files, "
                     "weather, stocks, or other data you can fetch, USE the appropriate tool to get "
                     "real information. Do not say you 'would use' a tool - actually call it."
+                    "If the user asks about past conversation/history/timeframes (e.g., 'what did I say last month', "
+                    "'2 weeks ago', 'yesterday'), call `search_memory` before answering."
                 ),
             }
             messages_with_instruction = [tool_instruction] + messages

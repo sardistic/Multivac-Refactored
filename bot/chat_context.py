@@ -86,7 +86,8 @@ def build_chat_context(message, user_id, raw_prompt, ref_msg=None, is_reply_to_b
                         "The user is asking about past events. Here is the relevant conversation history retrieved from the database:\n"
                         f"{found_text}\n"
                         "IMPORTANT: If this retrieved context is insufficient to answer specific requests (e.g., specific quotes, older messages, or details not shown above), "
-                        "you MUST use the `search_history_for_context` tool to perform a specific search for the missing information.\n"
+                        "you MUST use the `search_memory` tool to perform a specific search for the missing information.\n"
+                        "For time-based recall, include temporal phrases in the query (for example: '2 weeks ago', 'last month', 'yesterday').\n"
                         "[END MEMORY RECALL]"
                     ),
                 })
@@ -97,7 +98,7 @@ def build_chat_context(message, user_id, raw_prompt, ref_msg=None, is_reply_to_b
                         "[SYSTEM: MEMORY RECALL]\n"
                         "Proactive database search returned NO direct matches for the user's specific query criteria (time range or keywords).\n"
                         "However, the user is explicitly asking for history.\n"
-                        "CRITICAL: Do NOT just say 'I don't recall'. You MUST use the `search_history_for_context` tool now with broader or different terms (e.g., ignore time, or search just keywords) to find the answer.\n"
+                        "CRITICAL: Do NOT just say 'I don't recall'. You MUST use the `search_memory` tool now with broader or different terms (e.g., ignore time, or search just keywords) to find the answer.\n"
                         "[END MEMORY RECALL]"
                     ),
                 })

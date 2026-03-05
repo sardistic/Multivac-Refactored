@@ -188,7 +188,7 @@ TOOL_SPECS = [
         "type": "function",
         "function": {
             "name": "search_memory",
-            "description": "Search my long-term memory (Elasticsearch) for past conversations or context. Use this to remember things the user told you previously.",
+            "description": "Search my long-term memory (Elasticsearch) for past conversations or context. Use this for recall questions, especially time-based prompts like '2 weeks ago', 'last month', or 'yesterday'.",
             "parameters": {
                 "type": "object",
                 "properties": {
