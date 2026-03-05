@@ -192,7 +192,18 @@ async def live_status_with_progress(
     stream_ok: bool = False,
     editor_factory=None,
 ):
-    status_msg = await message.reply(f"[{emoji} {action_label} ░░░░░░░░░░]")
+    status_msg = None
+    try:
+        status_msg = await message.reply(f"[{emoji} {action_label} ░░░░░░░░░░]")
+    except Exception:
+        # Avoid leaking an un-awaited coroutine if reply fails before task creation.
+        with contextlib.suppress(Exception):
+            if asyncio.iscoroutine(coro):
+                coro.close()
+        with contextlib.suppress(Exception):
+            status_msg = await message.channel.send(f"[{emoji} {action_label} ░░░░░░░░░░]")
+        if status_msg is None:
+            raise
 
     loop = asyncio.get_event_loop()
     task = loop.create_task(coro)
