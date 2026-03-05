@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 
-from providers.openai_client import get_openai_client
+from providers.openai_client import OPENAI_INTENT_MODEL, get_openai_client
 from providers.openai_messages import OpenAIModerationError
 
 _INTENT_SYSTEM = (
@@ -56,7 +56,7 @@ async def classify_intent(text: str, has_images: bool = False) -> str:
             system_prompt = _INTENT_SYSTEM
 
         resp = await get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
+            model=OPENAI_INTENT_MODEL,
             temperature=0,
             max_tokens=10,
             messages=[

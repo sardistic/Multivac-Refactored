@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import discord
+from providers.openai_client import OPENAI_CHAT_MODEL
 
 
 class ModerationFallbackView(discord.ui.View):
@@ -29,8 +30,8 @@ class ModerationFallbackView(discord.ui.View):
                 emoji="🆕",
             ),
             discord.SelectOption(
-                label="GPT-5.2 (OpenAI)",
-                value="gpt-5.2",
+                label=f"{OPENAI_CHAT_MODEL} (OpenAI)",
+                value=OPENAI_CHAT_MODEL,
                 description="Switch provider to OpenAI.",
                 emoji="🟢",
             ),

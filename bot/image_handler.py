@@ -10,6 +10,7 @@ import discord
 
 from bot.chat_context import build_chat_context
 from providers.gemini_utils import generate_gemini_image
+from providers.openai_client import OPENAI_CHAT_MODEL
 from providers.openai_utils import generate_openai_messages_response_with_tools, get_openai_client
 from providers.stability_utils import handle_image_generation
 from services.weather_utils import get_location_details, get_weather_data
@@ -147,7 +148,7 @@ async def handle_edit_image_intent(
     async def _do_single_edit(img_url: str):
         edit_instruction = f"You must edit this image. {prompt}. Apply the changes to the image."
         response = await get_openai_client().responses.create(
-            model="gpt-4.1",
+            model=OPENAI_CHAT_MODEL,
             input=[
                 {
                     "role": "user",
@@ -250,7 +251,7 @@ async def handle_describe_image_intent(
             text_resp,
             target_msg=status_msg,
             original_message=message,
-            model="gpt-4o-vision",
+            model=OPENAI_CHAT_MODEL,
         )
 
     if artifacts:

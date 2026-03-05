@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List
 
 from services.database_utils import get_user_instruction
-from services.memory_utils import build_timeline_prompt_block, search_history_for_context
+from services.memory_utils import build_message_window, build_timeline_prompt_block, search_history_for_context
 
 logger = logging.getLogger("discord_bot")
 
@@ -25,6 +25,23 @@ def build_chat_context(message, user_id, raw_prompt, ref_msg=None, is_reply_to_b
         max_items=12,
     )
     msgs.append({"role": "system", "content": timeline_block})
+
+    # Include recent turn-by-turn context so provider switching (Claude -> GPT, etc.)
+    # keeps the same local conversational memory.
+    try:
+        window = build_message_window(
+            guild_id=message.guild.id if message.guild else "DM",
+            channel_id=message.channel.id,
+            user_id=user_id,
+            limit_msgs=20,
+        )
+        if window and window[-1].get("role") == "user":
+            if (window[-1].get("content") or "").strip() == (raw_prompt or "").strip():
+                window = window[:-1]
+        if window:
+            msgs.extend(window)
+    except Exception as e:
+        logger.warning(f"Failed to build message window context: {e}")
 
     if ref_msg and (ref_msg.content or "").strip():
         if is_reply_to_bot:

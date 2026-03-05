@@ -2,6 +2,7 @@ import logging
 
 from bot.chat_context import build_chat_context
 from providers.gemini_utils import GeminiModerationError, generate_gemini_text
+from providers.openai_client import OPENAI_CHAT_MODEL
 from providers.openai_utils import OpenAIModerationError, TOOLS_DEF, generate_openai_messages_response_with_tools
 
 logger = logging.getLogger("discord_bot")
@@ -24,7 +25,7 @@ async def handle_chat_intent(
     moderation_view_factory,
 ):
     async def _do_chat_generation(model_name=None):
-        selected_model = model_name or "gpt-5.2"
+        selected_model = model_name or OPENAI_CHAT_MODEL
 
         async def _chat_with_es_window():
             msgs = build_chat_context(

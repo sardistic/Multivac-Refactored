@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from providers.openai_client import USE_RESPONSES, get_openai_client
+from providers.openai_client import OPENAI_CHAT_MODEL, USE_RESPONSES, get_openai_client
 from providers.openai_images import (
     build_user_content_chat,
     build_user_content_responses,
@@ -185,7 +185,7 @@ async def _responses_tool_loop(
     first_resp,
     messages: List[Any],
     *,
-    model: str = "gpt-5.2",
+    model: str = OPENAI_CHAT_MODEL,
     temperature: float = 0.6,
     max_tokens: int = 700,
     max_rounds: int = 3,
@@ -222,7 +222,7 @@ async def generate_openai_response(
     *,
     image_urls: Optional[List[str]] = None,
     context: Optional[str] = None,
-    model: str = "gpt-5.2",
+    model: str = OPENAI_CHAT_MODEL,
     temperature: float = 0.6,
     max_tokens: int = 800,
 ) -> str:
@@ -268,7 +268,7 @@ async def generate_openai_response(
 async def generate_openai_messages_response(
     messages: List[Dict[str, Any]],
     *,
-    model: str = "gpt-5.2",
+    model: str = OPENAI_CHAT_MODEL,
     max_tokens: int = 700,
     temperature: float = 0.6,
 ) -> str:
@@ -307,7 +307,7 @@ async def generate_openai_messages_response_with_tools(
     *,
     tools: Optional[list] = None,
     tool_context: Optional[Dict[str, Any]] = None,
-    model: str = "gpt-5.2",
+    model: str = OPENAI_CHAT_MODEL,
     max_tokens: int = 700,
     temperature: float = 0.6,
 ) -> str:
@@ -435,7 +435,7 @@ async def generate_openai_response_tools(
         messages,
         tools=TOOLS_DEF,
         tool_context={"conversation_id": conversation_id, "user_id": str(user_id)},
-        model="gpt-5.2",
+        model=OPENAI_CHAT_MODEL,
         max_tokens=max_tokens,
         temperature=temperature,
     )
