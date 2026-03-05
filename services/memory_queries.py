@@ -170,6 +170,43 @@ def fetch_recent_page(
 def _parse_relative_time_search(query: str) -> Optional[Dict[str, Any]]:
     q = query.lower()
     now = datetime.now(timezone.utc)
+    if "yesterday" in q:
+        target_time = now - timedelta(days=1)
+        return {
+            "gte": (target_time - timedelta(days=1)).isoformat(),
+            "lte": (target_time + timedelta(days=1)).isoformat(),
+        }
+
+    if "last week" in q:
+        q = q.replace("last week", "1 week ago")
+    if "last month" in q:
+        q = q.replace("last month", "1 month ago")
+    if "last year" in q:
+        q = q.replace("last year", "1 year ago")
+
+    q = re.sub(r"\b(a|an)\s+(sec|second|min|minute|hour|hr|day|week|month|year)s?\s+ago\b", r"1 \2 ago", q)
+
+    word_to_num = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+        "eleven": 11,
+        "twelve": 12,
+    }
+    for word, value in word_to_num.items():
+        q = re.sub(
+            rf"\b{word}\s+(sec|second|min|minute|hour|hr|day|week|month|year)s?\s+ago\b",
+            rf"{value} \1 ago",
+            q,
+        )
+
     match = re.search(r"(\d+)\s+(sec|second|min|minute|hour|hr|day|week|month|year)s?\s+ago", q)
     if not match:
         return None
