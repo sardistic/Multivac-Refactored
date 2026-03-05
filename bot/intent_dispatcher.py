@@ -110,7 +110,7 @@ async def dispatch_intent(
         )
         return True
 
-    if intent == "summarize_url" and general_url_match:
+    if intent == "summarize_url" and general_url_match and not image_urls:
         await handle_summarize_url_intent(
             message=message,
             url=general_url_match.group(0),

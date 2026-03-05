@@ -5,10 +5,14 @@ import logging
 import mimetypes
 import re
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 
 from google.genai import types
 
 logger = logging.getLogger("discord_bot")
+
+URL_RE = re.compile(r"https?://[^\s<>]+", flags=re.IGNORECASE)
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff", ".tif", ".avif", ".heic", ".heif")
 
 
 def strip_mention_and_trigger(raw: str, bot_user_id: int | None) -> str:
@@ -69,6 +73,31 @@ def _embed_image_candidates(embeds) -> List[str]:
     return candidates
 
 
+def _clean_url_token(url: str) -> str:
+    return (url or "").strip().rstrip(").,!?:;]}'\"")
+
+
+def _extract_urls_from_text(text: str) -> List[str]:
+    if not text:
+        return []
+    return [_clean_url_token(m.group(0)) for m in URL_RE.finditer(text)]
+
+
+def _looks_like_image_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        path = (parsed.path or "").lower()
+        if path.endswith(IMAGE_EXTS):
+            return True
+        if "cdn.discordapp.com/attachments/" in url.lower():
+            return True
+        if "media.discordapp.net/attachments/" in url.lower():
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def has_visual_inputs(message, ref_msg=None) -> bool:
     if message.attachments or (ref_msg and ref_msg.attachments):
         return True
@@ -76,8 +105,13 @@ def has_visual_inputs(message, ref_msg=None) -> bool:
         return True
     if ref_msg and _embed_image_candidates(getattr(ref_msg, "embeds", None)):
         return True
-    if re.search(r"https?://[^\s]+(?:\.(?:png|jpg|jpeg|webp|gif)|cdn\.discordapp\.com/attachments/[^\s]+)", message.content):
-        return True
+    for url in _extract_urls_from_text(message.content):
+        if _looks_like_image_url(url):
+            return True
+    if ref_msg:
+        for url in _extract_urls_from_text(getattr(ref_msg, "content", "")):
+            if _looks_like_image_url(url):
+                return True
     return False
 
 
@@ -110,17 +144,21 @@ async def collect_image_inputs(message, ref_msg, image_url_to_base64) -> List[st
             if b64:
                 image_urls.append(b64)
 
-    matches = re.findall(
-        r"https?://[^\s]+(?:\.(?:png|jpg|jpeg|webp|gif)|cdn\.discordapp\.com/attachments/[^\s]+)",
-        message.content,
-    )
-    for raw_url in matches:
-        if "cdn.discordapp.com" in raw_url:
+    text_candidates: List[str] = []
+    if ref_msg:
+        text_candidates.extend(_extract_urls_from_text(getattr(ref_msg, "content", "")))
+    text_candidates.extend(_extract_urls_from_text(message.content))
+
+    for raw_url in text_candidates:
+        if not _looks_like_image_url(raw_url):
+            continue
+        lowered = raw_url.lower()
+        if "cdn.discordapp.com" in lowered or "media.discordapp.net" in lowered:
             b64 = await image_url_to_base64(raw_url)
             if b64:
                 image_urls.append(b64)
-        else:
-            image_urls.append(raw_url)
+                continue
+        image_urls.append(raw_url)
 
     seen = set()
     unique_urls = []
