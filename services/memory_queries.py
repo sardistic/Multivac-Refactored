@@ -270,26 +270,44 @@ def fetch_matches_recent(
     source: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
     ckey = conversation_key(guild_id, channel_id, user_id)
-    body: Dict[str, Any] = {
-        "query": {
-            "bool": {
-                "must": [{"match": {"content": {"query": query, "operator": "and"}}}],
-                "filter": [{"term": {"conversation_key.keyword": ckey}}],
-            }
-        },
-        "size": int(size),
-        "sort": _SORT_RECENT,
+    cleaned_query = (query or "").strip()
+
+    bool_query: Dict[str, Any] = {
+        "filter": [{"term": {"conversation_key.keyword": ckey}}],
+        "must": [],
     }
-    if source:
-        body["_source"] = source
+    if cleaned_query:
+        bool_query["must"].append({"match": {"content": {"query": cleaned_query, "operator": "and"}}})
 
-    client = runtime.client or init_es_client()
-    if client is None:
-        return []
+    # Use the shared safe search path to avoid bubbling ES 400s into tool failures.
+    resp = search_raw(
+        {"bool": bool_query},
+        index=OPENSEARCH_INDEX,
+        size=int(size),
+        source=source,
+        sort=_SORT_RECENT,
+    )
 
-    resp = client.search(index=OPENSEARCH_INDEX, body=body)  # type: ignore[attr-defined]
     hits = resp.get("hits", {}).get("hits", [])
-    return [h.get("_source", {}) for h in hits]
+    docs = [h.get("_source", {}) for h in hits]
+    if docs or not cleaned_query:
+        return docs
+
+    # Fallback: loosen matching if strict AND matching produced no results.
+    fallback_query = {
+        "bool": {
+            "filter": [{"term": {"conversation_key.keyword": ckey}}],
+            "must": [{"match": {"content": cleaned_query}}],
+        }
+    }
+    resp = search_raw(
+        fallback_query,
+        index=OPENSEARCH_INDEX,
+        size=int(size),
+        source=source,
+        sort=_SORT_RECENT,
+    )
+    return [h.get("_source", {}) for h in resp.get("hits", {}).get("hits", [])]
 
 
 def build_timeline_from_docs(docs: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
@@ -308,4 +326,3 @@ def build_timeline_from_docs(docs: List[Dict[str, Any]]) -> List[Tuple[str, str]
             content = content[:137].rstrip() + "…"
         items.append((ago, f"{who}: {content}"))
     return items
-

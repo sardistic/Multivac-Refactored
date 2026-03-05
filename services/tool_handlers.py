@@ -179,7 +179,7 @@ async def handle_git_find_api_calls(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
-    from services.memory_utils import fetch_matches_recent
+    from services.memory_utils import fetch_matches_recent, search_history_for_context
 
     ctx = args.get("_context", {})
     guild_id = ctx.get("guild_id")
@@ -197,6 +197,30 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
         query=query,
         size=limit,
     )
+    if not results and query:
+        lowered = query.lower()
+        if any(k in lowered for k in ["ago", "week", "month", "year", "first", "earliest", "history", "what did i talk"]):
+            recalled = search_history_for_context(
+                guild_id=guild_id,
+                channel_id=channel_id,
+                user_id=user_id,
+                query_text=query,
+                limit=limit,
+                oldest_first=any(k in lowered for k in ["first", "earliest", "start", "beginning"]),
+            )
+            if recalled:
+                recalled_rows = []
+                for line in recalled.splitlines():
+                    if ": " in line:
+                        ts_role, content = line.split(": ", 1)
+                        role = "unknown"
+                        timestamp = ""
+                        if "] " in ts_role:
+                            timestamp, role = ts_role.split("] ", 1)
+                            timestamp = timestamp.lstrip("[")
+                        recalled_rows.append({"role": role, "content": content, "timestamp": timestamp})
+                if recalled_rows:
+                    results = recalled_rows
     return {
         "ok": True,
         "results": [
