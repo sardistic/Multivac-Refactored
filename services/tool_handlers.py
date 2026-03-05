@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict
 
+from config import ALLOW_CONTEXT_SEARCH_OTHERS
 from services.tool_specs import TOOL_SPECS
 from services.url_utils import extract_main_text, fetch_url_content, reduce_text_length
 
@@ -190,6 +191,13 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
 
     query = args.get("query", "")
     limit = int(args.get("limit", 5))
+    requested_target_user = args.get("target_user_id")
+    target_user_id = None
+    if requested_target_user not in (None, "", user_id, str(user_id)):
+        if not ALLOW_CONTEXT_SEARCH_OTHERS:
+            return {"ok": False, "error": "cross_user_memory_search_disabled"}
+        target_user_id = str(requested_target_user)
+
     lowered = query.lower()
     is_temporal_query = any(
         k in lowered
@@ -201,6 +209,7 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
             guild_id=guild_id,
             channel_id=channel_id,
             user_id=user_id,
+            target_user_id=target_user_id,
             query_text=query,
             limit=limit,
             oldest_first=any(k in lowered for k in ["first", "earliest", "start", "beginning"]),
@@ -223,6 +232,7 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
         guild_id=guild_id,
         channel_id=channel_id,
         user_id=user_id,
+        target_user_id=target_user_id,
         query=query,
         size=limit,
     )
@@ -232,6 +242,7 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
                 guild_id=guild_id,
                 channel_id=channel_id,
                 user_id=user_id,
+                target_user_id=target_user_id,
                 query_text=query,
                 limit=limit,
                 oldest_first=any(k in lowered for k in ["first", "earliest", "start", "beginning"]),
@@ -249,6 +260,17 @@ async def handle_search_memory(args: Dict[str, Any]) -> Dict[str, Any]:
                         recalled_rows.append({"role": role, "content": content, "timestamp": timestamp})
                 if recalled_rows:
                     results = recalled_rows
+        # If the user asks a time/recall question and we still have nothing,
+        # return recent scoped context so the model can still answer usefully.
+        if not results and is_temporal_query:
+            results = fetch_matches_recent(
+                guild_id=guild_id,
+                channel_id=channel_id,
+                user_id=user_id,
+                target_user_id=target_user_id,
+                query="",
+                size=limit,
+            )
     return {
         "ok": True,
         "results": [

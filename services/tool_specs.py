@@ -188,12 +188,13 @@ TOOL_SPECS = [
         "type": "function",
         "function": {
             "name": "search_memory",
-            "description": "Search my long-term memory (Elasticsearch) for past conversations or context. Use this for recall questions, especially time-based prompts like '2 weeks ago', 'last month', or 'yesterday'.",
+            "description": "Search long-term memory (Elasticsearch) for past conversation context. Use this for recall questions, especially time-based prompts like '2 weeks ago', 'last month', or 'yesterday'. Supports scoped retrieval and optional target user lookup when enabled.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "The search query (e.g. 'favorite pokemon', 'project ideas')"},
                     "limit": {"type": "integer", "description": "Max results to return", "default": 5},
+                    "target_user_id": {"type": "string", "description": "Optional Discord user ID to search for. Only works when cross-user memory search is enabled."},
                 },
                 "required": ["query"],
             },
