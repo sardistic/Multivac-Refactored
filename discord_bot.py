@@ -148,6 +148,15 @@ _pending_image_selection: set[int] = set()  # user IDs awaiting reply
 
 # Track message IDs currently being expanded to prevent race conditions
 _expansion_locks: set[int] = set()
+# Track preflight status messages so progress can start immediately.
+_preflight_status_by_message_id: dict[int, discord.Message] = {}
+
+
+def _preflight_bar(step: int, total: int = 3, width: int = 10) -> str:
+    total = max(1, total)
+    step = max(0, min(step, total))
+    filled = int((step / total) * width)
+    return f"[{'█' * filled}{'░' * (width - filled)}]"
 
 async def prompt_for_image_selection(message, image_count: int, timeout: float = 30.0):
     """
@@ -217,6 +226,11 @@ async def send_or_edit_with_truncation(*args, **kwargs):
 
 
 async def live_status_with_progress(*args, **kwargs):
+    base_message = args[0] if args else kwargs.get("message")
+    if isinstance(base_message, discord.Message):
+        existing = _preflight_status_by_message_id.pop(base_message.id, None)
+        if existing is not None:
+            kwargs.setdefault("existing_status_msg", existing)
     kwargs.setdefault("stream_ok", STREAM_OK)
     if STREAM_OK:
         kwargs.setdefault("editor_factory", lambda status_msg: ThrottledEditor(status_msg, min_interval_s=1.5, max_len=1300))
@@ -424,6 +438,18 @@ async def on_message(message: discord.Message):
     if message.author.id in _pending_image_selection:
         return
 
+    preflight_status = None
+    try:
+        preflight_status = await message.reply(f"[🧠 Preparing {_preflight_bar(0)}]")
+    except Exception:
+        try:
+            preflight_status = await message.channel.send(f"[🧠 Preparing {_preflight_bar(0)}]")
+        except Exception:
+            preflight_status = None
+
+    if preflight_status is not None:
+        _preflight_status_by_message_id[message.id] = preflight_status
+
     # Pre-log the user's message (live indexing)
     try:
         index_message(
@@ -438,9 +464,16 @@ async def on_message(message: discord.Message):
         )
     except Exception:
         pass
+    finally:
+        if preflight_status is not None:
+            with contextlib.suppress(Exception):
+                await preflight_status.edit(content=f"[🧠 Preparing {_preflight_bar(1)}]\nIndexing context…")
 
     # ---- Search: fast-path ONLY if fully configured; else fall through to tools ----
     if looks_like_search(prompt) and web_search is not None and has_google_search(GOOGLE_API_KEY, GOOGLE_CSE_ID, os.environ):
+        if preflight_status is not None:
+            with contextlib.suppress(Exception):
+                await preflight_status.edit(content=f"[🧠 Preparing {_preflight_bar(2)}]\nRunning search…")
         q = extract_search_query(prompt)
         try:
             results = web_search(q, max_results=5)
@@ -456,16 +489,21 @@ async def on_message(message: discord.Message):
                 if snippet:
                     snippet = snippet[:300]
                 lines.append(f"- [{title}]({url}) — {snippet}")
-            await send_or_edit_with_truncation("\n".join(lines), channel=message.channel, reply_to=message)
+            await send_or_edit_with_truncation("\n".join(lines), target_msg=preflight_status, channel=message.channel, reply_to=message)
+            _preflight_status_by_message_id.pop(message.id, None)
             return
         # If configured but the query returned nothing, say so (this path is “real”)
-        await send_or_edit_with_truncation("No results found.", channel=message.channel, reply_to=message)
+        await send_or_edit_with_truncation("No results found.", target_msg=preflight_status, channel=message.channel, reply_to=message)
+        _preflight_status_by_message_id.pop(message.id, None)
         return
     # If not configured, we do NOT send “No results found” — we let the model’s web_search tool handle it.
 
     image_urls = await collect_image_inputs(message, ref_msg, image_url_to_base64)
     gemini_parts = await collect_gemini_parts(message, ref_msg, image_urls)
     has_attachments = has_visual_inputs(message, ref_msg) or bool(image_urls or gemini_parts)
+    if preflight_status is not None:
+        with contextlib.suppress(Exception):
+            await preflight_status.edit(content=f"[🧠 Preparing {_preflight_bar(2)}]\nClassifying intent…")
     
     # Intent
     # 1. Determine Intent
@@ -489,6 +527,9 @@ async def on_message(message: discord.Message):
              intent = await classify_intent(prompt, has_images=has_attachments)
         
     logger.info(f"Intent identified as: {intent} (has_attachments={has_attachments}, image_inputs={len(image_urls)})")
+    if preflight_status is not None:
+        with contextlib.suppress(Exception):
+            await preflight_status.edit(content=f"[🧠 Preparing {_preflight_bar(3)}]\nDispatching…")
 
     # Any URL (for summarize)
     general_url_match = re.search(r"https?://[^\s]+", message.content)
@@ -519,6 +560,12 @@ async def on_message(message: discord.Message):
         logger.exception("Critical error in on_message dispatch")
         with contextlib.suppress(Exception):
             await message.reply(f"❌ Critical failure: {str(e)[:150]}...")
+        _preflight_status_by_message_id.pop(message.id, None)
+
+    leftover_status = _preflight_status_by_message_id.pop(message.id, None)
+    if leftover_status is not None:
+        with contextlib.suppress(Exception):
+            await leftover_status.delete()
 
     # let other cogs/commands run too
     await bot.process_commands(message)
