@@ -120,6 +120,40 @@ def _normalize_messages_for_responses(messages: List[Dict[str, Any]]) -> List[Di
     return norm
 
 
+async def _create_chat_completion_with_token_fallback(
+    *,
+    model: str,
+    messages: List[Dict[str, Any]],
+    temperature: float,
+    max_tokens: int,
+    tools: Optional[list] = None,
+    tool_choice: Optional[str] = None,
+):
+    kwargs: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if tools is not None:
+        kwargs["tools"] = tools
+    if tool_choice is not None:
+        kwargs["tool_choice"] = tool_choice
+
+    try:
+        return await get_openai_client().chat.completions.create(
+            **kwargs,
+            max_completion_tokens=max_tokens,
+        )
+    except Exception as e:
+        msg = str(e).lower()
+        if "max_completion_tokens" in msg and ("unsupported" in msg or "unknown" in msg):
+            return await get_openai_client().chat.completions.create(
+                **kwargs,
+                max_tokens=max_tokens,
+            )
+        raise
+
+
 async def _exec_tool(name: str, args: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> str:
     logging.debug("[openai.tools] Executing %s with args=%s", name, list(args.keys()))
     try:
@@ -246,11 +280,11 @@ async def generate_openai_response(
             return _extract_responses_text(resp) or "I’m not sure yet—could you clarify what you need?"
 
         msgs.append({"role": "user", "content": build_user_content_chat(prompt, img_norm)})
-        resp = await get_openai_client().chat.completions.create(
+        resp = await _create_chat_completion_with_token_fallback(
             model=model,
+            messages=msgs,
             temperature=temperature,
             max_tokens=max_tokens,
-            messages=msgs,
         )
         choice = resp.choices[0]
         if choice.finish_reason == "content_filter":
@@ -283,7 +317,7 @@ async def generate_openai_messages_response(
             )
             return _extract_responses_text(resp) or "I’m not sure yet—could you clarify what you need?"
 
-        resp = await get_openai_client().chat.completions.create(
+        resp = await _create_chat_completion_with_token_fallback(
             model=model,
             messages=messages,
             max_tokens=max_tokens,
@@ -367,7 +401,7 @@ async def generate_openai_messages_response_with_tools(
                 return text
             return "I tried to use my tools but couldn't get a response. Could you rephrase?"
 
-        resp = await get_openai_client().chat.completions.create(
+        resp = await _create_chat_completion_with_token_fallback(
             model=model,
             messages=messages,
             tools=tools or TOOLS_DEF,
@@ -392,13 +426,13 @@ async def generate_openai_messages_response_with_tools(
                 except Exception as e:
                     output = f"Error: {e}"
                 current_msgs.append({"role": "tool", "tool_call_id": tc.id, "content": str(output)})
-            resp = await get_openai_client().chat.completions.create(
+            resp = await _create_chat_completion_with_token_fallback(
                 model=model,
+                messages=current_msgs,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 tool_choice="auto",
                 tools=tools or TOOLS_DEF,
-                messages=current_msgs,
             )
             msg = resp.choices[0].message
             if resp.choices[0].finish_reason == "content_filter":

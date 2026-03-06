@@ -48,7 +48,7 @@ def _truthy(s: str | None, default: bool = False) -> bool:
 # --- App/API keys ---
 DISCORD_TOKEN           = get_metadata("DISCORD_TOKEN")
 OPENAI_API_KEY          = get_metadata("OPENAI_API_KEY")
-OPENAI_DEFAULT_MODEL    = get_metadata("OPENAI_DEFAULT_MODEL", "gpt-5.2")
+OPENAI_DEFAULT_MODEL    = get_metadata("OPENAI_DEFAULT_MODEL", "gpt-5.4")
 STABILITY_HOST          = get_metadata("STABILITY_HOST")
 STABILITY_KEY           = get_metadata("STABILITY_KEY")
 GOOGLE_PLACES_API_KEY   = get_metadata("GOOGLE_PLACES_API_KEY")
