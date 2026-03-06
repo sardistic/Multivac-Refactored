@@ -297,8 +297,8 @@ def search_history_for_context(
     guild_id: str | int,
     channel_id: str | int,
     user_id: str | int,
-    target_user_id: str | int | None = None,
     query_text: str,
+    target_user_id: str | int | None = None,
     limit: int = 5,
     oldest_first: bool = False,
 ) -> str:
