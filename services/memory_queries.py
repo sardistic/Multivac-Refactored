@@ -1,13 +1,33 @@
 from __future__ import annotations
 
 import re
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from services.memory_client import OPENSEARCH_INDEX, conversation_key, init_es_client, search_raw, runtime, _now_iso, _now_utc
+from config import ALLOW_CROSS_CHANNEL_USER_CONTEXT, ALLOW_CROSS_GUILD_USER_CONTEXT
 
 # Keep sorting compatible with older indices where message_id may be mapped as text.
 _SORT_RECENT = [{"timestamp": {"order": "desc"}}]
+
+def _build_scope_filters(
+    *,
+    guild_id: str | int,
+    channel_id: str | int,
+    user_id: str | int,
+    target_user_id: str | int | None = None,
+) -> List[Dict[str, Any]]:
+    active_user_id = str(target_user_id) if target_user_id is not None else str(user_id)
+    filters: List[Dict[str, Any]] = [{"term": {"user_id": active_user_id}}]
+
+    if not ALLOW_CROSS_GUILD_USER_CONTEXT:
+        filters.append({"term": {"guild_id": str(guild_id)}})
+
+    if not ALLOW_CROSS_CHANNEL_USER_CONTEXT:
+        filters.append({"term": {"channel_id": str(channel_id)}})
+
+    return filters
 
 
 def build_message_window(
@@ -15,11 +35,17 @@ def build_message_window(
     guild_id: str | int,
     channel_id: str | int,
     user_id: str | int,
+    target_user_id: str | int | None = None,
     limit_msgs: int = 24,
 ) -> List[Dict[str, str]]:
-    ckey = conversation_key(guild_id, channel_id, user_id)
+    scope_filters = _build_scope_filters(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        user_id=user_id,
+        target_user_id=target_user_id,
+    )
     resp = search_raw(
-        {"bool": {"filter": [{"term": {"conversation_key.keyword": ckey}}]}},
+        {"bool": {"filter": scope_filters}},
         size=limit_msgs,
         source=["role", "content", "timestamp", "user_id", "message_id"],
         sort=[{"timestamp": {"order": "desc"}}],
@@ -58,11 +84,17 @@ def fetch_recent_timeline(
     guild_id: str | int,
     channel_id: str | int,
     user_id: str | int,
+    target_user_id: str | int | None = None,
     max_items: int = 12,
 ) -> List[Tuple[str, str]]:
-    ckey = conversation_key(guild_id, channel_id, user_id)
+    scope_filters = _build_scope_filters(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        user_id=user_id,
+        target_user_id=target_user_id,
+    )
     resp = search_raw(
-        {"bool": {"filter": [{"term": {"conversation_key.keyword": ckey}}]}},
+        {"bool": {"filter": scope_filters}},
         size=max_items,
         source=["role", "content", "timestamp"],
         sort=[{"timestamp": {"order": "desc"}}],
@@ -91,6 +123,7 @@ def build_timeline_prompt_block(
     guild_id: str | int,
     channel_id: str | int,
     user_id: str | int,
+    target_user_id: str | int | None = None,
     max_items: int = 12,
 ) -> str:
     lines = [
@@ -98,7 +131,13 @@ def build_timeline_prompt_block(
         f"Current UTC time: {_now_iso()}",
         "",
     ]
-    timeline = fetch_recent_timeline(guild_id=guild_id, channel_id=channel_id, user_id=user_id, max_items=max_items)
+    timeline = fetch_recent_timeline(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        user_id=user_id,
+        target_user_id=target_user_id,
+        max_items=max_items,
+    )
     if not timeline:
         lines.append("Recent timeline: (no recent messages found)")
         return "\n".join(lines)
@@ -109,9 +148,9 @@ def build_timeline_prompt_block(
 
 
 def get_newest_indexed_message_id(*, guild_id: str | int, channel_id: str | int, user_id: str | int) -> Optional[str]:
-    ckey = conversation_key(guild_id, channel_id, user_id)
+    scope_filters = _build_scope_filters(guild_id=guild_id, channel_id=channel_id, user_id=user_id)
     resp = search_raw(
-        {"bool": {"filter": [{"term": {"conversation_key.keyword": ckey}}]}},
+        {"bool": {"filter": scope_filters}},
         size=1,
         source=["message_id", "timestamp"],
         sort=[{"timestamp": {"order": "desc"}}],
@@ -123,9 +162,9 @@ def get_newest_indexed_message_id(*, guild_id: str | int, channel_id: str | int,
 
 
 def get_oldest_indexed_message_id(*, guild_id: str | int, channel_id: str | int, user_id: str | int) -> Optional[str]:
-    ckey = conversation_key(guild_id, channel_id, user_id)
+    scope_filters = _build_scope_filters(guild_id=guild_id, channel_id=channel_id, user_id=user_id)
     resp = search_raw(
-        {"bool": {"filter": [{"term": {"conversation_key.keyword": ckey}}]}},
+        {"bool": {"filter": scope_filters}},
         size=1,
         source=["message_id", "timestamp"],
         sort=[{"timestamp": {"order": "asc"}}],
@@ -141,13 +180,19 @@ def fetch_recent_page(
     guild_id: str | int,
     channel_id: str | int,
     user_id: str | int,
+    target_user_id: str | int | None = None,
     size: int = 24,
     after: List[Any] | None = None,
     source: List[str] | None = None,
 ) -> Tuple[List[Dict[str, Any]], List[Any] | None]:
-    ckey = conversation_key(guild_id, channel_id, user_id)
+    scope_filters = _build_scope_filters(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        user_id=user_id,
+        target_user_id=target_user_id,
+    )
     body: Dict[str, Any] = {
-        "query": {"bool": {"filter": [{"term": {"conversation_key.keyword": ckey}}]}},
+        "query": {"bool": {"filter": scope_filters}},
         "size": int(size),
         "sort": _SORT_RECENT,
     }
@@ -252,15 +297,21 @@ def search_history_for_context(
     guild_id: str | int,
     channel_id: str | int,
     user_id: str | int,
+    target_user_id: str | int | None = None,
     query_text: str,
     limit: int = 5,
     oldest_first: bool = False,
 ) -> str:
-    ckey = conversation_key(guild_id, channel_id, user_id)
+    scope_filters = _build_scope_filters(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        user_id=user_id,
+        target_user_id=target_user_id,
+    )
     if "random" in query_text.lower():
         query = {
             "function_score": {
-                "query": {"bool": {"filter": [{"term": {"conversation_key.keyword": ckey}}]}},
+                "query": {"bool": {"filter": scope_filters}},
                 "functions": [{"random_score": {}}],
                 "boost_mode": "replace",
             }
@@ -268,7 +319,7 @@ def search_history_for_context(
         resp = search_raw(query, size=limit, source=["role", "content", "timestamp"], sort=None)
     else:
         time_range = _parse_relative_time_search(query_text)
-        query = {"bool": {"filter": [{"term": {"conversation_key.keyword": ckey}}], "must": []}}
+        query = {"bool": {"filter": list(scope_filters), "must": []}}
         if time_range:
             query["bool"]["filter"].append({"range": {"timestamp": time_range}})
         else:
@@ -303,15 +354,21 @@ def fetch_matches_recent(
     guild_id: str | int,
     channel_id: str | int,
     user_id: str | int,
+    target_user_id: str | int | None = None,
     query: str,
     size: int = 16,
     source: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
-    ckey = conversation_key(guild_id, channel_id, user_id)
+    scope_filters = _build_scope_filters(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        user_id=user_id,
+        target_user_id=target_user_id,
+    )
     cleaned_query = (query or "").strip()
 
     bool_query: Dict[str, Any] = {
-        "filter": [{"term": {"conversation_key.keyword": ckey}}],
+        "filter": list(scope_filters),
         "must": [],
     }
     if cleaned_query:
@@ -334,7 +391,7 @@ def fetch_matches_recent(
     # Fallback: loosen matching if strict AND matching produced no results.
     fallback_query = {
         "bool": {
-            "filter": [{"term": {"conversation_key.keyword": ckey}}],
+            "filter": list(scope_filters),
             "must": [{"match": {"content": cleaned_query}}],
         }
     }
