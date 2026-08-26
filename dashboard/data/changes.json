@@ -1,17 +1,17 @@
 {
   "baseline": "0318b4a56a08",
-  "generated_at": "2026-08-26T16:28:06.059462+00:00",
+  "generated_at": "2026-08-26T16:33:15.770379+00:00",
   "proposals": [
     {
       "activated_at": null,
       "baseline": "0318b4a56a08",
       "created_at": "2026-08-26T15:00:03.297887",
-      "deployment_result": "Activating",
-      "deployment_status": "activating",
+      "deployment_result": "Failed safely",
+      "deployment_status": "failed",
       "files": [
         "bot/ui_messages.py"
       ],
-      "finished_at": null,
+      "finished_at": "2026-08-26T16:28:17.780122+00:00",
       "id": "wren-kiwi",
       "patch": "fbb3a598721d",
       "reviewed_at": "2026-08-26T16:25:45.110969",
