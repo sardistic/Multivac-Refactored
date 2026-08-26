@@ -1,7 +1,24 @@
 {
   "baseline": "0318b4a56a08",
-  "generated_at": "2026-08-23T20:58:03.284106+00:00",
+  "generated_at": "2026-08-26T15:05:15.764614+00:00",
   "proposals": [
+    {
+      "activated_at": null,
+      "baseline": "0318b4a56a08",
+      "created_at": "2026-08-26T15:00:03.297887",
+      "deployment_result": null,
+      "deployment_status": null,
+      "files": [
+        "bot/ui_messages.py"
+      ],
+      "finished_at": null,
+      "id": "wren-kiwi",
+      "patch": null,
+      "reviewed_at": null,
+      "status": "reviewable",
+      "summary": "change request: Split long replys up in multiple discord messages be sure to respect the discord character limit",
+      "updated_at": "2026-08-26T15:02:04.981269"
+    },
     {
       "activated_at": null,
       "baseline": "592a8151e67a",
