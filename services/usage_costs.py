@@ -170,7 +170,8 @@ _DEFAULT_PRICING: Dict[str, tuple] = {
     "gpt-5": (1.25, 10.00),
     "gpt-4o": (2.50, 10.00),
     "gpt-4.1": (2.00, 8.00),
-    "gpt-image": (5.00, 32.00),  # gpt-image-1.5: $5/M text-in, $32/M image-out
+    # GPT Image 2.5 Sunburst/Flare: $5/M text input, $30/M image output.
+    "gpt-image": (5.00, 30.00),
     "claude-fable-5": (10.00, 50.00, 1.00, 12.50),
     "claude-sonnet-5": (2.00, 10.00),
     "claude-sonnet-4": (3.00, 15.00),

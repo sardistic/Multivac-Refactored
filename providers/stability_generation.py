@@ -26,7 +26,8 @@ logger = logging.getLogger("stability_utils")
 _REPLY_PROMPT_MAX_CHARS = 1800
 
 # Friendly, user-facing model labels shown in the live status / ✅ line.
-IMG_MODEL_OPENAI = "GPT Image 1.5"
+OPENAI_IMAGE_MODEL = "gpt-image-2.5-sunburst"
+IMG_MODEL_OPENAI = "GPT Image 2.5 Sunburst"
 IMG_MODEL_GEMINI = "Gemini 3 Pro Image"
 IMG_MODEL_STABILITY = "Stable Diffusion 1.5"
 
@@ -237,7 +238,7 @@ async def _generate_gpt_image_streaming(
     # the picture the user pointed at stops being the picture they get back.
     if references:
         stream = await get_openai_image_client().images.edit(
-            model="gpt-image-1.5",
+            model=OPENAI_IMAGE_MODEL,
             image=_reference_streams(references),
             prompt=prompt,
             size="auto",
@@ -248,7 +249,7 @@ async def _generate_gpt_image_streaming(
         )
     else:
         stream = await get_openai_image_client().images.generate(
-            model="gpt-image-1.5",
+            model=OPENAI_IMAGE_MODEL,
             prompt=prompt,
             size="auto",
             background=background_type,
@@ -310,7 +311,7 @@ async def generate_gpt_image(
             return BytesIO(base64.b64decode(b64_image))
         if references:
             result = await get_openai_image_client().images.edit(
-                model="gpt-image-1.5",
+                model=OPENAI_IMAGE_MODEL,
                 image=_reference_streams(references),
                 prompt=prompt,
                 size="auto",
@@ -319,7 +320,7 @@ async def generate_gpt_image(
             )
         else:
             result = await get_openai_image_client().images.generate(
-                model="gpt-image-1.5",
+                model=OPENAI_IMAGE_MODEL,
                 prompt=prompt,
                 size="auto",
                 background=background_type,
@@ -351,10 +352,13 @@ def _record_image_usage(result, *, label: str) -> None:
         from services import usage_costs
 
         if getattr(result, "usage", None) is not None:
-            usage_costs.record_response("gpt-image-1.5", result, label=label)
+            usage_costs.record_response(OPENAI_IMAGE_MODEL, result, label=label)
         else:
             usage_costs.record(
-                "gpt-image-1.5", None, float(os.getenv("OPENAI_IMAGE_COST_USD", "0.06")), label=label
+                OPENAI_IMAGE_MODEL,
+                None,
+                float(os.getenv("OPENAI_IMAGE_COST_USD", "0.06")),
+                label=label,
             )
     except Exception:
         logger.warning("image usage recording failed", exc_info=True)
@@ -525,7 +529,7 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
 
         base_img = await decode_img(urls[0])
         result = await get_openai_image_client().images.edit(
-            model="gpt-image-1.5",
+            model=OPENAI_IMAGE_MODEL,
             image=base_img,
             prompt=prompt,
             size="auto",

@@ -480,7 +480,7 @@ class LiveReplyToImageClassifierTests(unittest.TestCase):
 
     RECENT_TURNS = [
         "user: imagine a retro movie theater marquee at night",
-        "bot: ✅ Image generated (GPT Image 1.5) [image attached]",
+        "bot: ✅ Image generated (GPT Image 2.5 Sunburst) [image attached]",
     ]
 
     def _classify(self, text: str) -> str:

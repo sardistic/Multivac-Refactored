@@ -285,12 +285,12 @@ class UsageCostsTests(unittest.TestCase):
         usage_costs.record("gpt-5.5", {"prompt_tokens": 100, "completion_tokens": 50}, 0.02, label="chat")
         usage_costs.record("gpt-5.5", {"prompt_tokens": 200, "completion_tokens": 80}, 0.03, label="chat")
         usage_costs.record("gpt-5.4-nano", {"prompt_tokens": 50, "completion_tokens": 5}, 0.0001, label="intent_classify")
-        usage_costs.record("gpt-image-1.5", None, 0.06, label="image_generation")
+        usage_costs.record("gpt-image-2.5-sunburst", None, 0.06, label="image_generation")
 
         rows = usage_costs.today_breakdown("42")
         self.assertEqual(len(rows), 3)
         # Most expensive first
-        self.assertEqual(rows[0]["model"], "gpt-image-1.5")
+        self.assertEqual(rows[0]["model"], "gpt-image-2.5-sunburst")
         chat_row = next(r for r in rows if r["label"] == "chat")
         self.assertEqual(chat_row["calls"], 2)
         self.assertEqual(chat_row["total_tokens"], 430)
@@ -310,11 +310,15 @@ class UsageCostsTests(unittest.TestCase):
         self.assertAlmostEqual(usage_costs.estimate_cost("claude-fable-5", usage), 10.00)
         self.assertEqual(usage_costs.estimate_cost("mystery-model", usage), 0.0)
 
-    def test_gpt_image_output_priced_at_32_per_million(self):
-        # gpt-image-1.5 image-output tokens bill at $32/M (not $40). A ~6,600
-        # token high-quality image should cost ~$0.21.
+    def test_gpt_image_output_priced_at_30_per_million(self):
+        # GPT Image 2.5 image-output tokens bill at $30/M. A ~6,600-token
+        # high-quality image should cost about $0.20.
         usage = {"prompt_tokens": 10, "completion_tokens": 6_600}
-        self.assertAlmostEqual(usage_costs.estimate_cost("gpt-image-1.5", usage), 0.21125, places=4)
+        self.assertAlmostEqual(
+            usage_costs.estimate_cost("gpt-image-2.5-sunburst", usage),
+            0.19805,
+            places=4,
+        )
 
     def test_migrates_old_schema_without_user_id(self):
         # Simulate a database created before the user_id column existed.
