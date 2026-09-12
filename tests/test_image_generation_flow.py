@@ -77,7 +77,7 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_retry_context_replaces_generic_generated_status_text(self, mock_generate_gpt):
         mock_generate_gpt.return_value = "image-bytes"
         reply_msg = SimpleNamespace(
-            content="✅ Image generated (GPT Image 1.5)",
+            content="✅ Image generated (GPT Image 2.5 Sunburst)",
             author=SimpleNamespace(display_name="Multivac"),
         )
 
@@ -102,7 +102,7 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         first_status = SimpleNamespace(
             id=2,
-            content="✅ Image generated (GPT Image 1.5)",
+            content="✅ Image generated (GPT Image 2.5 Sunburst)",
             reference=SimpleNamespace(resolved=original),
         )
         first_retry = SimpleNamespace(
@@ -112,7 +112,7 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         second_status = SimpleNamespace(
             id=4,
-            content="✅ Image generated (GPT Image 1.5)",
+            content="✅ Image generated (GPT Image 2.5 Sunburst)",
             reference=SimpleNamespace(resolved=first_retry),
         )
 
@@ -130,7 +130,7 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         replied_status = SimpleNamespace(
             id=11,
-            content="✅ Image generated (GPT Image 1.5)",
+            content="✅ Image generated (GPT Image 2.5 Sunburst)",
             reference=SimpleNamespace(resolved=original),
         )
         output_status = SimpleNamespace(edit=AsyncMock())
@@ -152,7 +152,7 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         forwarded = mock_generate.await_args.kwargs["retry_context"]
         self.assertIn("draw a complex flow chart", forwarded)
         edit_kwargs = output_status.edit.await_args.kwargs
-        self.assertEqual(edit_kwargs["content"], "✅ Image generated (GPT Image 1.5)")
+        self.assertEqual(edit_kwargs["content"], "✅ Image generated (GPT Image 2.5 Sunburst)")
         self.assertEqual(len(edit_kwargs["attachments"]), 1)
         self.assertEqual(edit_kwargs["attachments"][0].filename, "generated_image.png")
         channel.send.assert_not_awaited()
@@ -183,6 +183,10 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         result = await stability_generation.generate_gpt_image("a neon city skyline")
 
         self.assertEqual(result.read(), b"img")
+        self.assertEqual(
+            client.images.generate.await_args.kwargs["model"],
+            stability_generation.OPENAI_IMAGE_MODEL,
+        )
         self.assertEqual(client.images.generate.await_args.kwargs["size"], "auto")
 
     @patch("providers.stability_generation.get_openai_image_client")
@@ -196,6 +200,10 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result.read(), b"edited")
+        self.assertEqual(
+            client.images.edit.await_args.kwargs["model"],
+            stability_generation.OPENAI_IMAGE_MODEL,
+        )
         self.assertEqual(client.images.edit.await_args.kwargs["size"], "auto")
 
 
@@ -307,6 +315,7 @@ class AttachedImageAsGenerationReferenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.read(), b"img")
         client.images.generate.assert_not_awaited()
         call = client.images.edit.await_args.kwargs
+        self.assertEqual(call["model"], stability_generation.OPENAI_IMAGE_MODEL)
         self.assertEqual(len(call["image"]), 1)
         self.assertEqual(call["image"][0].read(), b"foo")
         # Without high input fidelity the reference is only loose inspiration.
@@ -370,6 +379,7 @@ class AttachedImageAsGenerationReferenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.read(), b"done")
         self.assertEqual(partials, [(b"half", 0)])
         call = client.images.edit.await_args.kwargs
+        self.assertEqual(call["model"], stability_generation.OPENAI_IMAGE_MODEL)
         self.assertTrue(call["stream"])
         self.assertEqual(call["image"][0].read(), b"foo")
         client.images.generate.assert_not_awaited()

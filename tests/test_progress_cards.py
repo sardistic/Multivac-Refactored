@@ -85,7 +85,10 @@ class CardRenderTests(unittest.TestCase):
         totals = {"calls": 2.0, "tokens": 15400.0, "cost_usd": 0.134}
         with patch("services.usage_costs.get_request_totals", return_value=totals):
             buf = build_run_receipt(
-                "Image generated", elapsed=41, model="gpt-image-1.5", requested_by="@unnes"
+                "Image generated",
+                elapsed=41,
+                model="gpt-image-2.5-sunburst",
+                requested_by="@unnes",
             )
         self.assertIsNotNone(buf)
         with Image.open(buf) as img:
