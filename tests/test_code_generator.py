@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from providers.openai_client import OPENAI_CHAT_MODEL
+from providers.openai_client import OPENAI_CHAT_MODEL, is_reasoning_model, reasoning_kwargs
 from bot.intent_dispatcher import chat_model_for_intent
 from services import code_generator
 from services.code_generator import (
@@ -14,16 +14,22 @@ from services.code_generator import (
 
 
 class CodeGeneratorOutputTests(unittest.TestCase):
-    def test_code_generation_uses_gpt_56_sol(self):
-        self.assertEqual(OPENAI_CHAT_MODEL, "gpt-5.6-terra")
-        self.assertEqual(CODE_MODEL, "gpt-5.6-sol")
+    def test_code_generation_uses_gpt_6_astra(self):
+        self.assertEqual(OPENAI_CHAT_MODEL, "gpt-6.1-sol")
+        self.assertEqual(CODE_MODEL, "gpt-6-astra")
 
-    def test_five_tier_chat_model_gradient(self):
-        self.assertEqual(chat_model_for_intent("chat_tiny"), "gpt-5.4-nano")
-        self.assertEqual(chat_model_for_intent("chat_light"), "gpt-5.4-mini")
-        self.assertEqual(chat_model_for_intent("chat_standard"), "gpt-5.6-luna")
-        self.assertEqual(chat_model_for_intent("chat"), "gpt-5.6-terra")
-        self.assertEqual(chat_model_for_intent("chat_deep"), "gpt-5.6-sol")
+    def test_chat_roles_keep_distinct_reasoning_tiers(self):
+        self.assertEqual(chat_model_for_intent("chat_tiny"), "gpt-6-luna")
+        self.assertEqual(chat_model_for_intent("chat_light"), "gpt-6-luna")
+        self.assertEqual(chat_model_for_intent("chat_standard"), "gpt-6-luna")
+        self.assertEqual(chat_model_for_intent("chat"), "gpt-6.1-sol")
+        self.assertEqual(chat_model_for_intent("chat_deep"), "gpt-6-astra")
+
+    def test_gpt_6_reasoning_controls_match_model_capabilities(self):
+        self.assertTrue(is_reasoning_model("gpt-6-astra"))
+        self.assertEqual(reasoning_kwargs("gpt-6-luna", "none", responses=True), {"reasoning": {"effort": "none"}})
+        self.assertEqual(reasoning_kwargs("gpt-6-astra", "high", responses=True), {"reasoning": {"effort": "high"}})
+        self.assertEqual(reasoning_kwargs("gpt-6.1-sol", "none", responses=True), {})
 
     def test_explicit_fable_directive_selects_claude(self):
         for request in (
@@ -34,14 +40,14 @@ class CodeGeneratorOutputTests(unittest.TestCase):
         ):
             with self.subTest(request=request):
                 self.assertEqual(select_code_generation_provider(request), "claude")
-                self.assertEqual(code_generation_model(request), "claude-fable-5")
+                self.assertEqual(code_generation_model(request), "claude-fable-5-1")
 
     def test_mentions_about_claude_do_not_select_it_as_generator(self):
         self.assertEqual(
             select_code_generation_provider("change your code so Claude chat has a timeout"),
             "openai",
         )
-        self.assertEqual(code_generation_model("change your code"), "gpt-5.6-sol")
+        self.assertEqual(code_generation_model("change your code"), "gpt-6-astra")
 
 
 class ProviderAwareCodeGenerationTests(unittest.IsolatedAsyncioTestCase):
@@ -93,7 +99,7 @@ class ProviderAwareCodeGenerationTests(unittest.IsolatedAsyncioTestCase):
         ), patch.object(
             code_generator,
             "_generate_code_response",
-            new=AsyncMock(return_value=(diff, "claude-fable-5")),
+            new=AsyncMock(return_value=(diff, "claude-fable-5-1")),
         ) as generate:
             patch_text, metadata = await code_generator.generate_code_patch(
                 "claude edit your code", "a" * 40
@@ -101,7 +107,7 @@ class ProviderAwareCodeGenerationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(patch_text, diff)
         self.assertEqual(metadata["provider"], "claude")
-        self.assertEqual(metadata["model"], "claude-fable-5")
+        self.assertEqual(metadata["model"], "claude-fable-5-1")
         self.assertEqual(generate.await_args.kwargs["provider"], "claude")
 
     def test_extracts_fenced_unified_diff(self):

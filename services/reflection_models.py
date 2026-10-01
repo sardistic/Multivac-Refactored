@@ -8,7 +8,7 @@ import os
 from typing import Any
 
 from providers.openai_client import (
-    OPENAI_DEEP_MODEL,
+    OPENAI_CHAT_MODEL,
     OPENAI_STANDARD_MODEL,
     OPENAI_TINY_MODEL,
     get_openai_client,
@@ -149,7 +149,7 @@ class ReflectionModels:
         self.store = store
         self.daily_cap = max(0.0, float(os.getenv("REFLECTION_DAILY_BUDGET_USD", "1.50")))
         self.extract_model = os.getenv("REFLECTION_EXTRACT_MODEL", OPENAI_TINY_MODEL)
-        self.plan_model = os.getenv("REFLECTION_PLAN_MODEL", OPENAI_DEEP_MODEL)
+        self.plan_model = os.getenv("REFLECTION_PLAN_MODEL", OPENAI_CHAT_MODEL)
         self.cleanup_model = os.getenv("REFLECTION_CLEANUP_MODEL", OPENAI_STANDARD_MODEL)
 
     async def pulse(self, message: dict) -> dict:

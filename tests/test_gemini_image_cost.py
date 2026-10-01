@@ -20,16 +20,16 @@ class GeminiImageCostTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_4k_costs_more_than_default(self):
-        gemini_images._record_gemini_image_cost("gemini-3-pro-image-preview", "image_generation", image_size="4K")
+        gemini_images._record_gemini_image_cost("gemini-3-pro-image", "image_generation", image_size="4K")
         self.assertAlmostEqual(usage_costs.today()["cost"], 0.24, places=4)
 
     def test_2k_uses_standard_tier(self):
-        gemini_images._record_gemini_image_cost("gemini-3-pro-image-preview", "image_generation", image_size="2K")
+        gemini_images._record_gemini_image_cost("gemini-3-pro-image", "image_generation", image_size="2K")
         self.assertAlmostEqual(usage_costs.today()["cost"], 0.134, places=4)
 
     def test_edit_path_default_is_standard_tier(self):
         # Edit/reference paths omit image_size and run at the default tier.
-        gemini_images._record_gemini_image_cost("gemini-3-pro-image-preview", "image_edit")
+        gemini_images._record_gemini_image_cost("gemini-3-pro-image", "image_edit")
         self.assertAlmostEqual(usage_costs.today()["cost"], 0.134, places=4)
 
 

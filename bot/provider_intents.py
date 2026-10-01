@@ -385,7 +385,7 @@ async def handle_gemini_chat_intent(
     }
 
     async def _do_gemini_generation(model_name=None):
-        selected_model = model_name or "gemini-3.7-flash"
+        selected_model = model_name or "gemini-3.8-flash"
 
         async def _generate_once(
             *,

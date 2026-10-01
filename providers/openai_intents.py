@@ -168,10 +168,10 @@ async def _classify_intent_with_sonnet(system_prompt: str, user_content: str) ->
     # No `temperature`: Claude 5 rejects it outright ("`temperature` is
     # deprecated for this model", HTTP 400), which failed every single call to
     # this fallback -- so an OpenAI outage always landed on the keyword router.
-    # Nothing is lost: the model emits one label from a 32-token budget.
+    # Allow room for Sonnet 5.5's adaptive thinking before its one-label answer.
     response = await client.messages.create(
         model=ANTHROPIC_INTENT_MODEL,
-        max_tokens=32,
+        max_tokens=256,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}],
     )
@@ -291,10 +291,10 @@ async def classify_intent(
         else:
             system_prompt = _INTENT_SYSTEM
 
-        # GPT-5.6 can classify with reasoning disabled. It only emits one label,
+        # Luna can classify with reasoning disabled. It only emits one label,
         # so do not pay for a hidden reasoning budget on every Discord message.
         reasoning = is_reasoning_model(OPENAI_INTENT_MODEL)
-        no_reasoning = OPENAI_INTENT_MODEL.lower().startswith("gpt-5.6")
+        no_reasoning = OPENAI_INTENT_MODEL.lower().startswith(("gpt-5.6", "gpt-6-luna"))
         max_out = 64 if no_reasoning else (2000 if reasoning else 16)
 
         # Give the classifier conversational context so follow-ups like

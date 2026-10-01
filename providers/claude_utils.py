@@ -225,12 +225,26 @@ async def generate_claude_response(
             kwargs["temperature"] = temperature
         if system_prompt:
             kwargs["system"] = system_prompt
+        original_system = kwargs.get("system")
+        prompted_forced_tool = False
         if anthropic_tools:
             kwargs["tools"] = anthropic_tools
             if forced_tool in available_tool_names:
-                kwargs["tool_choice"] = {"type": "tool", "name": forced_tool}
+                if selected_model.startswith(("claude-fable-5-1", "claude-sonnet-5-5", "claude-opus-5-5")):
+                    prompted_forced_tool = True
+                    kwargs["system"] = (
+                        (kwargs.get("system", "") + "\n\n")
+                        + f"In your first response, call the {forced_tool} tool before answering."
+                    ).strip()
+                else:
+                    kwargs["tool_choice"] = {"type": "tool", "name": forced_tool}
 
         response = await client.messages.create(**kwargs)
+        if prompted_forced_tool:
+            if original_system:
+                kwargs["system"] = original_system
+            else:
+                kwargs.pop("system", None)
         _record_claude_usage(response, selected_model)
         started = time.monotonic()
         step_index = 0

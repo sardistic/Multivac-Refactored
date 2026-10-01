@@ -160,6 +160,9 @@ def _accumulate_request_totals(tokens: Any, cost: Any) -> None:
 # ----------------------------
 _DEFAULT_PRICING: Dict[str, tuple] = {
     # prefix: (input_per_1m, output_per_1m, cached_input_per_1m, cache_write_per_1m)
+    "gpt-6.1-sol": (2.00, 10.00, 0.10, 2.50),
+    "gpt-6-astra": (10.00, 50.00, 1.00, 12.50),
+    "gpt-6-luna": (0.10, 0.50, 0.01, 0.125),
     "gpt-5.6-sol": (5.00, 30.00, 0.50, 6.25),
     "gpt-5.6-terra": (2.00, 12.00, 0.20, 2.50),
     "gpt-5.6-luna": (0.20, 1.20, 0.02, 0.25),
@@ -172,14 +175,17 @@ _DEFAULT_PRICING: Dict[str, tuple] = {
     "gpt-4.1": (2.00, 8.00),
     # GPT Image 2.5 Sunburst/Flare: $5/M text input, $30/M image output.
     "gpt-image": (5.00, 30.00),
+    "claude-fable-5-1": (10.00, 50.00, 0.25, 12.50),
     "claude-fable-5": (10.00, 50.00, 1.00, 12.50),
+    "claude-sonnet-5-5": (2.00, 10.00, 0.20, 2.50),
     "claude-sonnet-5": (2.00, 10.00),
     "claude-sonnet-4": (3.00, 15.00),
     "claude": (3.00, 15.00),
-    # gemini-3.7-flash promo rates run through 2026-12-31; they double to
+    # gemini-3.8-flash promo rates run through 2026-12-31; they double to
     # (1.50, 7.50) on 2027-01-01. Needs its own row because estimate_cost
-    # matches by longest startswith prefix and "gemini-3.7-flash" does not
+    # matches by longest startswith prefix and "gemini-3.8-flash" does not
     # start with "gemini-3-flash".
+    "gemini-3.8-flash": (0.75, 3.75),
     "gemini-3.7-flash": (0.75, 3.75),
     "gemini-3-flash": (0.30, 2.50),
     "gemini": (0.30, 2.50),

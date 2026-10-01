@@ -64,15 +64,15 @@ def _truthy(s: str | None, default: bool = False) -> bool:
 # --- App/API keys ---
 DISCORD_TOKEN           = get_metadata("DISCORD_TOKEN")
 OPENAI_API_KEY          = get_metadata("OPENAI_API_KEY")
-OPENAI_DEFAULT_MODEL    = get_metadata("OPENAI_DEFAULT_MODEL", "gpt-5.6-terra")
-OPENAI_CODE_MODEL       = get_metadata("OPENAI_CODE_MODEL", "gpt-5.6-sol")
+OPENAI_DEFAULT_MODEL    = get_metadata("OPENAI_DEFAULT_MODEL", "gpt-6.1-sol")
+OPENAI_CODE_MODEL       = get_metadata("OPENAI_CODE_MODEL", "gpt-6-astra")
 # Answer gradient, cheapest sufficient model first.
-OPENAI_TINY_MODEL       = get_metadata("OPENAI_TINY_MODEL", "gpt-5.4-nano")
-OPENAI_CASUAL_MODEL     = get_metadata("OPENAI_CASUAL_MODEL", "gpt-5.4-mini")
-OPENAI_STANDARD_MODEL   = get_metadata("OPENAI_STANDARD_MODEL", "gpt-5.6-luna")
-OPENAI_DEEP_MODEL       = get_metadata("OPENAI_DEEP_MODEL", "gpt-5.6-sol")
+OPENAI_TINY_MODEL       = get_metadata("OPENAI_TINY_MODEL", "gpt-6-luna")
+OPENAI_CASUAL_MODEL     = get_metadata("OPENAI_CASUAL_MODEL", "gpt-6-luna")
+OPENAI_STANDARD_MODEL   = get_metadata("OPENAI_STANDARD_MODEL", "gpt-6-luna")
+OPENAI_DEEP_MODEL       = get_metadata("OPENAI_DEEP_MODEL", "gpt-6-astra")
 # Luna is also the cost-oriented one-label router.
-OPENAI_INTENT_MODEL     = get_metadata("OPENAI_INTENT_MODEL", "gpt-5.6-luna")
+OPENAI_INTENT_MODEL     = get_metadata("OPENAI_INTENT_MODEL", "gpt-6-luna")
 STABILITY_HOST          = get_metadata("STABILITY_HOST")
 STABILITY_KEY           = get_metadata("STABILITY_KEY")
 GOOGLE_PLACES_API_KEY   = get_metadata("GOOGLE_PLACES_API_KEY")
@@ -86,10 +86,10 @@ GOOGLE_VISION_API_KEY   = get_metadata("GOOGLE_VISION_API_KEY", GOOGLE_API_KEY)
 SERPAPI_API_KEY         = get_metadata("SERPAPI_API_KEY")    # optional Google Lens fallback
 GEMINI_API_KEY          = get_metadata("GEMINI_API_KEY")     # <-- for Gemini image gen
 ANTHROPIC_API_KEY       = get_metadata("ANTHROPIC_API_KEY")  # <-- for Claude
-ANTHROPIC_MODEL         = get_metadata("ANTHROPIC_MODEL", "claude-fable-5")
-ANTHROPIC_INTENT_MODEL  = get_metadata("ANTHROPIC_INTENT_MODEL", "claude-sonnet-5")
+ANTHROPIC_MODEL         = get_metadata("ANTHROPIC_MODEL", "claude-fable-5-1")
+ANTHROPIC_INTENT_MODEL  = get_metadata("ANTHROPIC_INTENT_MODEL", "claude-sonnet-5-5")
 
-# Responses is the supported reasoning + tool surface for current GPT-5.6
+# Responses is the supported reasoning + tool surface for current GPT-6
 # models. Operators can still set this false for a bounded rollback.
 OPENAI_USE_RESPONSES    = _truthy(get_metadata("OPENAI_USE_RESPONSES", "true"), True)
 

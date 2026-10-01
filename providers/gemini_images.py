@@ -27,7 +27,7 @@ def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) ->
     elif height > width:
         aspect_ratio = "9:16"
 
-    model = "gemini-3-pro-image-preview"
+    model = "gemini-3-pro-image"
     try:
         config = types.GenerateContentConfig(
             response_modalities=["IMAGE"],
@@ -83,9 +83,9 @@ def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
 
     try:
         input_image = PILImage.open(image_bytes)
-        _record_gemini_image_cost("gemini-3-pro-image-preview", "image_edit")
+        _record_gemini_image_cost("gemini-3-pro-image", "image_edit")
         response = client.models.generate_content(
-            model="gemini-3-pro-image-preview",
+            model="gemini-3-pro-image",
             contents=[prompt, input_image],
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE"],
@@ -121,9 +121,9 @@ def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]
 
     try:
         pil_images = [PILImage.open(img_bytes) for img_bytes in reference_images]
-        _record_gemini_image_cost("gemini-3-pro-image-preview", "image_generation")
+        _record_gemini_image_cost("gemini-3-pro-image", "image_generation")
         response = client.models.generate_content(
-            model="gemini-3-pro-image-preview",
+            model="gemini-3-pro-image",
             contents=[prompt, *pil_images],
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE"],

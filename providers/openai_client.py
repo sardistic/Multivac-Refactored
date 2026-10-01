@@ -35,11 +35,11 @@ OPENAI_INTENT_MODEL = _CONFIG_INTENT_MODEL
 
 
 def is_reasoning_model(model: str) -> bool:
-    """GPT-5+ and the o-series models are reasoning models: they spend
+    """GPT-5/6 and the o-series models are reasoning models: they spend
     (hidden) reasoning tokens before visible output, so token budgets must be
     generous and several classic params (temperature) are rejected."""
     m = (model or "").lower()
-    return m.startswith(("gpt-5", "o1", "o3", "o4"))
+    return m.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
 
 
 def model_supports_temperature(model: str) -> bool:
@@ -61,8 +61,10 @@ def reasoning_kwargs(model: str, effort: str | None, *, responses: bool) -> dict
         return {}
     normalized = effort.strip().lower()
     allowed = {"low", "medium", "high"}
-    if (model or "").lower().startswith("gpt-5.6"):
+    if (model or "").lower().startswith(("gpt-5.6", "gpt-6")):
         allowed.update({"none", "xhigh", "max"})
+    if (model or "").lower().startswith(("gpt-6-astra", "gpt-6.1-sol")):
+        allowed.discard("none")
     if normalized not in allowed:
         return {}
     if responses:

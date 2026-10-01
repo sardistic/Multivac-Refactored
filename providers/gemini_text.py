@@ -220,7 +220,7 @@ def generate_gemini_text(
     status_tracker: Optional[Dict[str, str]] = None,
     enable_code_execution: bool = False,
     search_ids: Optional[Dict[str, Any]] = None,
-    model_name: str = "gemini-3.7-flash",
+    model_name: str = "gemini-3.8-flash",
     force_web_search: bool = False,
 ) -> Tuple[Optional[str], List[Tuple[bytes, str]]]:
     client = get_gemini_client()

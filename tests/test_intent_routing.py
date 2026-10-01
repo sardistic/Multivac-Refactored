@@ -422,7 +422,7 @@ class EfficientClassifierTests(unittest.IsolatedAsyncioTestCase):
         response = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content="chat_light"))],
             usage=None,
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
         )
         create = AsyncMock(return_value=response)
         client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
@@ -437,7 +437,7 @@ class EfficientClassifierTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, "chat_light")
         kwargs = create.await_args.kwargs
-        self.assertEqual(kwargs["model"], "gpt-5.6-luna")
+        self.assertEqual(kwargs["model"], "gpt-6-luna")
         self.assertEqual(kwargs["reasoning_effort"], "none")
         self.assertEqual(kwargs["max_completion_tokens"], 64)
         self.assertEqual(kwargs["messages"][0]["role"], "developer")

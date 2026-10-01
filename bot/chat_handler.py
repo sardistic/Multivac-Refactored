@@ -16,7 +16,7 @@ logger = logging.getLogger("discord_bot")
 
 # Model used to answer chat when the OpenAI backend is unavailable (quota/429,
 # rate limit, connection). Keeps the bot usable during an OpenAI outage.
-GEMINI_FALLBACK_CHAT_MODEL = "gemini-3.7-flash"
+GEMINI_FALLBACK_CHAT_MODEL = "gemini-3.8-flash"
 
 _RESEARCH_TOOL_NAMES = {
     "web_search",

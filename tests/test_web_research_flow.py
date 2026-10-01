@@ -91,6 +91,7 @@ class WebResearchToolLoopTests(unittest.IsolatedAsyncioTestCase):
         ), patch.object(openai_messages, "execute_tool", execute):
             result = await openai_messages.generate_openai_messages_response_with_tools(
                 [{"role": "user", "content": "What is the latest lunar mission news?"}],
+                model="gpt-5.6-terra",
                 forced_tool="web_search",
                 forced_tool_args={
                     "q": "latest lunar mission news as of 2026-07-29",
@@ -174,6 +175,19 @@ class WebResearchToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tool_trace[0]["name"], "web_search")
 
     @patch("providers.openai_messages.USE_RESPONSES", False)
+    async def test_astra_tool_calls_use_responses_when_rollback_flag_is_off(self):
+        snapshot = SimpleNamespace(tool_specs=lambda: [_tool_spec("web_search")])
+        create = AsyncMock(return_value=SimpleNamespace(output_text="answer", output=[]))
+        with patch.object(openai_messages, "get_tool_snapshot", return_value=snapshot), patch.object(
+            openai_messages, "_responses_create", create
+        ):
+            result = await openai_messages.generate_openai_messages_response_with_tools(
+                [{"role": "user", "content": "Tell me about this"}], model="gpt-6-astra"
+            )
+        self.assertEqual(result, "answer")
+        self.assertEqual(create.await_args.kwargs["tools"][0]["name"], "web_search")
+
+    @patch("providers.openai_messages.USE_RESPONSES", False)
     async def test_url_instruction_requires_reading_relevant_page(self):
         specs = [_tool_spec("summarize_url")]
         snapshot = SimpleNamespace(tool_specs=lambda: specs)
@@ -199,7 +213,8 @@ class WebResearchToolLoopTests(unittest.IsolatedAsyncioTestCase):
                         "role": "user",
                         "content": "What do you think of https://example.test/article?",
                     }
-                ]
+                ],
+                model="gpt-5.6-terra",
             )
 
         instruction = create.await_args.kwargs["messages"][0]["content"]

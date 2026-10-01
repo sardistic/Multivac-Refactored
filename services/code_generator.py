@@ -26,7 +26,7 @@ _CLAUDE_PROVIDER_RE = re.compile(
 
 
 def select_code_generation_provider(request: str) -> str:
-    """Honor an explicit Claude/Fable directive; otherwise retain Sol."""
+    """Honor an explicit Claude/Fable directive; otherwise use the OpenAI code model."""
     return "claude" if _CLAUDE_PROVIDER_RE.search(request or "") else "openai"
 
 

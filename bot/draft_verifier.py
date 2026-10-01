@@ -226,7 +226,7 @@ async def verify_chat_draft(
             },
         }
         if is_reasoning_model(model):
-            payload["reasoning_effort"] = "minimal"
+            payload["reasoning_effort"] = "none" if model.startswith("gpt-6-luna") else "minimal"
 
         try:
             response = await get_openai_client().chat.completions.create(

@@ -74,8 +74,6 @@ CONTINUE_PROMPT = (
 
 def _normalize_tools(tools: list | None) -> list:
     src = tools if tools is not None else get_tool_snapshot().tool_specs()
-    if not USE_RESPONSES:
-        return src
     flat = []
     for t in src:
         if t.get("type") == "function" and "function" in t:
@@ -917,7 +915,7 @@ async def generate_openai_messages_response_with_tools(
             if force_available
             else chat_tool_choice
         )
-        if USE_RESPONSES:
+        if USE_RESPONSES or ((model or "").lower().startswith(("gpt-6-astra", "gpt-6.1-sol")) and active_tools):
             norm = _normalize_messages_for_responses(messages_with_instruction)
             response_kwargs = dict(
                 model=model,
@@ -1008,7 +1006,7 @@ async def generate_openai_messages_response_with_tools(
             temperature=temperature,
             reasoning_effort=(
                 "none"
-                if (model or "").lower().startswith("gpt-5.6") and chat_tools
+                if (model or "").lower().startswith(("gpt-5.6", "gpt-6-luna")) and chat_tools
                 else reasoning_effort
             ),
         )
@@ -1093,7 +1091,7 @@ async def generate_openai_messages_response_with_tools(
                 tools=chat_tools,
                 reasoning_effort=(
                     "none"
-                    if (model or "").lower().startswith("gpt-5.6") and chat_tools
+                    if (model or "").lower().startswith(("gpt-5.6", "gpt-6-luna")) and chat_tools
                     else reasoning_effort
                 ),
             )

@@ -275,7 +275,7 @@ AGENT_MAX_TOOL_SECONDS=45
 Reverse-image provider call estimates use configurable list-price values before
 free tiers: `GOOGLE_VISION_WEB_COST_PER_CALL_USD` defaults to `0.0035`, and
 `SERPAPI_LENS_COST_PER_CALL_USD` defaults to `0.025`. Token accounting separates
-ordinary input, cache reads, cache writes, and output for the current GPT-5.6
+ordinary input, cache reads, cache writes, and output for the current GPT-6
 and Claude Fable rates. Override price tables with `OPENAI_PRICE_JSON` when a
 provider changes rates or an account has custom pricing.
 

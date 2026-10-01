@@ -471,3 +471,22 @@ does not change what the model can say about a clip.
 A clip that cannot be read -- an unsupported container, or past the request
 byte budget -- is refused out loud before it is downloaded, the way an
 unusable image already is. Silence is what produced the original report.
+
+## 2026-09-30: Refresh active model tiers by workload
+
+GPT-6 Luna handles intent classification, short chat, draft review, and small
+reflection jobs. GPT-6.1 Sol handles normal chat, research, and cost-governed
+reflection planning. GPT-6 Astra handles deep chat, reverse-image synthesis,
+and owner-requested code proposals. The automatic reflection planner uses Sol
+explicitly so the deep-chat upgrade does not consume its daily budget faster.
+GPT-6 Astra and GPT-6.1 Sol use Responses whenever tools are active, including
+when the legacy Chat Completions rollback setting is selected. Luna's
+one-label classifier and Chat Completions tool fallback use no reasoning.
+
+Gemini chat uses 3.8 Flash, and Gemini image generation uses the stable 3 Pro
+Image model in place of its shut-down preview. Claude chat and explicit Claude
+code requests use Fable 5.1; the intent fallback uses Sonnet 5.5. New Claude
+models receive an instruction to call a required tool because forced tool
+selection is unsupported. GPT Image 2.5 Sunburst, Sora 2, and Veo 3.1 retain
+their specialized roles. Pricing records include the new IDs while old rows
+remain for historical usage and operator overrides.

@@ -12,14 +12,14 @@ class ModerationFallbackView(discord.ui.View):
 
         options = [
             discord.SelectOption(
-                label="Gemini 3 Pro (Smarter)",
-                value="gemini-3-pro-preview",
+                label="Gemini 3.1 Pro (Smarter)",
+                value="gemini-3.1-pro-preview",
                 description="Higher reasoning, might be less strict.",
                 emoji="🧠",
             ),
             discord.SelectOption(
-                label="Gemini 3.7 Flash (Fast)",
-                value="gemini-3.7-flash",
+                label="Gemini 3.8 Flash (Fast)",
+                value="gemini-3.8-flash",
                 description="Fast and efficient.",
                 emoji="⚡",
             ),

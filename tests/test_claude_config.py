@@ -23,7 +23,7 @@ class ClaudeFableConfigTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result, "hello")
-        self.assertEqual(create.await_args.kwargs["model"], "claude-fable-5")
+        self.assertEqual(create.await_args.kwargs["model"], "claude-fable-5-1")
         self.assertNotIn("temperature", create.await_args.kwargs)
 
     async def test_legacy_claude_model_keeps_temperature(self):

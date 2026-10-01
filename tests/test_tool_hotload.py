@@ -188,7 +188,7 @@ class ProviderToolSnapshotTests(unittest.IsolatedAsyncioTestCase):
             create,
         ):
             result = await openai_messages.generate_openai_messages_response_with_tools(
-                [{"role": "user", "content": "use it"}]
+                [{"role": "user", "content": "use it"}], model="gpt-5.6-terra"
             )
 
         self.assertEqual(result, "ok")

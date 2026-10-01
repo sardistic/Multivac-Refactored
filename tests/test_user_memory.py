@@ -308,7 +308,20 @@ class UsageCostsTests(unittest.TestCase):
         self.assertAlmostEqual(usage_costs.estimate_cost("gpt-5.6-sol", usage), 5.00)
         self.assertAlmostEqual(usage_costs.estimate_cost("gpt-5.6-luna", usage), 0.20)
         self.assertAlmostEqual(usage_costs.estimate_cost("claude-fable-5", usage), 10.00)
+        self.assertAlmostEqual(usage_costs.estimate_cost("gpt-6-luna", usage), 0.10)
+        self.assertAlmostEqual(usage_costs.estimate_cost("gpt-6.1-sol", usage), 2.00)
+        self.assertAlmostEqual(usage_costs.estimate_cost("gpt-6-astra", usage), 10.00)
+        self.assertAlmostEqual(usage_costs.estimate_cost("claude-fable-5-1", usage), 10.00)
+        self.assertAlmostEqual(usage_costs.estimate_cost("claude-sonnet-5-5", usage), 2.00)
+        self.assertAlmostEqual(usage_costs.estimate_cost("gemini-3.8-flash", usage), 0.75)
         self.assertEqual(usage_costs.estimate_cost("mystery-model", usage), 0.0)
+
+    def test_new_model_cache_and_output_prices(self):
+        usage = {"prompt_tokens": 1_000_000, "cached_prompt_tokens": 1_000_000, "completion_tokens": 1_000_000}
+        self.assertAlmostEqual(usage_costs.estimate_cost("gpt-6-luna", usage), 0.51)
+        self.assertAlmostEqual(usage_costs.estimate_cost("gpt-6.1-sol", usage), 10.10)
+        self.assertAlmostEqual(usage_costs.estimate_cost("gpt-6-astra", usage), 51.00)
+        self.assertAlmostEqual(usage_costs.estimate_cost("claude-fable-5-1", usage), 50.25)
 
     def test_gpt_image_output_priced_at_30_per_million(self):
         # GPT Image 2.5 image-output tokens bill at $30/M. A ~6,600-token

@@ -8,6 +8,7 @@ venv/
 # Agent handoff notes stay local. They are written after the deploy, so
 # committing them leaves every deploy checkout one commit behind GitHub.
 docs/agent/HANDOFF.md
+.agent/runtime/
 
 # Per-host deploy state: names the active release path, rewritten every deploy.
 .multivac-release.json
