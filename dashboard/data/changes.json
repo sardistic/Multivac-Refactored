@@ -1,21 +1,26 @@
 {
   "baseline": "ad2058326706",
-  "generated_at": "2026-10-04T04:23:33.298315+00:00",
+  "generated_at": "2026-10-04T04:28:37.142353+00:00",
   "proposals": [
     {
       "activated_at": null,
       "baseline": "ad2058326706",
       "created_at": "2026-10-04T04:20:23.591972",
-      "deployment_result": null,
-      "deployment_status": null,
-      "files": [],
-      "finished_at": null,
+      "deployment_result": "Failed safely",
+      "deployment_status": "failed",
+      "files": [
+        "bot/intent_dispatcher.py",
+        "bot/response_policy.py",
+        "providers/openai_intents.py",
+        "providers/openai_utils.py"
+      ],
+      "finished_at": "2026-10-04T04:28:03.925701+00:00",
       "id": "wild-raven-roam",
-      "patch": null,
-      "reviewed_at": null,
-      "status": "draft",
+      "patch": "1ef67fb97d75",
+      "reviewed_at": "2026-10-04T04:25:52.735571",
+      "status": "approved",
       "summary": "make a draft of your code for a gate check, use gpt luna 6 to simulate jev determine if the user is asking the bot to shutdown, if yes dont respond",
-      "updated_at": "2026-10-04T04:20:23.591972"
+      "updated_at": "2026-10-04T04:25:52.735571"
     },
     {
       "activated_at": null,
