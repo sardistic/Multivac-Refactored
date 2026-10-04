@@ -1,5 +1,20 @@
 # Architectural Decisions
 
+## 2026-10-04: Enforce explicit silence before Discord response work
+
+Standalone shutdown and stop-replying commands terminate the current message
+path before rate-limit notices, progress UI, intent classification, and provider
+generation. These explicit commands are enforced locally, independently of the
+model classifier's availability or verdict. Full matching keeps quoted language,
+negations, technical questions, and commands targeting another system out of
+this local rule. Broader wording retains the existing model-based classifier.
+
+Normal Discord requests carry their completed gate check into dispatch so the
+decision is evaluated once. Direct dispatch callers retain a defensive gate.
+Silence applies only to the current request; it does not terminate the process
+or persist a mute. TypeSafe's Jev is a separate decision model; this correction
+does not add or activate a TypeSafe provider integration.
+
 ## 2026-08-12: Export public AI usage as a privacy-safe state snapshot
 
 Multivac publishes a small atomic JSON snapshot beside its usage ledger for the

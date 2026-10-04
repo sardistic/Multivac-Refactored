@@ -256,6 +256,7 @@ class DispatchContext:
     channel_context: List[dict[str, str]] = field(default_factory=list)
     general_url_match: Any = None
     stream_ok: bool = False
+    response_gate_checked: bool = False
     # Injected collaborators (Discord-side helpers owned by discord_bot.py)
     get_location_details: Optional[Callable] = None
     get_weather_data: Optional[Callable] = None
@@ -431,8 +432,9 @@ async def dispatch_intent(ctx: DispatchContext) -> bool:
     captured callback until they finish.
     """
     # Return handled, not False: silence must not trigger a fallback response.
-    # This guards dispatch; ingress must also gate before sending preflight UI.
-    if await should_suppress_response(ctx.raw_prompt or ctx.prompt):
+    # Ingress checks before any UI; keep a guard for direct dispatch callers
+    # without classifying a normal Discord request twice.
+    if not ctx.response_gate_checked and await should_suppress_response(ctx.raw_prompt or ctx.prompt):
         return True
 
     handled, result = await dispatch_intent_override(ctx.intent, ctx)

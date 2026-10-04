@@ -112,6 +112,7 @@ from bot.message_inputs import (
 )
 from bot.moderation_view import ModerationFallbackView
 from bot.persona import PERSONA_NAME, message_persona_scope, parse_persona_toggle
+from bot.response_policy import should_suppress_response
 from bot.ui_messages import (
     EXPAND_EMOJI,
     COLLAPSE_EMOJI,
@@ -2114,6 +2115,11 @@ async def _builtin_on_message(message: discord.Message):
     if message.author.id in _pending_image_selection:
         return
 
+    # Silence is a terminal decision before quota notices, progress messages,
+    # intent classification, or any chat/provider path can emit a response.
+    if await should_suppress_response(raw_prompt):
+        return
+
     try:
         is_app_owner = await bot.is_owner(message.author)
     except Exception:
@@ -2413,6 +2419,7 @@ async def _builtin_on_message(message: discord.Message):
                 channel_context=channel_context,
                 general_url_match=general_url_match,
                 stream_ok=STREAM_OK,
+                response_gate_checked=True,
                 get_location_details=get_location_details,
                 get_weather_data=get_weather_data,
                 live_status_with_progress=live_status_with_progress,

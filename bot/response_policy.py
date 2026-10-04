@@ -32,12 +32,25 @@ INTENT_POLICY = {
 }
 
 
+_DIRECT_SILENCE_COMMAND_RE = re.compile(
+    r"(?:please\s+)?(?:shut\s*down|stop\s+(?:responding|replying)|"
+    r"(?:do\s+not|don['’]t)\s+(?:respond|reply))(?:\s+please)?[.!]*",
+    re.I,
+)
+
+
 async def should_suppress_response(text: str) -> bool:
     """Decide silence independently of intent, provider and user style.
 
     Ingress callers should await this before acknowledgements or progress.
     No process state or persistent user preferences are changed.
     """
+    # A standalone silence command is authoritative even when the classifier
+    # is unavailable or returns RESPOND. Full matching preserves questions,
+    # quotes, negations, and requests to shut down another system.
+    if _DIRECT_SILENCE_COMMAND_RE.fullmatch(text.strip()):
+        return True
+
     from providers.openai_utils import classify_silence_request
 
     return await classify_silence_request(text)
