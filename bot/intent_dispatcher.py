@@ -6,6 +6,7 @@ from typing import Any, Callable, List, Optional
 
 from bot.chat_handler import GEMINI_FALLBACK_CHAT_MODEL, handle_chat_intent
 from bot.research_policy import is_reverse_image_request, requires_fresh_web
+from bot.response_policy import should_suppress_response
 from bot.image_handler import (
     handle_describe_image_intent,
     handle_edit_image_intent,
@@ -429,6 +430,11 @@ async def dispatch_intent(ctx: DispatchContext) -> bool:
     stable Discord message shell. Requests already in progress retain their
     captured callback until they finish.
     """
+    # Return handled, not False: silence must not trigger a fallback response.
+    # This guards dispatch; ingress must also gate before sending preflight UI.
+    if await should_suppress_response(ctx.raw_prompt or ctx.prompt):
+        return True
+
     handled, result = await dispatch_intent_override(ctx.intent, ctx)
     if handled:
         return True if result is None else bool(result)

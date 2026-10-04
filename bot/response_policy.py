@@ -32,6 +32,17 @@ INTENT_POLICY = {
 }
 
 
+async def should_suppress_response(text: str) -> bool:
+    """Decide silence independently of intent, provider and user style.
+
+    Ingress callers should await this before acknowledgements or progress.
+    No process state or persistent user preferences are changed.
+    """
+    from providers.openai_utils import classify_silence_request
+
+    return await classify_silence_request(text)
+
+
 def uses_personality(intent: str) -> bool:
     return bool(INTENT_POLICY.get(intent, {}).get("uses_personality", False))
 
