@@ -1,5 +1,28 @@
 # Architectural Decisions
 
+## 2026-10-11: One saved character portrait per durable Discord purchase
+
+The owner selected $0.99 for one rendered GFL2-inspired character image using
+SKU 1558749059609665566 and explicitly requested Sunburst 2.5. Authenticated
+inspection verified a durable SKU, so it is never consumed and repeated downloads
+reuse the completed PNG. A separate private SQLite ledger stores the frozen
+identity, image, leases, bounded provider attempts, and refund tombstones. Gateway
+and REST discovery trigger delivery; closed DMs retain command recovery. Entitlement
+ownership, application, SKU type, scope, validity, and deletion are rechecked.
+
+Kitsu supplies free random identities from a catalog verified at 105,906 records;
+named pre-purchase choices support subjects outside it. Sunburst low quality at
+1024 square, downscaled reference inputs, and no chat/classifier calls bound cost.
+Successful outputs are saved before delivery and never rerendered for download.
+Source, rate-limit, and provider-capacity failures retain the purchase without
+spending a provider attempt. The dedicated paid product uses shared provider
+capacity directly to keep its promised model fixed across behavior overrides.
+Failed image calls require an explicit retry, capped at three attempts;
+no automatic provider switch or quality upgrade is authorized by this product.
+The source count is over 100,000, not claimed to cover all possible characters.
+The SKU was unavailable for checkout during inspection; publishing remains a
+Developer Portal action. This product changes no subscription/donation benefits.
+
 ## 2026-10-11: Requester consent for Gemini retries and personal workload tiers
 
 Failed OpenAI chat, vision, image generation, and image editing now propose a

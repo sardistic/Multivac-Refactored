@@ -11,6 +11,11 @@ the SKU API does not expose checkout prices. Listing copy is in
 | fUnThrottled | `1558736446351872112` | User subscription (`5`, user flag) | $4.99/month | Automatic bypass of shared bot-wide throttle counters while active |
 | Donate | `1558738728720007219` | Consumable (`3`) | $2.99 once | `/premium_redeem donate` records one support purchase; no throttle benefit |
 | Donate More | `1558739372851859466` | Consumable (`3`) | $9.99 once | `/premium_redeem donate_more` records one support purchase; no throttle benefit |
+| GFL2-inspired character portrait | `1558749059609665566` | Durable (`2`) | $0.99 once | One saved PNG, generated on purchase; `/character` recovers/downloads it |
+
+The new character product uses a separate durable delivery ledger and fixed
+Sunburst 2.5 low-quality renderer. See [character portraits](character_portraits.md)
+for source, checkout availability, and recovery details. It grants no throttle benefit.
 
 This supersedes the earlier proposed $10 guild subscription, $5 personal pass,
 and $1 reset. The additional Server Goon SKU found in Discord is not configured

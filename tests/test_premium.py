@@ -609,6 +609,23 @@ class PremiumCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(interaction.edit_original_response.call_args.kwargs["view"])
         self.assertTrue(view.is_finished())
 
+    async def test_character_purchase_button_requires_available_durable_sku(self):
+        for kind, flags, expected in [(discord.SKUType.durable, 4, True),
+                                      (discord.SKUType.durable, 0, False),
+                                      (discord.SKUType.consumable, 4, False)]:
+            with self.subTest(kind=kind, flags=flags):
+                service = SimpleNamespace(refresh=AsyncMock(), config=SKUConfig(),
+                                          catalog={700: sku(700, kind, flags)}, user_boost=2, guild_boost=2)
+                bot = SimpleNamespace(get_cog=lambda name: SimpleNamespace(service=SimpleNamespace(sku_id=700)))
+                interaction = SimpleNamespace(response=SimpleNamespace(defer=AsyncMock()),
+                                              followup=SimpleNamespace(send=AsyncMock()))
+                await PremiumCog.shop.callback(PremiumCog(bot, service), interaction)
+                result = interaction.followup.send.call_args.kwargs
+                self.assertIn('$0.99', result['embed'].fields[0].name)
+                self.assertEqual(bool(result['view']), expected)
+                if expected:
+                    self.assertEqual(result['view'].children[0].sku_id, 700)
+
     async def test_shop_uses_native_sku_buttons_for_available_products(self):
         service = SimpleNamespace(
             refresh=AsyncMock(), config=SKUConfig(100, 200, 300), user_boost=2, guild_boost=2,

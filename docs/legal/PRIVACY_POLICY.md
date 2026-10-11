@@ -41,6 +41,9 @@ Depending on the enabled features and your interactions, MultiVAC processes:
   and consumption state, dates, and revocation status. Earlier local pass/reset
   records, if any, also contain grant periods and reset generations. Payments occur through
   Discord checkout; the bot does not collect your payment card details.
+- **Purchased character images:** saved subject choices, buyer and entitlement
+  identifiers, selected character/source metadata, render attempts and delivery
+  status, refund records, and the completed PNG retained for repeat downloads.
 
 Do not send passwords, access tokens, payment card details, private medical
 records, or other sensitive personal information. MultiVAC does not need your
@@ -53,7 +56,8 @@ information, maintain conversation context, apply saved preferences, provide
 requested memory features, manage usage and costs, enforce permissions and
 safety controls, diagnose failures, respond to support and privacy requests,
 verify subscription access, record support purchases, prevent duplicate consumable redemption,
-and meet applicable legal obligations.
+fulfill purchased character images without duplicate renders, and meet
+applicable legal obligations.
 
 Where privacy law requires a legal basis, we rely on the applicable basis for
 each purpose, such as providing a service you request, legitimate interests in
@@ -101,6 +105,10 @@ necessarily anonymous.
   image URLs, locations, and other tool inputs may be sent to services such as
   Google Search, Google Cloud Vision, SerpApi, OpenWeather, or Finnhub when their
   feature is used. Opening a supplied link involves the destination website.
+  Random character selection queries Kitsu's public catalog without sending
+  your Discord identity or named choices. Public source portraits are fetched
+  from their hosts; the selected subject and reference are sent to OpenAI to
+  render a purchased character image.
 - **Hosting and storage providers and authorized operators:** these parties may
   process stored information or access it when necessary to maintain the
   Service, investigate incidents, or fulfill requests.
@@ -131,11 +139,17 @@ held by Discord, an external provider, or a separately enabled memory feature.
 
 Indexed conversation memory, saved facts and profiles, preference or instruction
 history, agent-run records, expanded responses, saved locations, and usage
-records, including premium redemption records, do not currently have one
+records, including premium redemption records and purchased character images,
+do not currently have one
 universal automatic deletion deadline. Some
 can remain until removed by a feature control or an operator. Deleting the
 original Discord message or removing the bot does not automatically remove all
 of these copies.
+
+Saved character choices and completed images have no automatic expiry.
+Refund/deletion events remove the cached image and deny further downloads;
+purchase and revocation records can remain for verification. Contact us to
+request access or deletion of these records as well as other stored data.
 
 Reflection's default cleanup removes completed sessions after 30 days and
 selected run, budget, and frequency metadata after 90 days. Active observations

@@ -41,6 +41,20 @@
       "billing": "one_time",
       "description": "Give MultiVAC extra support with a one-time purchase. No throttle bonus or reset is included. Record it with /premium_redeem donate_more.",
       "benefits": []
+    },
+    {
+      "key": "character",
+      "sku_id": "1558749059609665566",
+      "name": "gfl2 3d character model",
+      "type": "durable",
+      "discord_sku_type": 2,
+      "requested_price": 0.99,
+      "billing": "one_time",
+      "description": "One GFL2-inspired character PNG per account, rendered with GPT Image 2.5 Sunburst. Choose any name with /character before buying, or receive a random catalog character. Later downloads reuse the saved image. No throttle benefit.",
+      "benefits": [
+        {"name": "One character portrait", "description": "A rendered PNG image, delivered by DM or privately through /character."},
+        {"name": "Saved downloads", "description": "Use /character to retrieve the same image without another render."}
+      ]
     }
   ]
 }

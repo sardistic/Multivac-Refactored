@@ -117,6 +117,13 @@ class PremiumCog(commands.Cog, name="Premium"):
             sku = self.service.catalog.get(sku_id)
             if verified and sku is not None and sku.flags.available:
                 view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=sku_id))
+        character_cog = self.bot.get_cog("Characters") if hasattr(self.bot, "get_cog") else None
+        if character_cog and character_cog.service.sku_id:
+            embed.add_field(name="GFL2-inspired character portrait — $0.99 once",
+                            value="One saved character image per account. Use /character to choose a name, purchase, or retrieve your image. No throttle benefit.", inline=False)
+            character_sku = self.service.catalog.get(character_cog.service.sku_id)
+            if verified and character_sku and character_sku.type == discord.SKUType.durable and character_sku.flags.available:
+                view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=character_sku.id))
         if not view.children:
             embed.description = "Purchases are not currently available. Please contact the operator."
         await interaction.followup.send(embed=embed, view=view if view.children else None, ephemeral=True)

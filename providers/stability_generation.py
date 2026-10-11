@@ -228,7 +228,7 @@ GPT_IMAGE_PARTIALS = 2
 
 async def _generate_gpt_image_streaming(
     prompt: str, background_type: str, partial_callback, references: list[bytes] | None = None,
-    *, model: str = OPENAI_IMAGE_MODEL, quality: str = "high",
+    *, model: str = OPENAI_IMAGE_MODEL, quality: str = "high", size: str = "auto",
 ):
     """Stream the render so the caller can show the image resolving.
 
@@ -243,7 +243,7 @@ async def _generate_gpt_image_streaming(
             model=model,
             image=_reference_streams(references),
             prompt=prompt,
-            size="auto",
+            size=size,
             quality=quality,
             **({"input_fidelity": "high"} if model != "gpt-image-1-mini" else {}),
             stream=True,
@@ -253,7 +253,7 @@ async def _generate_gpt_image_streaming(
         stream = await get_openai_image_client().images.generate(
             model=model,
             prompt=prompt,
-            size="auto",
+            size=size,
             background=background_type,
             quality=quality,
             moderation="low",
@@ -279,7 +279,7 @@ async def _generate_gpt_image_streaming(
 
 async def generate_gpt_image(
     prompt: str, partial_callback=None, references: list[bytes] | None = None,
-    *, model: str = OPENAI_IMAGE_MODEL, quality: str = "high",
+    *, model: str = OPENAI_IMAGE_MODEL, quality: str = "high", size: str = "auto",
 ) -> Optional[BytesIO]:
     """Render `prompt` with gpt-image.
 
@@ -297,7 +297,7 @@ async def generate_gpt_image(
             try:
                 result, b64_image = await _generate_gpt_image_streaming(
                     prompt, background_type, partial_callback, references=references,
-                    model=model, quality=quality,
+                    model=model, quality=quality, size=size,
                 )
             except ImageModerationError:
                 raise
@@ -318,7 +318,7 @@ async def generate_gpt_image(
                 model=model,
                 image=_reference_streams(references),
                 prompt=prompt,
-                size="auto",
+                size=size,
                 quality=quality,
                 **({"input_fidelity": "high"} if model != "gpt-image-1-mini" else {}),
             )
@@ -326,7 +326,7 @@ async def generate_gpt_image(
             result = await get_openai_image_client().images.generate(
                 model=model,
                 prompt=prompt,
-                size="auto",
+                size=size,
                 background=background_type,
                 quality=quality,
                 moderation="low",

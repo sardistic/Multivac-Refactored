@@ -94,6 +94,7 @@ from services.progress import (
 )
 from services.security_limits import check_rate_limit
 from bot.model_defaults import ModelDefaultsCog
+from bot.characters import CharacterCog
 from services.security_utils import public_error_detail, sanitize_diagnostic_text
 from services.user_profile import maybe_refresh_profile
 from providers.claude_utils import ANTHROPIC_API_KEY
@@ -665,6 +666,8 @@ async def on_ready():
         await bot.add_cog(PremiumCog(bot, get_premium_service()))
     if bot.get_cog("ModelDefaults") is None:
         await bot.add_cog(ModelDefaultsCog())
+    if bot.get_cog("Characters") is None:
+        await bot.add_cog(CharacterCog(bot))
 
     # Register slash (application) commands with Discord. Global sync; if the
     # commands don't appear, the bot needs re-inviting with the

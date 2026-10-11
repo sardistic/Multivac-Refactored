@@ -15,6 +15,8 @@ before publishing them.
 - OpenAI, Gemini, and Claude chat routing
 - Personal model tiers through `/model_defaults` and confirmation before Gemini
   retries; see [model defaults](docs/model_defaults.md)
+- Purchased GFL2-inspired character portraits with random catalog selection,
+  automatic delivery, and saved downloads; see [character portraits](docs/character_portraits.md)
 - Gemini text, image, multimodal chat, code execution, Google Search, and reference-image flows
 - Image generation, image editing, image description, and multimodal file analysis
 - Sora and Veo video generation, including image-to-video references and Sora remix flow

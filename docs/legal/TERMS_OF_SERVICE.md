@@ -99,6 +99,15 @@ in your currency and the applicable payment, cancellation, and refund terms.
 Payments are processed through Discord; contact bot@sardistic.com for delivery
 problems or questions about a charge.
 
+The **GFL2-inspired character portrait costs $0.99 once** and delivers one
+rendered PNG image per account using GPT Image 2.5 Sunburst. Choose a subject
+with `/character` before purchase or receive a random catalog character. The
+selection is fixed when processing begins; later downloads reuse the saved
+image. This purchase does not renew or grant a throttle benefit. Model fidelity
+and source availability can vary. If delivery fails, use `/character` to recover
+the purchase or contact bot@sardistic.com for resolution. Refunds and removed
+entitlements may end download access, subject to applicable law.
+
 fUnThrottled applies automatically to its buyer across guilds and direct
 messages while the subscription entitlement is active. It bypasses MultiVAC's
 shared bot-wide throttle counters for requests, URLs, images, compute, and code.
