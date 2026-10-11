@@ -158,6 +158,7 @@ class ImageDescriptionFlowTests(unittest.IsolatedAsyncioTestCase):
     ):
         """OpenAI vision being down must not cost the user the answer: the
         picture is already resolved, and Gemini can read it."""
+        self.enterContext(patch.object(image_handler, "confirm_provider_fallback", AsyncMock(return_value=True)))
         mock_generate.return_value = (
             "\u26a0\ufe0f OpenAI error: the provider is rate-limited or out of quota (HTTP 429)"
         )
@@ -196,6 +197,7 @@ class ImageDescriptionFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_handle_describe_image_intent_keeps_openai_error_when_gemini_has_nothing(
         self, mock_generate, mock_gemini, _mock_personality
     ):
+        self.enterContext(patch.object(image_handler, "confirm_provider_fallback", AsyncMock(return_value=True)))
         mock_generate.return_value = "\u26a0\ufe0f OpenAI error: the provider is rate-limited or out of quota (HTTP 429)"
         mock_gemini.return_value = (None, [])
 

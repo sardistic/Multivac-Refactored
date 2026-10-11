@@ -17,6 +17,7 @@ from providers.veo_utils import (
 )
 from services import usage_costs
 from services.behavior_registry import invoke_provider
+from services.model_preferences import preference_tier
 from services.progress_cards import build_run_receipt, receipts_enabled, requester_label
 from services.database_utils import (
     check_sora_limit,
@@ -283,7 +284,13 @@ async def handle_generate_video_intent(message, prompt: str, user_id, live_statu
 
     include_veo = veo_is_available()
     cost_msg = _build_video_cost_message(effective_prompt, include_veo=include_veo)
-    view = VideoConfirmationView(author_id=user_id, video_options=build_video_config_options(include_veo=include_veo))
+    video_options = build_video_config_options(include_veo=include_veo)
+    tier = preference_tier(user_id, "video")
+    preferred = {"economy": "sora|sora-2|4", "balanced": "sora|sora-2|8", "quality": "sora|sora-2-pro|8"}.get(tier)
+    if preferred:
+        for option in video_options:
+            option["default"] = option["value"] == preferred
+    view = VideoConfirmationView(author_id=user_id, video_options=video_options)
     confirm_msg = await message.reply(cost_msg, view=view)
     await view.wait()
 

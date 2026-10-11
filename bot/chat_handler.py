@@ -6,6 +6,7 @@ from bot.chat_context import build_chat_context
 from bot.draft_verifier import verify_chat_draft
 from bot.research_policy import build_fresh_search_query
 from bot.response_policy import apply_personality_overrides
+from bot.fallback_consent import confirm_provider_fallback
 from providers.openai_images import DEFAULT_VISION_DETAIL
 from providers.gemini_utils import GeminiModerationError, generate_gemini_text
 from providers.openai_client import OPENAI_CHAT_MODEL
@@ -86,6 +87,7 @@ async def handle_chat_intent(
     force_web_search: bool = False,
     force_reverse_image_search: bool = False,
     is_owner: bool = False,
+    model_preference_locked: bool = False,
 ):
     async def _do_chat_generation(
         model_name=None,
@@ -314,16 +316,17 @@ async def handle_chat_intent(
             status_msg, response = await live_status_with_progress(message, **status_kwargs)
 
             if _is_openai_outage(response) and "gemini" not in selected_model.lower():
-                # OpenAI backend is down (quota/429/etc). Don't surface the raw
-                # error or bounce between OpenAI tiers — answer with Gemini.
+                # Ask before sending the failed request to another provider.
                 logger.warning(
-                    "OpenAI unavailable during chat (%.80r); falling back to Gemini",
+                    "OpenAI unavailable during chat (%.80r); proposing Gemini retry",
                     response,
                 )
-                with contextlib.suppress(Exception):
-                    await status_msg.edit(
-                        content="⚠️ OpenAI is unavailable right now — answering with **Gemini** instead…"
-                    )
+                if not await confirm_provider_fallback(
+                    message, model=GEMINI_FALLBACK_CHAT_MODEL,
+                    reason="OpenAI chat is currently unavailable.",
+                ):
+                    await status_msg.edit(content="Cancelled. No fallback chat request was sent.")
+                    return
                 await _do_chat_generation(
                     model_name=GEMINI_FALLBACK_CHAT_MODEL,
                     existing_status_msg=status_msg,
@@ -338,7 +341,7 @@ async def handle_chat_intent(
                     original_message=message,
                     model=selected_model,
                 )
-            elif selected_model != OPENAI_CHAT_MODEL and allow_model_escalation:
+            elif selected_model != OPENAI_CHAT_MODEL and allow_model_escalation and not model_preference_locked:
                 # Light-tier model punted; escalate to the main model once.
                 logger.info("Empty response from %s; escalating to %s", selected_model, OPENAI_CHAT_MODEL)
                 await _do_chat_generation(

@@ -159,7 +159,7 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
 
     @patch("providers.stability_generation.generate_gemini_image")
     @patch("providers.stability_generation.generate_gpt_image", new_callable=AsyncMock)
-    async def test_openai_image_failure_always_falls_back_to_gemini(self, mock_generate_gpt, mock_gemini):
+    async def test_openai_image_failure_proposes_gemini_without_calling_it(self, mock_generate_gpt, mock_gemini):
         mock_generate_gpt.return_value = None
         mock_gemini.return_value = "gemini-image"
         provider_state = {}
@@ -170,7 +170,9 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
             provider_state=provider_state,
         )
 
-        self.assertEqual(result, "gemini-image")
+        self.assertIsInstance(result, stability_generation.ProviderFallback)
+        mock_gemini.assert_not_called()
+        self.assertEqual(await result.retry(), "gemini-image")
         mock_gemini.assert_called_once()
         self.assertEqual(provider_state["provider"], "Gemini")
         self.assertEqual(provider_state["model"], stability_generation.IMG_MODEL_GEMINI)
@@ -421,6 +423,7 @@ class ImageEditFallbackTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_openai_edit_failure_falls_back_to_gemini(self):
+        self.enterContext(patch.object(image_handler, "confirm_provider_fallback", AsyncMock(return_value=True)))
         message = SimpleNamespace(channel=SimpleNamespace(send=AsyncMock()))
 
         with patch.object(
@@ -436,6 +439,7 @@ class ImageEditFallbackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_openai_edit_without_an_image_falls_back_to_gemini(self):
         """A 200 that carries no image is the same outcome as an exception."""
+        self.enterContext(patch.object(image_handler, "confirm_provider_fallback", AsyncMock(return_value=True)))
         message = SimpleNamespace(channel=SimpleNamespace(send=AsyncMock()))
 
         with patch.object(

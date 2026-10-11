@@ -9,7 +9,7 @@ import time
 import weakref
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,7 @@ class SlidingWindowLimiter:
         self._clock = clock
         self._lock = threading.Lock()
         self._events: dict[tuple[str, str, str], deque[float]] = defaultdict(deque)
+        self._user_generations: dict[str, int] = {}
 
     def check(
         self,
@@ -66,6 +67,8 @@ class SlidingWindowLimiter:
         user_id: str | int,
         guild_id: str | int,
         rule: RateLimitRule | None = None,
+        user_generation: int = 0,
+        bypass_global: bool = False,
     ) -> RateLimitDecision:
         selected = rule or DEFAULT_RULES[action]
         now = float(self._clock())
@@ -76,11 +79,12 @@ class SlidingWindowLimiter:
             ("global", "*", selected.global_),
         )
         with self._lock:
+            self._reset_user_locked(str(user_id), user_generation)
             for scope, identity, limit in identities:
                 events = self._events[(action, scope, identity)]
                 while events and events[0] <= cutoff:
                     events.popleft()
-                if limit > 0 and len(events) >= limit:
+                if limit > 0 and len(events) >= limit and not (scope == "global" and bypass_global):
                     retry = max(1, int(events[0] + selected.window_seconds - now) + 1)
                     return RateLimitDecision(False, retry_after=retry, scope=scope)
             for scope, identity, limit in identities:
@@ -91,13 +95,38 @@ class SlidingWindowLimiter:
     def reset(self) -> None:
         with self._lock:
             self._events.clear()
+            self._user_generations.clear()
+
+    def _reset_user_locked(self, user_id: str, generation: int) -> None:
+        if generation <= self._user_generations.get(user_id, 0):
+            return
+        for key in list(self._events):
+            if key[1:] == ("user", user_id):
+                del self._events[key]
+        self._user_generations[user_id] = generation
+
+    def reset_user(self, user_id: str | int, *, generation: int) -> None:
+        """Apply a durable personal reset once, preserving guild/global counters."""
+        with self._lock:
+            self._reset_user_locked(str(user_id), generation)
 
 
 RATE_LIMITER = SlidingWindowLimiter()
 
 
 def check_rate_limit(action: str, *, user_id: str | int, guild_id: str | int) -> RateLimitDecision:
-    return RATE_LIMITER.check(action, user_id=user_id, guild_id=guild_id)
+    from services.premium import get_premium_service
+    benefits = get_premium_service().benefits(user_id, guild_id)
+    base = DEFAULT_RULES[action]
+    rule = replace(
+        base, user=base.user * benefits.user_multiplier,
+        guild=base.guild * benefits.guild_multiplier,
+    )
+    return RATE_LIMITER.check(
+        action, user_id=user_id, guild_id=guild_id, rule=rule,
+        user_generation=benefits.reset_generation,
+        bypass_global=benefits.bypass_global_throttle,
+    )
 
 
 class ProviderCapacityError(RuntimeError):

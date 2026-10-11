@@ -1,5 +1,92 @@
 # Architectural Decisions
 
+## 2026-10-11: Requester consent for Gemini retries and personal workload tiers
+
+Failed OpenAI chat, vision, image generation, and image editing now propose a
+Gemini retry instead of immediately sending the request. Video-chat rerouting
+to Gemini also asks first. Only the requesting Discord account can accept;
+cancellation, prompt delivery failure, and two-minute expiry deny the retry.
+Image-provider services return a deferred `ProviderFallback` proposal so the
+Discord layer waits for approval after releasing provider concurrency. Reference
+inputs remain attached to the approved retry. Explicit Gemini image failures
+also require approval before switching to OpenAI.
+
+The self-service `/model_defaults` command persists explicit Auto, Economy,
+Balanced, or Quality choices per account and workload in an additive SQLite
+table. Text/vision choices map to Luna, Sol, and Astra; images/edits map to Mini
+low or Sunburst medium/high. Research tools remain available, explicit provider
+requests take priority, and inferred personalization cannot change these choices.
+Same-model image retries preserve model and quality; saved text tiers disable
+the prior automatic empty-answer upgrade. Video choices only preselect Sora
+configuration and still require the existing cost confirmation. Auto restores
+existing behavior. Weather images honor an explicit saved image tier.
+
+SQLite connection context managers now explicitly close connections after
+commit/rollback. Restart-persistence tests exposed the previous connection leak
+as locked temporary databases on Windows.
+
+## 2026-10-11: Preserve Claude image answers through presentation
+
+The Claude route already passes attached and replied-to images as Anthropic
+image blocks. Its generic post-draft reviewer receives only the latest text
+request and draft, so it can replace a visual answer with a false request to
+attach the image. Requests containing actual Claude image blocks now preserve
+the provider's answer without this text-only rewrite. This follows the existing
+main chat policy for grounded reverse-image tool answers. Text-only requests
+retain draft review and research repair. Provider tools, safety constraints,
+and final explicit personality overrides continue to apply.
+
+## 2026-10-11: Connect actual fUnThrottled and support products
+
+The owner replaced the earlier proposed offerings with fUnThrottled ($4.99),
+Donate ($2.99), and Donate More ($9.99). Authenticated Discord SKU lookup verified
+fUnThrottled as a user subscription and both donations as consumables. The owner
+explicitly selected support-only donations with no throttle benefit and a
+subscription bypass of bot-wide counters only. Its buyer still has personal
+and guild limits. Requests continue contributing to aggregate counters; other
+users receive no exemption. Provider capacity, provider quotas, media constraints,
+and existing permission/safety/approval checks remain enforced.
+
+The three supplied IDs are fresh-install defaults, verified against Discord
+before access or purchase buttons are enabled. Subscriptions apply automatically
+through verified gateway events and REST reconciliation; ended, deleted, foreign,
+guild-scoped, or stale entitlements do not grant access. Donations reuse durable
+confirmed consumable recording/recovery without creating passes or reset epochs.
+The earlier settings schema migrates without losing saved mappings or records,
+and existing saved owner configuration takes precedence over defaults.
+Legacy guild/pass/reset mappings remain optional and disabled by default. The
+additional unpublished Server Goon SKU is not configured because its benefits
+and price were not selected. Actual checkout prices remain portal-managed.
+
+## 2026-10-11: Initial premium proposal (superseded by actual products above)
+
+The owner's selected products are a $10/month guild subscription, a $5
+consumable 30-day personal pass, and a $1 personal throttle reset. A personal
+pass is manually renewed because Discord currently allows one subscription
+scope per application and the owner chose guild subscriptions. Both bonuses
+default to 2x; they multiply to 4x personal limits inside a subscribed guild.
+
+The existing central rate limiter remains the enforcement boundary. Guild
+bonuses raise member and guild limits in that guild; personal passes raise the
+user limit across conversations. Global limits, provider capacity, and all
+permission/safety/approval controls remain enforced. Resets clear only the
+buyer's personal buckets, with durable increasing generations preventing replay.
+
+A managed Discord Cog exposes native SKU buttons, status, explicit confirmed
+redemption, and owner-only SKU listing/configuration. SKU creation, pricing,
+and publication remain Discord Developer Portal operations. Actual SKU types,
+application ownership, and guild flags are validated before configuration or
+redemption; subscription-group IDs are not accepted.
+
+Private SQLite state reserves a consumable entitlement before Discord consumes
+it. The local grant and applied marker commit together. Ambiguous API outcomes
+are recovered through the reserved entitlement, never by issuing a second
+unrecorded grant. Passes use fixed sequential 30-day periods; refunding one
+revokes that period without moving later grants. Gateway changes and periodic
+REST reconciliation control subscriptions and pass revocations. Bonuses require
+recent verification, expire locally after five minutes without it, and are
+re-verified after restart. The design retains the single-process throttle model.
+
 ## 2026-10-04: Enforce explicit silence before Discord response work
 
 Standalone shutdown and stop-replying commands terminate the current message

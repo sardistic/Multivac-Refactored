@@ -2,10 +2,19 @@
 
 Multivac is a modular Discord bot with multiple chat providers, image and video generation flows, tool-calling, and optional long-term memory.
 
+Draft [Terms of Service](docs/legal/TERMS_OF_SERVICE.md) and
+[Privacy Policy](docs/legal/PRIVACY_POLICY.md) are available for operator review.
+See [policy publication notes](docs/legal/README.md) for the details to complete
+before publishing them.
+
 ## Features
 
 - Discord mention and reply based chat
+- Discord fUnThrottled user subscriptions and support-only donation purchases;
+  see [premium setup](docs/premium.md)
 - OpenAI, Gemini, and Claude chat routing
+- Personal model tiers through `/model_defaults` and confirmation before Gemini
+  retries; see [model defaults](docs/model_defaults.md)
 - Gemini text, image, multimodal chat, code execution, Google Search, and reference-image flows
 - Image generation, image editing, image description, and multimodal file analysis
 - Sora and Veo video generation, including image-to-video references and Sora remix flow

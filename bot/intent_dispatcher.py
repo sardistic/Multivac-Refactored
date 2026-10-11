@@ -22,6 +22,8 @@ from bot.video_handler import handle_generate_video_intent
 from services.stock_utils import handle_stock_command
 from services.weather_utils import handle_weather_request
 from services.behavior_registry import dispatch_intent_override, get_runtime_setting
+from services.model_preferences import preference_tier, text_model_for_tier, image_choice
+from bot.fallback_consent import confirm_provider_fallback
 
 # "imagine ..." normally means generate an image, but when an image is present
 # and the ask is to translate/describe/explain/read IT, "imagine" is used in its
@@ -323,6 +325,7 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
             stream_ok=ctx.stream_ok,
             live_status_with_progress=ctx.live_status_with_progress,
             use_gemini=wants_gemini(ctx.prompt) or wants_gemini(ctx.raw_prompt),
+            image_choice=None if wants_gemini(ctx.prompt) or wants_gemini(ctx.raw_prompt) or ctx.prompt.lower().startswith("stable imagine") or preference_tier(ctx.user_id, "image") == "auto" else image_choice(ctx.user_id),
             # A generation can have a subject the user attached ("imagine this
             # in an art museum"). Only edit_image used to receive these, so
             # that picture was dropped and the model invented a subject.
@@ -339,6 +342,7 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
             prompt_for_image_selection=ctx.prompt_for_image_selection,
             live_status_with_progress=ctx.live_status_with_progress,
             use_gemini=use_gemini,
+            image_choice=None if use_gemini or preference_tier(ctx.user_id, "edit") == "auto" else image_choice(ctx.user_id, "edit"),
         )
         return True
 
@@ -365,6 +369,7 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
             live_status_with_progress=ctx.live_status_with_progress,
             send_or_edit_with_truncation=ctx.send_or_edit_with_truncation,
             channel_context=ctx.channel_context,
+            default_model=text_model_for_tier(preference_tier(ctx.user_id, "vision"), chat_model_for_intent("chat")),
         )
         return True
 
@@ -389,7 +394,15 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
     # takes images alone, so an attached video routed there reaches the model
     # as nothing at all; Gemini reads it inline from ctx.gemini_parts.
     chat_model = chat_model_for_intent(ctx.intent)
+    workload = "research" if ctx.intent in {"chat_research", "chat_reverse_image"} else "deep" if ctx.intent == "chat_deep" else "chat"
+    tier = preference_tier(ctx.user_id, workload)
+    chat_model = text_model_for_tier(tier, chat_model)
     if ctx.video_inputs and "gemini" not in chat_model.lower():
+        if not await confirm_provider_fallback(
+            message, model=GEMINI_FALLBACK_CHAT_MODEL,
+            reason="This chat model cannot read the attached video.",
+        ):
+            return True
         chat_model = GEMINI_FALLBACK_CHAT_MODEL
 
     # 'clarify' runs as normal chat WITH full conversation history plus a
@@ -420,6 +433,7 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
         force_web_search=(ctx.intent == "chat_research"),
         force_reverse_image_search=(ctx.intent == "chat_reverse_image"),
         is_owner=ctx.is_owner,
+        model_preference_locked=(tier != "auto"),
     )
     return True
 

@@ -21,6 +21,7 @@ from providers.stability_client import (
     stability_client,
 )
 from services.url_utils import DEFAULT_MEDIA_BYTES, fetch_url_bytes_async
+from services.provider_fallback import ProviderFallback
 
 logger = logging.getLogger("stability_utils")
 _REPLY_PROMPT_MAX_CHARS = 1800
@@ -226,7 +227,8 @@ GPT_IMAGE_PARTIALS = 2
 
 
 async def _generate_gpt_image_streaming(
-    prompt: str, background_type: str, partial_callback, references: list[bytes] | None = None
+    prompt: str, background_type: str, partial_callback, references: list[bytes] | None = None,
+    *, model: str = OPENAI_IMAGE_MODEL, quality: str = "high",
 ):
     """Stream the render so the caller can show the image resolving.
 
@@ -238,22 +240,22 @@ async def _generate_gpt_image_streaming(
     # the picture the user pointed at stops being the picture they get back.
     if references:
         stream = await get_openai_image_client().images.edit(
-            model=OPENAI_IMAGE_MODEL,
+            model=model,
             image=_reference_streams(references),
             prompt=prompt,
             size="auto",
-            quality="high",
-            input_fidelity="high",
+            quality=quality,
+            **({"input_fidelity": "high"} if model != "gpt-image-1-mini" else {}),
             stream=True,
             partial_images=GPT_IMAGE_PARTIALS,
         )
     else:
         stream = await get_openai_image_client().images.generate(
-            model=OPENAI_IMAGE_MODEL,
+            model=model,
             prompt=prompt,
             size="auto",
             background=background_type,
-            quality="high",
+            quality=quality,
             moderation="low",
             n=1,
             stream=True,
@@ -276,7 +278,8 @@ async def _generate_gpt_image_streaming(
 
 
 async def generate_gpt_image(
-    prompt: str, partial_callback=None, references: list[bytes] | None = None
+    prompt: str, partial_callback=None, references: list[bytes] | None = None,
+    *, model: str = OPENAI_IMAGE_MODEL, quality: str = "high",
 ) -> Optional[BytesIO]:
     """Render `prompt` with gpt-image.
 
@@ -293,7 +296,8 @@ async def generate_gpt_image(
         if partial_callback is not None:
             try:
                 result, b64_image = await _generate_gpt_image_streaming(
-                    prompt, background_type, partial_callback, references=references
+                    prompt, background_type, partial_callback, references=references,
+                    model=model, quality=quality,
                 )
             except ImageModerationError:
                 raise
@@ -304,31 +308,31 @@ async def generate_gpt_image(
                 result = None
                 b64_image = None
         if b64_image:
-            _record_image_usage(result, label="image_generation")
+            _record_image_usage(result, label="image_generation", model=model)
             logger.info(
                 "gpt-image streamed %d bytes (prompt=%.80r)", len(b64_image) * 3 // 4, prompt
             )
             return BytesIO(base64.b64decode(b64_image))
         if references:
             result = await get_openai_image_client().images.edit(
-                model=OPENAI_IMAGE_MODEL,
+                model=model,
                 image=_reference_streams(references),
                 prompt=prompt,
                 size="auto",
-                quality="high",
-                input_fidelity="high",
+                quality=quality,
+                **({"input_fidelity": "high"} if model != "gpt-image-1-mini" else {}),
             )
         else:
             result = await get_openai_image_client().images.generate(
-                model=OPENAI_IMAGE_MODEL,
+                model=model,
                 prompt=prompt,
                 size="auto",
                 background=background_type,
-                quality="high",
+                quality=quality,
                 moderation="low",
                 n=1,
             )
-        _record_image_usage(result, label="image_generation")
+        _record_image_usage(result, label="image_generation", model=model)
         b64_image = result.data[0].b64_json if result and result.data else None
         if not b64_image:
             logger.warning("gpt-image returned no image data (prompt=%.80r, result=%r)", prompt, result)
@@ -343,7 +347,7 @@ async def generate_gpt_image(
         return None
 
 
-def _record_image_usage(result, *, label: str) -> None:
+def _record_image_usage(result, *, label: str, model: str = OPENAI_IMAGE_MODEL) -> None:
     """Ledger entry for a gpt-image call: token-based when the API reports
     usage, else a flat per-image estimate (OPENAI_IMAGE_COST_USD, default 0.06)."""
     try:
@@ -352,10 +356,10 @@ def _record_image_usage(result, *, label: str) -> None:
         from services import usage_costs
 
         if getattr(result, "usage", None) is not None:
-            usage_costs.record_response(OPENAI_IMAGE_MODEL, result, label=label)
+            usage_costs.record_response(model, result, label=label)
         else:
             usage_costs.record(
-                OPENAI_IMAGE_MODEL,
+                model,
                 None,
                 float(os.getenv("OPENAI_IMAGE_COST_USD", "0.06")),
                 label=label,
@@ -385,7 +389,10 @@ async def handle_image_generation(
     provider_state: dict | None = None,
     partial_callback=None,
     reference_urls: list[str] | None = None,
-) -> Optional[BytesIO]:
+    image_model: str = OPENAI_IMAGE_MODEL,
+    image_quality: str = "high",
+    image_model_label: str = IMG_MODEL_OPENAI,
+) -> BytesIO | ProviderFallback | None:
     """Render an image request, using whatever pictures came with it.
 
     `reference_urls` is what the Discord layer collected for this message. Both
@@ -409,34 +416,29 @@ async def handle_image_generation(
 
     async def _gemini_render(image_prompt: str, width: int, height: int) -> Optional[BytesIO]:
         if references:
-            img = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 generate_gemini_with_references, image_prompt, _reference_streams(references)
             )
-            if img:
-                return img
         return await asyncio.to_thread(generate_gemini_image, image_prompt, width, height)
 
-    async def _openai_then_gemini(image_prompt: str, width: int, height: int) -> Optional[BytesIO]:
-        """Try OpenAI once, then always try Gemini for any OpenAI failure."""
-        _set_provider("OpenAI", IMG_MODEL_OPENAI)
+    async def _openai_then_gemini(image_prompt: str, width: int, height: int):
+        """Propose a Gemini retry without sending anything to it yet."""
+        _set_provider("OpenAI", image_model_label)
         try:
             img = await generate_gpt_image(
-                image_prompt, partial_callback=partial_callback, references=references
+                image_prompt, partial_callback=partial_callback, references=references,
+                model=image_model, quality=image_quality,
             )
         except ImageModerationError:
             img = None
         if img:
             return img
 
-        if message:
-            await message.channel.send("⚠️ OpenAI image generation failed — trying **Gemini** instead…")
-        _set_provider("Gemini", IMG_MODEL_GEMINI)
-        img = await _gemini_render(image_prompt, width, height)
-        if img:
-            return img
-        if message:
-            await message.channel.send("❌ Gemini image generation failed too. Try again or rephrase the prompt.")
-        return None
+        async def retry():
+            _set_provider("Gemini", IMG_MODEL_GEMINI)
+            return await _gemini_render(image_prompt, width, height)
+
+        return ProviderFallback("Gemini", IMG_MODEL_GEMINI, "OpenAI image generation did not complete.", retry)
 
     try:
         references = await collect_reference_images(
@@ -475,17 +477,17 @@ async def handle_image_generation(
             img = await _gemini_render(image_prompt, width, height)
             if img:
                 return img
-            if message:
-                await message.channel.send("⚠️ **Gemini generation failed** (likely rate limit or error). Falling back to OpenAI... 🧠")
-            _set_provider("OpenAI", IMG_MODEL_OPENAI)
-            try:
-                return await generate_gpt_image(
-                    image_prompt, partial_callback=partial_callback, references=references
-                )
-            except ImageModerationError:
-                if message:
-                    await message.channel.send("🚫 OpenAI's safety system also rejected this prompt. Try rephrasing.")
-                return None
+            async def retry_openai():
+                _set_provider("OpenAI", image_model_label)
+                try:
+                    return await generate_gpt_image(
+                        image_prompt, partial_callback=partial_callback, references=references,
+                        model=image_model, quality=image_quality,
+                    )
+                except ImageModerationError:
+                    return None
+
+            return ProviderFallback("OpenAI", image_model_label, "Gemini image generation did not complete.", retry_openai)
 
         return await _openai_then_gemini(prompt_with_reply_context, width, height)
     except Exception:

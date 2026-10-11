@@ -146,6 +146,7 @@ class VideoChatRoutingTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def _dispatched_model(self, context):
+        self.enterContext(patch("bot.intent_dispatcher.confirm_provider_fallback", new=AsyncMock(return_value=True)))
         with patch(
             "bot.intent_dispatcher.handle_chat_intent", new_callable=AsyncMock
         ) as handle:

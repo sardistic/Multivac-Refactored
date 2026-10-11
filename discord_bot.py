@@ -93,6 +93,7 @@ from services.progress import (
     start_progress_bar,
 )
 from services.security_limits import check_rate_limit
+from bot.model_defaults import ModelDefaultsCog
 from services.security_utils import public_error_detail, sanitize_diagnostic_text
 from services.user_profile import maybe_refresh_profile
 from providers.claude_utils import ANTHROPIC_API_KEY
@@ -113,6 +114,8 @@ from bot.message_inputs import (
 from bot.moderation_view import ModerationFallbackView
 from bot.persona import PERSONA_NAME, message_persona_scope, parse_persona_toggle
 from bot.response_policy import should_suppress_response
+from bot.premium import PremiumCog
+from services.premium import get_premium_service
 from bot.ui_messages import (
     EXPAND_EMOJI,
     COLLAPSE_EMOJI,
@@ -657,6 +660,11 @@ async def on_ready():
         activity=discord.Activity(type=discord.ActivityType.watching, name="Graphs Go BRRR 📈")
     )
     logger.info("Bot is online and ready!")
+
+    if bot.get_cog("Premium") is None:
+        await bot.add_cog(PremiumCog(bot, get_premium_service()))
+    if bot.get_cog("ModelDefaults") is None:
+        await bot.add_cog(ModelDefaultsCog())
 
     # Register slash (application) commands with Discord. Global sync; if the
     # commands don't appear, the bot needs re-inviting with the

@@ -26,6 +26,9 @@ from providers.stability_utils import (
 )
 from services.weather_utils import get_location_details, get_weather_data
 from services.behavior_registry import invoke_provider
+from services.provider_fallback import ProviderFallback
+from services.model_preferences import ImageModelChoice
+from bot.fallback_consent import confirm_provider_fallback
 from services.progress_cards import build_run_receipt, receipts_enabled, requester_label
 from services.url_utils import DEFAULT_MEDIA_BYTES, fetch_url_bytes
 
@@ -465,6 +468,7 @@ async def handle_generate_image_intent(
     live_status_with_progress,
     use_gemini: bool = False,
     image_urls=None,
+    image_choice: ImageModelChoice | None = None,
 ):
     weather_match = re.search(r"imagine\s+weather\s+(.*)", prompt, flags=re.IGNORECASE)
     if weather_match:
@@ -534,6 +538,12 @@ async def handle_generate_image_intent(
                     f"Premium Apple / SF Pro typography / iOS 17 Weather app aesthetic, 8k hyper-detailed text."
                 )
                 logger.info(f"Generating extreme weather widget: {widget_prompt}")
+                if image_choice and not use_gemini:
+                    return await invoke_provider(
+                        "image.generate", handle_image_generation, message, widget_prompt,
+                        image_model=image_choice.model, image_quality=image_choice.quality,
+                        image_model_label=image_choice.label,
+                    )
                 return await invoke_provider(
                     "image.gemini.generate",
                     _generate_gemini_image_threaded,
@@ -554,6 +564,18 @@ async def handle_generate_image_intent(
             summarizer=(lambda: "Fetching live data... Rendering widget...") if stream_ok else None,
         )
 
+        if isinstance(image_data, ProviderFallback):
+            proposal = image_data
+            if not await confirm_provider_fallback(
+                message, provider=proposal.provider, model=proposal.model, reason=proposal.reason,
+            ):
+                await status_msg.edit(content="Cancelled. No fallback image request was sent.")
+                return
+            status_msg, image_data = await live_status_with_progress(
+                message, action_label=f"Building Widget ({proposal.model})", emoji="🌦️",
+                coro=invoke_provider("image.fallback", proposal.retry), duration_estimate=15,
+                existing_status_msg=status_msg,
+            )
         if image_data:
             image_data.seek(0)
             await status_msg.reply(file=discord.File(image_data, filename="weather_widget.png"))
@@ -574,7 +596,7 @@ async def handle_generate_image_intent(
     # generation branch is entered; it starts at the best guess from routing.
     provider_state = {
         "provider": "Gemini" if use_gemini else "OpenAI",
-        "model": IMG_MODEL_GEMINI if use_gemini else IMG_MODEL_OPENAI,
+        "model": IMG_MODEL_GEMINI if use_gemini else (image_choice.label if image_choice else IMG_MODEL_OPENAI),
     }
     # Progressive preview: the provider streams partial renders, and the
     # progress loop attaches each one as it arrives. The indicator becomes the
@@ -614,11 +636,27 @@ async def handle_generate_image_intent(
             provider_state=provider_state,
             partial_callback=_stash_partial,
             reference_urls=reference_urls,
+            **({"image_model": image_choice.model, "image_quality": image_choice.quality,
+                "image_model_label": image_choice.label} if image_choice else {}),
         ),
         duration_estimate=duration_estimate,
         summarizer=(lambda: "Rendering image… adding details…") if stream_ok else None,
         preview_sink=preview_sink,
     )
+    if isinstance(image_data, ProviderFallback):
+        proposal = image_data
+        accepted = await confirm_provider_fallback(
+            message, provider=proposal.provider, model=proposal.model, reason=proposal.reason,
+        )
+        if not accepted:
+            await status_msg.edit(content="Cancelled. No fallback image request was sent.", attachments=[])
+            return
+        preview_sink.update(seq=0, frame=None)
+        status_msg, image_data = await live_status_with_progress(
+            message, action_label=f"Generating ({proposal.model})", emoji="🎨",
+            coro=invoke_provider("image.fallback", proposal.retry),
+            duration_estimate=duration_estimate, existing_status_msg=status_msg,
+        )
     if image_data:
         image_data.seek(0)
         files = [discord.File(image_data, "generated_image.png")]
@@ -672,6 +710,7 @@ async def handle_edit_image_intent(
     prompt_for_image_selection,
     live_status_with_progress,
     use_gemini: bool = False,
+    image_choice: ImageModelChoice | None = None,
 ):
     images_to_edit = image_urls
     if len(image_urls) > 1:
@@ -693,6 +732,17 @@ async def handle_edit_image_intent(
             return await _do_single_edit_gemini(img_url)
         edit_instruction = f"You must edit this image. {prompt}. Apply the changes to the image."
         try:
+            if image_choice:
+                from providers.stability_generation import generate_gpt_image, _reference_bytes
+                data = await _reference_bytes(img_url)
+                edited = await invoke_provider(
+                    "image.openai.edit", generate_gpt_image, edit_instruction,
+                    references=[data], model=image_choice.model, quality=image_choice.quality,
+                )
+                if edited:
+                    return edited
+                return ProviderFallback("Gemini", IMG_MODEL_GEMINI, "OpenAI image editing did not complete.",
+                                        lambda: _do_single_edit_gemini(img_url))
             response = await invoke_provider(
                 "image.openai.edit", _openai_edit_image, img_url, edit_instruction
             )
@@ -703,19 +753,14 @@ async def handle_edit_image_intent(
             ]
             if image_calls and image_calls[0].result:
                 return io.BytesIO(base64.b64decode(image_calls[0].result))
-            logger.warning("OpenAI edit returned no image; trying Gemini")
+            logger.warning("OpenAI edit returned no image; proposing Gemini retry")
         except Exception as e:
-            logger.warning("OpenAI edit failed (%.120s); trying Gemini", e)
+            logger.warning("OpenAI edit failed (%s); proposing Gemini retry", type(e).__name__)
 
-        # Generation already degrades OpenAI -> Gemini (handle_image_generation).
-        # Editing has to do the same: with OpenAI out of quota this path used to
-        # report "Edit failed" while a working image backend sat unused.
-        if message:
-            with contextlib.suppress(Exception):
-                await message.channel.send(
-                    "⚠️ OpenAI image editing failed — trying **Gemini** instead…"
-                )
-        return await _do_single_edit_gemini(img_url)
+        # Return a proposal so the requester can decide after provider capacity
+        # is released. Neither constructing nor declining it invokes Gemini.
+        return ProviderFallback("Gemini", IMG_MODEL_GEMINI, "OpenAI image editing did not complete.",
+                                lambda: _do_single_edit_gemini(img_url))
 
     edited_count = 0
     for idx, img_url in enumerate(images_to_edit):
@@ -727,6 +772,16 @@ async def handle_edit_image_intent(
             coro=_do_single_edit(img_url),
             duration_estimate=30,
         )
+
+        if isinstance(image_data, ProviderFallback):
+            proposal = image_data
+            if not await confirm_provider_fallback(message, provider=proposal.provider, model=proposal.model, reason=proposal.reason):
+                await status_msg.edit(content="Cancelled. No fallback edit was sent.")
+                break
+            status_msg, image_data = await live_status_with_progress(
+                message, action_label=f"Editing ({proposal.model})", emoji="🔧",
+                coro=proposal.retry(), duration_estimate=30, existing_status_msg=status_msg,
+            )
 
         if image_data:
             edited_count += 1
@@ -751,6 +806,7 @@ async def handle_describe_image_intent(
     live_status_with_progress,
     send_or_edit_with_truncation,
     channel_context=None,
+    default_model: str | None = None,
 ):
     if ref_msg and (ref_msg.content or "").strip():
         if is_reply_to_bot:
@@ -769,8 +825,15 @@ async def handle_describe_image_intent(
         *list(channel_context or []),
     ]
 
+    selected_model = default_model or OPENAI_CHAT_MODEL
+    display_model = {"value": selected_model}
+
     async def _describe_with_gemini(reason: str):
         """Answer the same question on Gemini when OpenAI vision is down."""
+        if not await confirm_provider_fallback(
+            message, model="Gemini 3.8 Flash", reason="OpenAI image analysis did not complete.",
+        ):
+            return "Cancelled. No fallback analysis was sent."
         parts = await asyncio.to_thread(_gemini_image_parts, image_urls)
         if not parts:
             return None
@@ -788,6 +851,7 @@ async def handle_describe_image_intent(
             context=context,
             extra_parts=parts,
         )
+        display_model["value"] = "gemini-3.8-flash"
         return text
 
     async def _describe():
@@ -798,7 +862,7 @@ async def handle_describe_image_intent(
                 image_urls=image_urls,
                 reply_context=reply_context,
             ),
-            model=OPENAI_CHAT_MODEL,
+            model=selected_model,
             temperature=0.0,
             max_tokens=1400,
         )
@@ -814,7 +878,7 @@ async def handle_describe_image_intent(
                 reply_context=reply_context,
                 style_messages=style_messages,
             ),
-            model=OPENAI_CHAT_MODEL,
+            model=selected_model,
             temperature=0.2,
             max_tokens=1400,
         )
@@ -832,7 +896,7 @@ async def handle_describe_image_intent(
                     retry=True,
                     style_messages=style_messages,
                 ),
-                model=OPENAI_CHAT_MODEL,
+                model=selected_model,
                 temperature=0.2,
                 max_tokens=1400,
             )
@@ -851,7 +915,7 @@ async def handle_describe_image_intent(
                     reply_context=reply_context,
                     style_messages=style_messages,
                 ),
-                model=OPENAI_CHAT_MODEL,
+                model=selected_model,
                 temperature=0.1,
                 max_tokens=1800,
             )
@@ -895,7 +959,7 @@ async def handle_describe_image_intent(
             text_resp,
             target_msg=status_msg,
             original_message=message,
-            model=OPENAI_CHAT_MODEL,
+            model=display_model["value"],
         )
 
     if artifacts:

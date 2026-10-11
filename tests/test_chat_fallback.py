@@ -33,7 +33,9 @@ class ChatFallbackTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(chat_handler, "build_chat_context", return_value=[{"role": "user", "content": "hello"}]), patch.object(
             chat_handler, "generate_openai_messages_response_with_tools", openai
-        ), patch.object(chat_handler, "generate_gemini_text", gemini):
+        ), patch.object(chat_handler, "generate_gemini_text", gemini), patch.object(
+            chat_handler, "confirm_provider_fallback", new=AsyncMock(return_value=True)
+        ) as confirm:
             await chat_handler.handle_chat_intent(
                 message=message,
                 prompt="hello",
@@ -52,6 +54,7 @@ class ChatFallbackTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(openai.await_count, 1)
+        confirm.assert_awaited_once()
         self.assertEqual(gemini.call_count, 1)
         self.assertEqual(live_calls, [None, status])
         self.assertIn("fallback model returned no response", status.edits[-1])

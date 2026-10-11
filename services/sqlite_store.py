@@ -49,13 +49,21 @@ class SQLiteStore:
 
     @contextmanager
     def logs_conn(self) -> Iterator[sqlite3.Connection]:
-        with self._connect(self.paths.logs_db) as conn:
-            yield conn
+        conn = self._connect(self.paths.logs_db)
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     @contextmanager
     def locations_conn(self) -> Iterator[sqlite3.Connection]:
-        with self._connect(self.paths.locations_db) as conn:
-            yield conn
+        conn = self._connect(self.paths.locations_db)
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def log_message(self, conversation_id, user_id, user_msg, bot_msg) -> None:
         timestamp = datetime.utcnow().isoformat()
@@ -575,6 +583,22 @@ class SQLiteStore:
             ).fetchone()
         return True if row is None else bool(row[0])
 
+    def get_model_preferences(self, user_id: str | int) -> dict[str, str]:
+        with self.logs_conn() as conn:
+            return dict(conn.execute("SELECT workload,tier FROM user_model_preferences WHERE user_id=?", (str(user_id),)))
+
+    def set_model_preferences(self, user_id: str | int, preferences: dict[str, str]) -> None:
+        with self.logs_conn() as conn:
+            for workload, tier in preferences.items():
+                if tier == "auto":
+                    conn.execute("DELETE FROM user_model_preferences WHERE user_id=? AND workload=?", (str(user_id), workload))
+                else:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO user_model_preferences VALUES(?,?,?,?)",
+                        (str(user_id), workload, tier, datetime.utcnow().isoformat()),
+                    )
+            conn.commit()
+
     def set_conversation_persona_enabled(self, scope_key: str, enabled: bool) -> None:
         with self.logs_conn() as conn:
             conn.execute(
@@ -962,6 +986,14 @@ class SQLiteStore:
                     persona TEXT NOT NULL DEFAULT 'mistake_not',
                     enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
                     updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS user_model_preferences (
+                    user_id TEXT NOT NULL,
+                    workload TEXT NOT NULL,
+                    tier TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(user_id, workload)
                 );
 
                 CREATE TABLE IF NOT EXISTS user_facts (

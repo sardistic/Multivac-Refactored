@@ -190,6 +190,14 @@ async def handle_claude_chat_intent(
         if not draft or not draft.strip():
             return draft
 
+        # The prose verifier receives only text, not the image blocks Claude
+        # just analyzed. It can replace a visual answer with a false request
+        # to attach the image. Preserve the provider's answer, as we do for
+        # grounded reverse-image tool answers on the main chat route.
+        if image_blocks:
+            logger.info("Preserving Claude visual answer without text-only post-draft rewrite")
+            return draft
+
         phase["detail"] = "Reviewing evidence, length, and voice…"
         verdict = await verify_chat_draft(
             user_id=message.author.id,
