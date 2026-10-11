@@ -320,8 +320,43 @@ class AttachedImageAsGenerationReferenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call["model"], stability_generation.OPENAI_IMAGE_MODEL)
         self.assertEqual(len(call["image"]), 1)
         self.assertEqual(call["image"][0].read(), b"foo")
-        # Without high input fidelity the reference is only loose inspiration.
-        self.assertEqual(call["input_fidelity"], "high")
+        # Sunburst rejects the legacy fidelity parameter, but receives the image.
+        self.assertNotIn("input_fidelity", call)
+
+    @patch("providers.stability_generation.get_openai_image_client")
+    async def test_fidelity_parameter_only_sent_to_supported_legacy_models(self, mock_get_client):
+        for model in ('gpt-image-1','gpt-image-1.5','gpt-image-1-mini','gpt-image-2','gpt-image-2.5-sunburst','gpt-image-2.5-flare'):
+            with self.subTest(model=model):
+                client=image_client(edit=b'img')
+                mock_get_client.return_value=client
+                result=await stability_generation.generate_gpt_image('a character',references=[b'reference'],model=model,quality='low',size='1024x1024')
+                self.assertEqual(result.read(),b'img')
+                call=client.images.edit.await_args.kwargs
+                self.assertEqual(call['image'][0].read(),b'reference')
+                self.assertEqual(call['model'],model)
+                if model in {'gpt-image-1','gpt-image-1.5'}:
+                    self.assertEqual(call['input_fidelity'],'high')
+                else:
+                    self.assertNotIn('input_fidelity',call)
+                client.images.edit.assert_awaited_once()
+                client.images.generate.assert_not_awaited()
+
+    @patch("providers.stability_generation.get_openai_image_client")
+    async def test_sunburst_stream_fallback_keeps_reference_and_compatible_parameters(self, mock_get_client):
+        client=image_client(edit=b'img')
+        result=client.images.edit.return_value
+        client.images.edit.side_effect=[OSError('stream unavailable'),result]
+        mock_get_client.return_value=client
+        output=await stability_generation.generate_gpt_image('a character',references=[b'reference'],partial_callback=lambda *args:None,model='gpt-image-2.5-sunburst',quality='low',size='1024x1024')
+        self.assertEqual(output.read(),b'img')
+        self.assertEqual(client.images.edit.await_count,2)
+        for request in client.images.edit.await_args_list:
+            self.assertNotIn('input_fidelity',request.kwargs)
+            self.assertEqual(request.kwargs['model'],'gpt-image-2.5-sunburst')
+            self.assertEqual(request.kwargs['quality'],'low')
+            self.assertEqual(request.kwargs['size'],'1024x1024')
+            self.assertEqual(request.kwargs['image'][0].read(),b'reference')
+        client.images.generate.assert_not_awaited()
 
     @patch("providers.stability_generation.generate_gemini_image")
     @patch("providers.stability_generation.generate_gemini_with_references")
@@ -383,6 +418,7 @@ class AttachedImageAsGenerationReferenceTests(unittest.IsolatedAsyncioTestCase):
         call = client.images.edit.await_args.kwargs
         self.assertEqual(call["model"], stability_generation.OPENAI_IMAGE_MODEL)
         self.assertTrue(call["stream"])
+        self.assertNotIn("input_fidelity", call)
         self.assertEqual(call["image"][0].read(), b"foo")
         client.images.generate.assert_not_awaited()
 

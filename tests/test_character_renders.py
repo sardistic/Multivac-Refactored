@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import io
 import json
 import tempfile
@@ -18,6 +19,8 @@ from services import character_catalog, character_renders, security_limits, usag
 from services.character_catalog import CharacterCatalog
 from services.character_renders import CharacterRenderService, CharacterStore, CHARACTER_SKU_ID
 from services.premium import PremiumError
+
+ORIGINAL_GENERATE = stability_generation.generate_gpt_image
 
 
 def png():
@@ -178,6 +181,30 @@ class CharacterRenderTests(unittest.IsolatedAsyncioTestCase):
             await self.service.render(self.client,10,7)
         with Image.open(io.BytesIO(self.render.await_args.kwargs['references'][0])) as ref:
             self.assertEqual(ref.size,(384,384))
+
+    async def test_paid_reference_render_uses_real_provider_path_and_caches_output(self):
+        self.catalog.choose.return_value['image']='https://example.org/photo.png'
+        result=SimpleNamespace(data=[SimpleNamespace(b64_json=base64.b64encode(png()).decode())])
+        async def compatible_edit(**kwargs):
+            if 'input_fidelity' in kwargs:
+                raise ValueError('Sunburst does not support input_fidelity')
+            self.assertEqual(kwargs['model'],'gpt-image-2.5-sunburst')
+            self.assertEqual(kwargs['quality'],'low')
+            self.assertEqual(kwargs['size'],'1024x1024')
+            self.assertTrue(kwargs['image'][0].read())
+            return result
+        client=SimpleNamespace(images=SimpleNamespace(edit=AsyncMock(side_effect=compatible_edit),generate=AsyncMock()))
+        with patch.object(stability_generation,'generate_gpt_image',new=ORIGINAL_GENERATE), patch.object(
+            stability_generation,'get_openai_image_client',return_value=client), patch.object(
+            stability_generation,'_record_image_usage'), patch.object(
+            character_renders,'fetch_url_bytes_async',new=AsyncMock(return_value=SimpleNamespace(body=png()))):
+            row=await self.service.render(self.client,10,7)
+            again=await self.service.render(self.client,10,7)
+        self.assertEqual(row['state'],'ready')
+        self.assertEqual(again['image'],png())
+        self.assertEqual(again['attempts'],1)
+        client.images.edit.assert_awaited_once()
+        client.images.generate.assert_not_awaited()
 
     async def test_wrong_sku_type_never_renders(self):
         self.client.product.type=discord.SKUType.consumable

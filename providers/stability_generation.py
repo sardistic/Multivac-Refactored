@@ -228,6 +228,12 @@ def _reference_streams(raw_images: list[bytes]) -> list[BytesIO]:
 GPT_IMAGE_PARTIALS = 2
 
 
+def _edit_fidelity_options(model: str) -> dict:
+    # Only these legacy models accept the optional fidelity setting. Sunburst
+    # rejects it; sending the references still uses the edits endpoint.
+    return {"input_fidelity": "high"} if model in {"gpt-image-1", "gpt-image-1.5"} else {}
+
+
 async def _generate_gpt_image_streaming(
     prompt: str, background_type: str, partial_callback, references: list[bytes] | None = None,
     *, model: str = OPENAI_IMAGE_MODEL, quality: str = "high", size: str = "auto",
@@ -237,9 +243,6 @@ async def _generate_gpt_image_streaming(
     Returns (result, b64_image). Raises on any streaming failure so the caller
     can fall back to a single-shot request.
     """
-    # input_fidelity="high" is what keeps the supplied subject recognizable;
-    # at the default the model treats the reference as loose inspiration and
-    # the picture the user pointed at stops being the picture they get back.
     if references:
         stream = await get_openai_image_client().images.edit(
             model=model,
@@ -247,7 +250,7 @@ async def _generate_gpt_image_streaming(
             prompt=prompt,
             size=size,
             quality=quality,
-            **({"input_fidelity": "high"} if model != "gpt-image-1-mini" else {}),
+            **_edit_fidelity_options(model),
             stream=True,
             partial_images=GPT_IMAGE_PARTIALS,
         )
@@ -324,7 +327,7 @@ async def generate_gpt_image(
                 prompt=prompt,
                 size=size,
                 quality=quality,
-                **({"input_fidelity": "high"} if model != "gpt-image-1-mini" else {}),
+                **_edit_fidelity_options(model),
             )
         else:
             result = await get_openai_image_client().images.generate(

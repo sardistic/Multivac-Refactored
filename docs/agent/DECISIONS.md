@@ -1,5 +1,17 @@
 # Architectural Decisions
 
+## 2026-10-11: Image edit parameters depend on model support
+
+The first live paid reference render failed with OpenAI's
+invalid_input_fidelity_model error: Sunburst does not accept input_fidelity.
+Send high input_fidelity only for the known supporting legacy GPT Image 1 and
+1.5 models. Streaming and single-shot edit calls use the same capability rule;
+Sunburst, Flare, GPT Image 2, Mini and unknown models omit the optional parameter.
+Reference files remain attached, and requested model, quality and size remain
+unchanged. No provider switch or extra generation attempt is added. The paid
+render regression exercises the real image provider path with a rejecting SDK
+mock, rather than mocking away the request construction.
+
 ## 2026-10-11: Expose app actions in profile and message menus
 
 Discord user/profile and message context menus use separate command types.
