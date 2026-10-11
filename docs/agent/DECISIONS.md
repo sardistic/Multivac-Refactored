@@ -1,5 +1,17 @@
 # Architectural Decisions
 
+## 2026-10-11: Expose app actions in profile and message menus
+
+Discord user/profile and message context menus use separate command types.
+Register the existing three action labels under both types so the bot's profile
+Apps menu exposes character checkout/recovery, ordinary image generation, and
+personal model defaults. Each action uses the requester, never the selected
+account. Profile image actions open a blank editable prompt; message actions
+continue prefilling the selected message. Both routes share the existing active-
+channel checks and requester-bound form, with no model call until submission.
+Paid-product ownership, generation limits, server policy and manager permissions
+remain enforced by the existing flows.
+
 ## 2026-10-11: Plain-text Unattractive slash syntax and checkout recovery
 
 A plain /unattractive message previously entered the legacy prefix-command

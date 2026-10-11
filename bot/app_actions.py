@@ -50,6 +50,9 @@ class AppActionsCog(commands.Cog, name="AppActions"):
             app_commands.ContextMenu(name="Character portrait $0.99", callback=self.character_menu),
             app_commands.ContextMenu(name="Generate image", callback=self.image_menu),
             app_commands.ContextMenu(name="Model defaults", callback=self.defaults_menu),
+            app_commands.ContextMenu(name="Character portrait $0.99", callback=self.character_profile_menu),
+            app_commands.ContextMenu(name="Generate image", callback=self.image_profile_menu),
+            app_commands.ContextMenu(name="Model defaults", callback=self.defaults_profile_menu),
         ]
 
     async def cog_load(self):
@@ -64,15 +67,27 @@ class AppActionsCog(commands.Cog, name="AppActions"):
         await self.bot.get_cog("Characters").handle_interaction(interaction)
 
     async def image_menu(self, interaction: discord.Interaction, message: discord.Message):
+        initial = re.sub(r"<@!?\d+>", "", message.content).strip()
+        await self.open_image_modal(interaction, initial)
+
+    async def open_image_modal(self, interaction, initial=""):
         try:
             await server_policy.require_active_channel(self.bot, server_policy.interaction_guild(interaction), interaction.channel)
         except PremiumError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
-        initial = re.sub(r"<@!?\d+>", "", message.content).strip()
         await interaction.response.send_modal(GenerateImageModal(self, interaction.user.id, initial))
 
     async def defaults_menu(self, interaction: discord.Interaction, message: discord.Message):
+        await ModelDefaultsCog.defaults.callback(self.bot.get_cog("ModelDefaults"), interaction)
+
+    async def character_profile_menu(self, interaction: discord.Interaction, user: discord.User):
+        await self.bot.get_cog("Characters").handle_interaction(interaction)
+
+    async def image_profile_menu(self, interaction: discord.Interaction, user: discord.User):
+        await self.open_image_modal(interaction)
+
+    async def defaults_profile_menu(self, interaction: discord.Interaction, user: discord.User):
         await ModelDefaultsCog.defaults.callback(self.bot.get_cog("ModelDefaults"), interaction)
 
     @app_commands.command(name="generate_image", description="Generate an image with your model defaults in an active bot channel.")

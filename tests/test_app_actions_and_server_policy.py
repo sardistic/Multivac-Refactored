@@ -299,13 +299,76 @@ class GuildPolicyTests(unittest.IsolatedAsyncioTestCase):
         await CharacterCog(self.bot,service).respond(7,item.guild,item.channel,item.reply,'random')
         service.purchase.assert_not_awaited()
 
-    async def test_apps_menus_register_and_remove_without_duplicate_names(self):
+    async def test_apps_menus_register_serialize_and_remove_for_both_surfaces(self):
         self.bot.tree=app_commands_tree=discord.app_commands.CommandTree(discord.Client(intents=discord.Intents.none()))
         cog=app_actions.AppActionsCog(self.bot)
         await cog.cog_load()
-        self.assertEqual({c.name for c in app_commands_tree.get_commands(type=discord.AppCommandType.message)}, {'Character portrait $0.99','Generate image','Model defaults'})
+        labels={'Character portrait $0.99','Generate image','Model defaults'}
+        for command_type in (discord.AppCommandType.user, discord.AppCommandType.message):
+            menus=app_commands_tree.get_commands(type=command_type)
+            self.assertEqual({c.name for c in menus}, labels)
+            serialized=[c.to_dict(app_commands_tree) for c in menus]
+            self.assertEqual({(c['name'],c['type']) for c in serialized}, {(name,command_type.value) for name in labels})
         await cog.cog_unload()
+        self.assertFalse(app_commands_tree.get_commands(type=discord.AppCommandType.user))
         self.assertFalse(app_commands_tree.get_commands(type=discord.AppCommandType.message))
+
+    async def test_profile_image_opens_blank_requester_form_without_rendering(self):
+        server_policy.note_activity(40,5)
+        cog=app_actions.AppActionsCog(self.bot)
+        cog.generate=AsyncMock()
+        item=request()
+        await cog.image_profile_menu(item,SimpleNamespace(id=8))
+        modal=item.response.send_modal.await_args.args[0]
+        self.assertEqual(modal.prompt.default,'')
+        self.assertEqual(modal.user_id,7)
+        cog.generate.assert_not_awaited()
+        outsider=request(8)
+        await modal.on_submit(outsider)
+        cog.generate.assert_not_awaited()
+        outsider.response.send_message.assert_awaited_once()
+        modal.stop()
+
+    async def test_profile_image_denies_inactive_and_disabled_channels(self):
+        cog=app_actions.AppActionsCog(self.bot)
+        for enabled in (False,True):
+            if enabled:
+                server_policy.note_activity(40,5)
+                server_policy.set_channel_enabled(40,5,False)
+            item=request()
+            await cog.image_profile_menu(item,SimpleNamespace(id=8))
+            item.response.send_modal.assert_not_awaited()
+            self.assertTrue(item.response.send_message.await_args.kwargs['ephemeral'])
+
+    async def test_message_image_still_prefills_description_without_mentions(self):
+        server_policy.note_activity(40,5)
+        item=request()
+        await app_actions.AppActionsCog(self.bot).image_menu(item,SimpleNamespace(content='<@99> a cat'))
+        modal=item.response.send_modal.await_args.args[0]
+        self.assertEqual(modal.prompt.default,'a cat')
+        self.assertEqual(modal.user_id,7)
+        modal.stop()
+
+    async def test_profile_paid_action_uses_requester_existing_purchase_flow(self):
+        paid=CharacterCog(self.bot,SimpleNamespace())
+        paid.respond=AsyncMock()
+        self.bot.get_cog=lambda name:paid
+        item=request()
+        await app_actions.AppActionsCog(self.bot).character_profile_menu(item,SimpleNamespace(id=8))
+        paid.respond.assert_awaited_once_with(7,item.guild,item.channel,item.followup.send,None,private=True)
+        self.assertTrue(item.response.defer.await_args.kwargs['ephemeral'])
+
+    async def test_profile_defaults_open_requesters_own_controls(self):
+        self.bot.get_cog=lambda name:app_actions.ModelDefaultsCog(self.bot)
+        model_preferences.set_preferences(8,'image','quality')
+        item=request()
+        await app_actions.AppActionsCog(self.bot).defaults_profile_menu(item,SimpleNamespace(id=8))
+        view=item.followup.send.await_args.kwargs['view']
+        self.assertEqual(view.user_id,7)
+        self.assertTrue(item.followup.send.await_args.kwargs['ephemeral'])
+        self.assertEqual(model_preferences.get_preferences(7),{})
+        self.assertEqual(model_preferences.get_preferences(8),{'image':'quality'})
+        view.stop()
 
     async def test_paid_sunburst_maximum_blocks_new_render_but_dm_recovery_works(self):
         service = CharacterRenderService(CharacterStore(self.path/'characters.db'), catalog=SimpleNamespace(choose=AsyncMock(return_value={

@@ -1,16 +1,23 @@
 # Discord app actions and server controls
 
-Right-click or long-press a Discord message, then open **Apps**:
+Right-click or long-press a Discord user profile (including MultiVAC) or a
+message, then open **Apps**:
 
 - **Character portrait $0.99** opens the existing one-time character purchase
   and saved-image recovery. Choose character opens a subject-name form. The
   purchase keeps Sunburst 2.5 low quality at 1024 square and one saved PNG.
 - **Generate image** opens an editable description form. This is ordinary image
   generation with your model defaults and normal quotas, separate from the paid
-  character product. Submit the form to generate; merely opening it does not
-  call the image provider.
+  character product. Message actions prefill the description from the message;
+  profile actions start with a blank description. Submit the form to generate;
+  merely opening it does not call the image provider.
 - **Model defaults** opens your own workload and tier selectors, regardless of
-  whose message you selected. Only the requesting account can change that view.
+  whose profile or message you selected. Only the requesting account can change
+  that view.
+
+All three actions operate on the account invoking them. Selecting another user
+does not purchase for that account, edit their settings, or make their avatar an
+image reference. The character action retains its explicit subject-name form.
 
 Slash commands remain available: `/character`, `/generate_image prompt:...`,
 and `/model_defaults`. Images and slash/menu settings responses are private.
