@@ -50,9 +50,7 @@ class CharacterOfferView(discord.ui.View):
 def character_caption(row):
     data = json.loads(row["character_json"])
     name = discord.utils.escape_markdown(data["name"])
-    source = f"\nCharacter source: <{data['url']}>" if data.get("url") else ""
-    return (f"**{name}** — your GFL2-inspired 3D character portrait.{source}\n"
-            f"One saved PNG per purchase. Download this image with /character purchase_id:{row['entitlement_id']}.")
+    return f"✅ {name} as a gfl2 3d character model"
 
 
 class CharacterCog(commands.Cog, name="Characters"):
@@ -150,7 +148,7 @@ class CharacterCog(commands.Cog, name="Characters"):
                 raise PremiumError(f"Request limits are busy. Retry in {quota.retry_after}s; your purchase is retained.")
             if purchase_id is not None:
                 if not purchase_id.isascii() or not purchase_id.isdecimal() or not 0 < int(purchase_id) < 2**64:
-                    raise PremiumError("Use the purchase ID shown below your saved character image.")
+                    raise PremiumError("Use a valid purchase ID to recover an earlier image.")
                 ent = await self.service.checked(self.bot, int(purchase_id), user_id)
             else:
                 ent = await self.service.purchase(self.bot, user_id)
@@ -187,12 +185,9 @@ class CharacterCog(commands.Cog, name="Characters"):
                     raise PremiumError("This server's image maximum excludes Sunburst. Use /character in a DM for this product.")
                 product = await self.service.product(self.bot)
                 view = CharacterOfferView(self, user_id, product)
-                text = ("**GFL2-inspired character portrait — $0.99 per purchase**\n"
-                        "Each purchase delivers one rendered PNG. Choose any name with /character character_name:NAME "
-                        "before buying, or leave it random. The image is delivered by DM after purchase; "
-                        "/character recovers it if DMs are closed. Later downloads reuse the saved image; "
-                        "buy again for another image. Earlier one-time purchases stay recoverable. "
-                        "No throttle benefit. Discord checkout shows the final price.")
+                text = ("**GFL2 character image — $0.99**\n"
+                        "Choose any character, or leave it random. Sunburst generates "
+                        "\"[character] as a gfl2 3d character model\". Each purchase generates one image.")
                 if not product.flags.available:
                     text += "\nThis product is not available for checkout yet."
                 await send(text, view=view, allowed_mentions=discord.AllowedMentions.none(), **flags)

@@ -64,7 +64,7 @@
       "discord_sku_type": 3,
       "requested_price": 0.99,
       "billing": "one_time",
-      "description": "One GFL2-inspired PNG per purchase using GPT Image 2.5 Sunburst. Choose any name before buying or receive a random catalog character. The completed image is saved before consumption; buy again for another image. Downloads reuse each saved image. No throttle benefit.",
+      "description": "Generate one image with the prompt '[character] as a gfl2 3d character model' using GPT Image 2.5 Sunburst. Choose any name or leave it random. $0.99 per image. No throttle benefit.",
       "benefits": [
         {
           "name": "One character portrait",

@@ -1,4 +1,4 @@
-# Purchased GFL2-inspired character portraits
+# Purchased GFL2 character images
 
 The active SKU `1558875787321679992` belongs to MultiVAC application
 `1087777433459118100`. Authenticated Discord inspection on October 11, 2026
@@ -30,8 +30,9 @@ previous bot activity in that channel and respect server-manager restrictions;
 DM recovery remains available. See [app actions](app_actions.md).
 
 `/character` prioritizes an unfinished purchase, then an unused purchase, then
-the most recent saved image. Captions include `/character purchase_id:ID` to
-retrieve a particular older image. Selecting another member's purchase is
+the most recent saved image. Replies show the image with a short subject caption.
+The optional `/character purchase_id:ID` selector remains supported for recovery
+of a known older purchase. Selecting another member's purchase is
 denied. Saved downloads offer the next checkout where the channel and server
 model maximum allow it. Choosing a new name after completion changes only the
 next purchase's choice, not any previously saved selection.
@@ -54,19 +55,19 @@ character list or promise a catalog containing every person. Named selections
 cover identities outside that anime/manga catalog without a lookup charge.
 The current count is over 100,000, not verified as hundreds of thousands.
 
-The record's name, bounded description, and available portrait identify the
-subject. Portraits use the existing public-URL validation, byte/content-type
-limits, and a 384-pixel thumbnail before generation. If a supplied portrait
-cannot be fetched, the purchase remains recoverable rather than silently
-dropping it. Source metadata is treated as untrusted data, not instructions.
+The image prompt is exactly `[character name] as a gfl2 3d character model`.
+Only the selected name is used. Catalog descriptions and portrait images are
+stored as selection metadata but are not sent to the image provider. Generation
+uses the text generation endpoint, matching an ordinary `imagine` request with
+that wording. No portrait pose, background, panel, or text restrictions are added.
 
 At the operator's explicit request, generation uses
 [GPT Image 2.5 Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst)
 with `quality=low`, `size=1024x1024`, and one output. It reuses the existing
 OpenAI API key. Character selection is free; image inference is paid. Actual
-cost depends on text/reference/output tokens; see
+cost depends on text/output tokens; see
 [OpenAI pricing](https://developers.openai.com/api/docs/pricing). Low quality,
-small references, no chat/classifier calls, and saved results keep costs down.
+no reference inputs, no chat/classifier calls, and saved results keep costs down.
 This product does not honor a more expensive personal image default and does
 not automatically retry through Gemini or upgrade quality.
 

@@ -1,5 +1,20 @@
 # Architectural Decisions
 
+## 2026-10-11: Exact GFL2 image prompt and direct image replies
+
+The operator's reference result came from the ordinary prompt `[character] as a
+gfl2 3d character model`. Paid rendering now uses exactly that template through
+the text generation endpoint. Remove catalog portrait inputs and the added
+full-body, neutral-background, no-text and no-UI restrictions that steered the
+output toward a generic portrait. Preserve Sunburst low quality, square size,
+selection, entitlement ownership, consumption, quotas and saved-result guards.
+
+Replies show the PNG and a short subject caption; source links and download
+instructions are removed. The optional purchase selector remains supported.
+The operator requested correction of their last completed image; a one-off
+audited repair may replace that saved output without consuming another purchase.
+This does not grant general rerolls or change automatic purchase processing.
+
 ## 2026-10-11: Repeatable consumable character portraits with legacy recovery
 
 The operator replaced new character checkout with published consumable SKU

@@ -17,7 +17,6 @@ from PIL import Image
 from services.character_catalog import CharacterCatalog, character_prompt
 from services.premium import PremiumError, entitlement_valid
 from services import usage_costs
-from services.url_utils import fetch_url_bytes_async
 
 logger = logging.getLogger("discord_bot")
 CHARACTER_SKU_ID = 1558875787321679992
@@ -230,15 +229,6 @@ class CharacterRenderService:
             else:
                 character = await self.catalog.choose(row["requested_name"])
                 self.store.update(ent.id, lease, character_json=json.dumps(character))
-            references = []
-            if character.get("image"):
-                fetched = await fetch_url_bytes_async(character["image"], timeout=15, max_bytes=2_000_000, allowed_content_types=("image/",))
-                # Keep reference input cheap and remove incidental metadata.
-                with Image.open(io.BytesIO(fetched.body)) as picture:
-                    picture.thumbnail((384, 384))
-                    buffer = io.BytesIO()
-                    picture.convert("RGB").save(buffer, format="PNG")
-                    references.append(buffer.getvalue())
             await self.checked(client, ent.id, user_id)
             from providers.stability_generation import generate_gpt_image
             from services.security_limits import check_rate_limit, provider_capacity
@@ -255,7 +245,7 @@ class CharacterRenderService:
                     raise PremiumError(f"Image limits are busy. Retry /character in {decision.retry_after}s; your purchase is retained.")
                 self.store.start_render(ent.id, lease)
                 image = await asyncio.wait_for(generate_gpt_image(
-                    character_prompt(character), references=references,
+                    character_prompt(character),
                     model=CHARACTER_MODEL, quality="low", size="1024x1024",
                 ), timeout=600)
             if not image:
