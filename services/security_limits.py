@@ -69,6 +69,7 @@ class SlidingWindowLimiter:
         rule: RateLimitRule | None = None,
         user_generation: int = 0,
         bypass_global: bool = False,
+        guild_user_limit: int | None = None,
     ) -> RateLimitDecision:
         selected = rule or DEFAULT_RULES[action]
         now = float(self._clock())
@@ -78,6 +79,8 @@ class SlidingWindowLimiter:
             ("guild", str(guild_id), selected.guild),
             ("global", "*", selected.global_),
         )
+        if guild_user_limit is not None:
+            identities += (("guild_user", f"{guild_id}:{user_id}", guild_user_limit),)
         with self._lock:
             self._reset_user_locked(str(user_id), user_generation)
             for scope, identity, limit in identities:
@@ -116,16 +119,19 @@ RATE_LIMITER = SlidingWindowLimiter()
 
 def check_rate_limit(action: str, *, user_id: str | int, guild_id: str | int) -> RateLimitDecision:
     from services.premium import get_premium_service
+    from services.server_policy import get_policy
     benefits = get_premium_service().benefits(user_id, guild_id)
     base = DEFAULT_RULES[action]
+    percent = get_policy(guild_id)["throttle_percent"]
     rule = replace(
         base, user=base.user * benefits.user_multiplier,
-        guild=base.guild * benefits.guild_multiplier,
+        guild=max(1, base.guild * benefits.guild_multiplier * percent // 100),
     )
     return RATE_LIMITER.check(
         action, user_id=user_id, guild_id=guild_id, rule=rule,
         user_generation=benefits.reset_generation,
         bypass_global=benefits.bypass_global_throttle,
+        guild_user_limit=max(1, rule.user * percent // 100) if percent < 100 else None,
     )
 
 

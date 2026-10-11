@@ -160,15 +160,18 @@ class CharacterRenderService:
                 raise PremiumError("This purchase was removed or refunded.")
         return ent
 
-    async def render(self, client, entitlement_id, user_id):
+    async def render(self, client, entitlement_id, user_id, *, guild_id="DM", before_render=None):
         await self.product(client)
         ent = await self.checked(client, entitlement_id, user_id)
         self.store.reserve(ent)
+        from services.server_policy import get_policy
+        if self.store.row(ent.id)["state"] != "ready" and get_policy(guild_id)["ceilings"].get("image") == "economy":
+            raise PremiumError("This server's image maximum excludes Sunburst. Your purchase is retained; use /character in a DM to recover it.")
         lease = self.store.claim(ent.id, time.time())
         if lease is None:
             return self.store.row(ent.id)
         previous_context = usage_costs.get_request_context()
-        usage_costs.set_request_context(user_id=str(user_id), intent="character_render")
+        usage_costs.set_request_context(user_id=str(user_id), guild_id=str(guild_id), intent="character_render")
         try:
             row = self.store.row(ent.id)
             if row["character_json"]:
@@ -192,7 +195,11 @@ class CharacterRenderService:
             # behavior overrides. Claim a paid attempt only after capacity opens.
             async with provider_capacity(user_id):
                 await self.checked(client, ent.id, user_id)
-                decision = check_rate_limit("image", user_id=user_id, guild_id="DM")
+                if before_render is not None:
+                    await before_render()
+                if get_policy(guild_id)["ceilings"].get("image") == "economy":
+                    raise PremiumError("This server's image maximum excludes Sunburst. Your purchase is retained; use /character in a DM.")
+                decision = check_rate_limit("image", user_id=user_id, guild_id=guild_id)
                 if not decision.allowed:
                     raise PremiumError(f"Image limits are busy. Retry /character in {decision.retry_after}s; your purchase is retained.")
                 self.store.start_render(ent.id, lease)

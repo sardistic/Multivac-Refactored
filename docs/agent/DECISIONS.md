@@ -1,5 +1,33 @@
 # Architectural Decisions
 
+## 2026-10-11: App actions, guild policy, and active-channel purchase access
+
+Discord message context menus expose character checkout/recovery, ordinary
+image generation, and personal model selectors. The $1 text alias targets the
+existing $0.99 durable SKU; it never charges an account or rerolls a completed
+image. Media app actions and character purchase offers require persistent
+channel activity, bounded historical reply evidence, and current bot access.
+Manager disable markers survive later normal activity. DM recovery remains
+available; automatic purchase delivery remains scoped to DMs.
+
+The owner clarified that server controls belong to members with Manage Server
+or Administrator permission, rather than only the guild owner. Runtime checks
+protect both text and slash controls. Additive SQLite tables store per-workload
+defaults/ceilings, a 1–100% throttle reduction, and channel eligibility. Request
+context variables isolate guild model resolution without changing saved personal
+choices. Cheaper ceilings constrain primary built-in routes, explicit external
+providers, retry consent, and selectable video configurations; operator-owned
+classifier/verifier/tool models retain their existing configuration. Economy
+image ceilings block new Sunburst paid jobs in that server without substituting
+the product's model; cached downloads and DM recovery remain possible.
+
+Server reduction applies to existing guild quotas and a separate member-in-guild
+counter inside the same atomic limiter check. Cross-server personal/global
+counters, premium multipliers, and provider capacity are retained. Global premium
+bypass never bypasses server restrictions. General image actions use one render
+attempt without an automatic provider switch. Native command visibility remains
+under Discord integration permissions; runtime gates do not hide global menus.
+
 ## 2026-10-11: One saved character portrait per durable Discord purchase
 
 The owner selected $0.99 for one rendered GFL2-inspired character image using

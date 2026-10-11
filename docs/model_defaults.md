@@ -12,9 +12,15 @@ and survive bot restarts. Command responses are private. Workloads are chat,
 research, deep chat, vision analysis, image generation, image editing, and video.
 Research and reverse-image tools remain available when changing text tiers.
 
+The command also provides workload/tier dropdowns. **Apps → Model defaults**
+opens the same controls. Text invocation supports `@MultiVAC model defaults
+image economy`; that reply is visible in its channel. Server defaults fill in
+Auto, and server maximums cap effective tiers while retaining your saved
+choices. See [app actions and server controls](app_actions.md).
+
 | Tier | Text and vision | Images and edits | Video preselection |
 | --- | --- | --- | --- |
-| Auto | Existing workload default | Existing route and quality | Existing default |
+| Auto | Server default, then workload default | Server default, then existing route | Server default, then existing default |
 | Economy | GPT-6 Luna | GPT Image Mini, low quality | Sora 2, 4 seconds |
 | Balanced | GPT-6.1 Sol | GPT Image 2.5 Sunburst, medium quality | Sora 2, 8 seconds |
 | Quality | GPT-6 Astra | GPT Image 2.5 Sunburst, high quality | Sora 2 Pro, 8 seconds |
@@ -25,13 +31,16 @@ as its cost-efficient image model; see the
 [provider pricing](https://developers.openai.com/api/docs/pricing) for current
 rates. These choices do not set a fixed per-request price or change subscription
 benefits, personal/guild limits, or provider capacity. Explicit Gemini, Claude,
-and Stability requests keep their own provider route. Automatic retries of a
+and Stability requests keep their own provider route where the server maximum
+allows it. Cheaper server maximums block external provider routes and retries
+for that workload. Automatic retries of a
 saved OpenAI tier retain that model and quality. An empty Economy chat response
 does not silently upgrade to the bot's more expensive chat default.
 
 Weather images also use a saved image tier. Auto retains the existing Gemini
 weather renderer. Video defaults only preselect a configuration: users still
 choose in the existing cost confirmation screen before any generation starts.
+Server maximums also restrict those choices and are rechecked after confirmation.
 
 When OpenAI chat, image generation, editing, or vision analysis needs a Gemini
 retry, the bot first offers **Retry with Gemini** and **Cancel**. Sending a video

@@ -285,6 +285,9 @@ async def handle_generate_video_intent(message, prompt: str, user_id, live_statu
     include_veo = veo_is_available()
     cost_msg = _build_video_cost_message(effective_prompt, include_veo=include_veo)
     video_options = build_video_config_options(include_veo=include_veo)
+    from services.server_policy import video_config_allowed
+    guild_id = getattr(getattr(message, "guild", None), "id", None)
+    video_options = [option for option in video_options if video_config_allowed(option, guild_id)]
     tier = preference_tier(user_id, "video")
     preferred = {"economy": "sora|sora-2|4", "balanced": "sora|sora-2|8", "quality": "sora|sora-2-pro|8"}.get(tier)
     if preferred:
@@ -305,6 +308,9 @@ async def handle_generate_video_intent(message, prompt: str, user_id, live_statu
     selected_config = get_video_config_by_value(view.value, include_veo=include_veo)
     if not selected_config:
         await confirm_msg.edit(content="❌ Unknown video configuration selected.", view=None)
+        return
+    if not video_config_allowed(selected_config, guild_id):
+        await confirm_msg.edit(content="This configuration exceeds the server's current maximum video tier.", view=None)
         return
 
     provider = selected_config["provider"]

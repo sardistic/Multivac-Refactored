@@ -996,6 +996,17 @@ class SQLiteStore:
                     PRIMARY KEY(user_id, workload)
                 );
 
+                CREATE TABLE IF NOT EXISTS guild_app_settings (
+                    guild_id TEXT PRIMARY KEY,
+                    settings TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS bot_channel_activity (
+                    guild_id TEXT NOT NULL, channel_id TEXT NOT NULL,
+                    state INTEGER NOT NULL DEFAULT 0,
+                    last_active REAL,
+                    PRIMARY KEY(guild_id, channel_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS user_facts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT NOT NULL,

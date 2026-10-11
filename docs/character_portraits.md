@@ -21,6 +21,12 @@ fixed when the purchase is reserved. A named subject does not need a catalog
 entry; fidelity depends on the image model's knowledge of that subject.
 Without a named choice, purchases use a random catalog character.
 
+The **Apps → Character portrait $0.99** message action opens the same flow.
+`@MultiVAC $1 random plz` is a shortcut to this $0.99 SKU, not an immediate
+charge or another render. Server purchase offers and media app actions require
+previous bot activity in that channel and respect server-manager restrictions;
+DM recovery remains available. See [app actions](app_actions.md).
+
 Purchase gateway events generate and DM the image automatically. A two-minute
 REST reconciliation also discovers purchases missed while the bot was offline.
 If DMs are closed, `/character` retrieves the saved result privately. The

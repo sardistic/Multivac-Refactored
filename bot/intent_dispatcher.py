@@ -369,7 +369,7 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
             live_status_with_progress=ctx.live_status_with_progress,
             send_or_edit_with_truncation=ctx.send_or_edit_with_truncation,
             channel_context=ctx.channel_context,
-            default_model=text_model_for_tier(preference_tier(ctx.user_id, "vision"), chat_model_for_intent("chat")),
+            default_model=text_model_for_tier(preference_tier(ctx.user_id, "vision"), chat_model_for_intent("chat"), user_id=ctx.user_id, workload="vision"),
         )
         return True
 
@@ -396,7 +396,7 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
     chat_model = chat_model_for_intent(ctx.intent)
     workload = "research" if ctx.intent in {"chat_research", "chat_reverse_image"} else "deep" if ctx.intent == "chat_deep" else "chat"
     tier = preference_tier(ctx.user_id, workload)
-    chat_model = text_model_for_tier(tier, chat_model)
+    chat_model = text_model_for_tier(tier, chat_model, user_id=ctx.user_id, workload=workload)
     if ctx.video_inputs and "gemini" not in chat_model.lower():
         if not await confirm_provider_fallback(
             message, model=GEMINI_FALLBACK_CHAT_MODEL,
@@ -451,7 +451,21 @@ async def dispatch_intent(ctx: DispatchContext) -> bool:
     if not ctx.response_gate_checked and await should_suppress_response(ctx.raw_prompt or ctx.prompt):
         return True
 
-    handled, result = await dispatch_intent_override(ctx.intent, ctx)
-    if handled:
-        return True if result is None else bool(result)
-    return await _dispatch_builtin_intent(ctx)
+    from services.server_policy import capped, server_scope, workload_for_intent, channel_state
+    guild = getattr(ctx.message, "guild", None)
+    with server_scope(getattr(guild, "id", None)):
+        workload = workload_for_intent(ctx.intent)
+        explicit_external = (ctx.intent in {"claude_chat", "gemini_chat"} or wants_gemini(ctx.prompt)
+                             or wants_gemini(ctx.raw_prompt) or ctx.prompt.lower().startswith("stable imagine"))
+        if capped(workload) and explicit_external:
+            await ctx.message.reply("This server's maximum tier restricts this workload to the configured OpenAI models. Use the default route or ask a server manager to change the maximum.")
+            return False
+        channel = getattr(ctx.message, "channel", None)
+        if guild and channel and ctx.intent in {"generate_image", "edit_image", "generate_video"} and channel_state(guild.id, channel.id) == -1:
+            await ctx.message.reply("Media app actions are disabled in this channel by a server manager.")
+            return False
+
+        handled, result = await dispatch_intent_override(ctx.intent, ctx)
+        if handled:
+            return True if result is None else bool(result)
+        return await _dispatch_builtin_intent(ctx)

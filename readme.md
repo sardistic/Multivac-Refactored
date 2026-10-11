@@ -17,6 +17,8 @@ before publishing them.
   retries; see [model defaults](docs/model_defaults.md)
 - Purchased GFL2-inspired character portraits with random catalog selection,
   automatic delivery, and saved downloads; see [character portraits](docs/character_portraits.md)
+- Discord Apps menu actions, `$1 random` mention shortcuts, and server-manager
+  model ceilings and stricter limits; see [app actions](docs/app_actions.md)
 - Gemini text, image, multimodal chat, code execution, Google Search, and reference-image flows
 - Image generation, image editing, image description, and multimodal file analysis
 - Sora and Veo video generation, including image-to-video references and Sora remix flow

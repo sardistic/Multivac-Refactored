@@ -12,8 +12,39 @@ from discord.ext import commands
 
 from services.character_renders import get_character_service
 from services.premium import PremiumError
+from services import server_policy
+from services.security_limits import check_rate_limit
 
 logger = logging.getLogger("discord_bot")
+
+
+class CharacterChoiceModal(discord.ui.Modal, title="Choose your character before buying"):
+    subject = discord.ui.TextInput(label="Character name, or random", max_length=120, default="random")
+
+    def __init__(self, cog, user_id):
+        super().__init__()
+        self.cog, self.user_id = cog, user_id
+
+    async def on_submit(self, interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Only the requester can choose this character.", ephemeral=True)
+            return
+        await self.cog.handle_interaction(interaction, str(self.subject))
+
+
+class CharacterOfferView(discord.ui.View):
+    def __init__(self, cog, user_id, product):
+        super().__init__(timeout=300)
+        self.cog, self.user_id = cog, user_id
+        if product.flags.available:
+            self.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=product.id))
+
+    @discord.ui.button(label="Choose character", style=discord.ButtonStyle.secondary)
+    async def choose(self, interaction, button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Use /character to choose your own subject.", ephemeral=True)
+            return
+        await interaction.response.send_modal(CharacterChoiceModal(self.cog, self.user_id))
 
 
 def character_caption(row):
@@ -96,23 +127,44 @@ class CharacterCog(commands.Cog, name="Characters"):
     @app_commands.command(name="character", description="Get your purchased character image, or choose a name before buying.")
     @app_commands.describe(character_name="Before buying: any character/person's name, or 'random' for a random character.")
     async def character(self, interaction: discord.Interaction, character_name: str | None = None):
+        await self.handle_interaction(interaction, character_name)
+
+    async def handle_interaction(self, interaction, character_name=None):
         await interaction.response.defer(ephemeral=True)
         try:
-            ent = await self.service.purchase(self.bot, interaction.user.id)
+            guild = server_policy.interaction_guild(interaction)
+        except PremiumError as exc:
+            await interaction.followup.send(str(exc), ephemeral=True)
+            return
+        await self.respond(interaction.user.id, guild, getattr(interaction, "channel", None), interaction.followup.send, character_name, private=True)
+
+    async def respond(self, user_id, guild, channel, send, character_name=None, *, private=False):
+        flags = {"ephemeral": True} if private else {}
+        try:
+            await server_policy.require_active_channel(self.bot, guild, channel)
+            quota = check_rate_limit("request", user_id=user_id, guild_id=guild.id if guild else "DM")
+            if not quota.allowed:
+                raise PremiumError(f"Request limits are busy. Retry in {quota.retry_after}s; your purchase is retained.")
+            ent = await self.service.purchase(self.bot, user_id)
+            existing = self.service.store.row(ent.id) if ent else None
+            if not (existing and existing["state"] == "ready") and server_policy.get_policy(guild.id if guild else "DM")["ceilings"].get("image") == "economy":
+                raise PremiumError("This server's image maximum excludes Sunburst. Use /character in a DM for this product.")
             if character_name is not None:
-                if ent and self.service.store.row(ent.id):
+                normalized = None if character_name.casefold().strip() == "random" else character_name.strip()
+                if existing and existing["requested_name"] != normalized:
                     raise PremiumError("Your purchase already has a fixed selection. Download it without specifying a new name.")
-                self.service.store.choice(interaction.user.id, None if character_name.casefold().strip() == "random" else character_name)
+                self.service.store.choice(user_id, normalized)
             if ent:
-                row = await self.service.render(self.bot, ent.id, interaction.user.id)
-                await self.service.checked(self.bot, ent.id, interaction.user.id)
-                await interaction.followup.send(character_caption(row), file=discord.File(io.BytesIO(row["image"]), "character.png"), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+                async def before_render():
+                    await server_policy.require_active_channel(self.bot, guild, channel)
+                row = await self.service.render(self.bot, ent.id, user_id, guild_id=guild.id if guild else "DM", before_render=before_render)
+                await self.service.checked(self.bot, ent.id, user_id)
+                await server_policy.require_active_channel(self.bot, guild, channel)
+                await send(character_caption(row), file=discord.File(io.BytesIO(row["image"]), "character.png"), allowed_mentions=discord.AllowedMentions.none(), **flags)
                 self.service.store.delivery_attempt(ent.id)
             else:
                 product = await self.service.product(self.bot)
-                view = discord.ui.View(timeout=300)
-                if product.flags.available:
-                    view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=product.id))
+                view = CharacterOfferView(self, user_id, product)
                 text = ("**GFL2-inspired character portrait — $0.99 once**\n"
                         "One rendered PNG image per account. Choose any name with /character character_name:NAME "
                         "before buying, or leave it random. The image is delivered by DM after purchase; "
@@ -120,9 +172,9 @@ class CharacterCog(commands.Cog, name="Characters"):
                         "No throttle benefit. Discord checkout shows the final price.")
                 if not product.flags.available:
                     text += "\nThis product is not available for checkout yet."
-                await interaction.followup.send(text, view=view if view.children else None, ephemeral=True)
+                await send(text, view=view, allowed_mentions=discord.AllowedMentions.none(), **flags)
         except PremiumError as exc:
-            await interaction.followup.send(str(exc), ephemeral=True)
+            await send(str(exc), **flags)
         except Exception as exc:
             logger.warning("Character request unavailable (%s)", type(exc).__name__)
-            await interaction.followup.send("Character service is temporarily unavailable. Your purchase is retained; retry /character.", ephemeral=True)
+            await send("Character service is temporarily unavailable. Your purchase is retained; retry /character.", **flags)

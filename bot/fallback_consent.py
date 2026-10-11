@@ -70,6 +70,13 @@ class FallbackConsentView(discord.ui.View):
 
 
 async def confirm_provider_fallback(message, *, provider: str = "Gemini", model: str, reason: str) -> bool:
+    from services.server_policy import capped, workload_for_intent
+    from services.usage_costs import get_request_context
+    context = get_request_context()
+    guild_id = getattr(getattr(message, "guild", None), "id", None) or context.get("guild_id")
+    if capped(workload_for_intent(context.get("intent")), guild_id):
+        await message.reply("This server's maximum model tier blocks provider retries for this workload. Retry the configured model later or ask a server manager to change the maximum.")
+        return False
     author_id = getattr(getattr(message, "author", None), "id", None)
     if author_id is None:
         return False

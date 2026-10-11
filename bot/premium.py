@@ -119,10 +119,21 @@ class PremiumCog(commands.Cog, name="Premium"):
                 view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=sku_id))
         character_cog = self.bot.get_cog("Characters") if hasattr(self.bot, "get_cog") else None
         if character_cog and character_cog.service.sku_id:
+            from services.server_policy import require_active_channel, get_policy, interaction_guild
+            character_allowed = True
+            availability = "One saved character image per account. Use /character to choose a name, purchase, or retrieve your image. No throttle benefit."
+            try:
+                guild = interaction_guild(interaction)
+                await require_active_channel(self.bot, guild, getattr(interaction, "channel", None))
+                if get_policy(guild.id if guild else "DM")["ceilings"].get("image") == "economy":
+                    raise PremiumError("This server's image maximum excludes Sunburst. Use /character in a DM for this product.")
+            except PremiumError as exc:
+                character_allowed = False
+                availability = str(exc)
             embed.add_field(name="GFL2-inspired character portrait — $0.99 once",
-                            value="One saved character image per account. Use /character to choose a name, purchase, or retrieve your image. No throttle benefit.", inline=False)
+                            value=availability, inline=False)
             character_sku = self.service.catalog.get(character_cog.service.sku_id)
-            if verified and character_sku and character_sku.type == discord.SKUType.durable and character_sku.flags.available:
+            if character_allowed and verified and character_sku and character_sku.type == discord.SKUType.durable and character_sku.flags.available:
                 view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=character_sku.id))
         if not view.children:
             embed.description = "Purchases are not currently available. Please contact the operator."

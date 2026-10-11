@@ -624,8 +624,11 @@ async def handle_summarize_url_intent(
             )
         )
         msgs.append({"role": "user", "content": f"Title: {title or ''}\n\n{condensed}"})
+        from services.model_preferences import preference_tier, text_model_for_tier
+        from providers.openai_client import OPENAI_CHAT_MODEL
         summary = await invoke_provider(
-            "chat.openai_plain", generate_openai_messages_response, msgs
+            "chat.openai_plain", generate_openai_messages_response, msgs,
+            model=text_model_for_tier(preference_tier(message.author.id, "research"), OPENAI_CHAT_MODEL, user_id=message.author.id, workload="research"),
         )
         summary = apply_personality_overrides(message.author.id, intent="summarize_url", text=summary)
         return f"**{title or 'Summary'}**\n{summary}"

@@ -44,6 +44,9 @@ Depending on the enabled features and your interactions, MultiVAC processes:
 - **Purchased character images:** saved subject choices, buyer and entitlement
   identifiers, selected character/source metadata, render attempts and delivery
   status, refund records, and the completed PNG retained for repeat downloads.
+- **Server app controls:** server and channel IDs, server model defaults and
+  maximum tiers, stricter throttle settings, channel activity timestamps, and
+  enabled/disabled state used to authorize media app actions.
 
 Do not send passwords, access tokens, payment card details, private medical
 records, or other sensitive personal information. MultiVAC does not need your
@@ -71,6 +74,11 @@ When invoked by a mention or reply, MultiVAC can read up to 24 preceding message
 in the same channel, subject to a 12,000-character limit. Display names and user
 IDs help distinguish speakers. This live context window is processed
 temporarily; it does not itself create another transcript archive.
+
+To recognize an existing active channel for media app actions, MultiVAC may
+inspect up to 100 preceding messages and fetch up to eight referenced originals
+to confirm a previous bot reply. This eligibility check retains channel/server
+identifiers, activity time, and enabled state, rather than message content.
 
 Separately, when the Elasticsearch/OpenSearch memory backend is configured,
 messages addressed to the bot and bot replies can be indexed persistently with
@@ -147,6 +155,8 @@ original Discord message or removing the bot does not automatically remove all
 of these copies.
 
 Saved character choices and completed images have no automatic expiry.
+Server app settings and channel eligibility records also have no automatic
+expiry and are included in operator access/deletion handling.
 Refund/deletion events remove the cached image and deny further downloads;
 purchase and revocation records can remain for verification. Contact us to
 request access or deletion of these records as well as other stored data.

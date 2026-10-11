@@ -95,6 +95,9 @@ from services.progress import (
 from services.security_limits import check_rate_limit
 from bot.model_defaults import ModelDefaultsCog
 from bot.characters import CharacterCog
+from bot.app_actions import AppActionsCog, handle_app_text
+from bot.server_settings import ServerSettingsCog
+from services.server_policy import server_scope, note_activity
 from services.security_utils import public_error_detail, sanitize_diagnostic_text
 from services.user_profile import maybe_refresh_profile
 from providers.claude_utils import ANTHROPIC_API_KEY
@@ -668,6 +671,10 @@ async def on_ready():
         await bot.add_cog(ModelDefaultsCog())
     if bot.get_cog("Characters") is None:
         await bot.add_cog(CharacterCog(bot))
+    if bot.get_cog("ServerSettings") is None:
+        await bot.add_cog(ServerSettingsCog())
+    if bot.get_cog("AppActions") is None:
+        await bot.add_cog(AppActionsCog(bot))
 
     # Register slash (application) commands with Discord. Global sync; if the
     # commands don't appear, the bot needs re-inviting with the
@@ -2131,6 +2138,9 @@ async def _builtin_on_message(message: discord.Message):
     if await should_suppress_response(raw_prompt):
         return
 
+    if await handle_app_text(bot, message, raw_prompt):
+        return
+
     try:
         is_app_owner = await bot.is_owner(message.author)
     except Exception:
@@ -2412,7 +2422,7 @@ async def _builtin_on_message(message: discord.Message):
                 message, intent, prompt, preflight_status, ref_msg=ref_msg
             )
         else:
-            await dispatch_intent(
+            handled = await dispatch_intent(
                 DispatchContext(
                 intent=intent,
                 message=message,
@@ -2439,6 +2449,8 @@ async def _builtin_on_message(message: discord.Message):
                 moderation_view_factory=ModerationFallbackView,
                 )
             )
+            if handled:
+                note_activity(message.guild.id if message.guild else None, message.channel.id)
 
     except Exception as e:
         logger.exception("Critical error in on_message dispatch")
@@ -2474,7 +2486,8 @@ async def _builtin_on_message(message: discord.Message):
 
 @bot.event
 async def on_message(message: discord.Message):
-    return await dispatch_event("message", _builtin_on_message, message)
+    with server_scope(message.guild.id if message.guild else None):
+        return await dispatch_event("message", _builtin_on_message, message)
 
 # ---- Entrypoint (used by main.py) ----
 def run_bot():

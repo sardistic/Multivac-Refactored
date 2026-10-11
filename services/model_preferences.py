@@ -21,11 +21,23 @@ def get_preferences(user_id) -> dict[str, str]:
 
 
 def preference_tier(user_id, workload: str) -> str:
-    return get_preferences(user_id).get(workload, "auto")
+    from services.server_policy import effective_tier
+    return effective_tier(get_preferences(user_id).get(workload, "auto"), workload)
 
 
-def text_model_for_tier(tier: str, default: str) -> str:
-    return {"economy": "gpt-6-luna", "balanced": "gpt-6.1-sol", "quality": "gpt-6-astra"}.get(tier, default)
+def text_model_for_tier(tier: str, default: str, *, user_id=None, workload="chat") -> str:
+    selected = {"economy": "gpt-6-luna", "balanced": "gpt-6.1-sol", "quality": "gpt-6-astra"}.get(tier, default)
+    if user_id is not None:
+        from services.server_policy import get_policy
+        policy = get_policy()
+        personal = get_preferences(user_id).get(workload, "auto")
+        configured = policy["defaults"].get(workload, "auto") if personal == "auto" else personal
+        cap = policy["ceilings"].get(workload)
+        # A ceiling alone must not upgrade the existing cheap/tiny chat routes.
+        rank = {"gpt-6-luna": 0, "gpt-6.1-sol": 1, "gpt-6-sol": 1, "gpt-6-astra": 2}
+        if configured == "auto" and cap and rank.get(default, 2) <= {"economy": 0, "balanced": 1, "quality": 2}[cap]:
+            return default
+    return selected
 
 
 @dataclass(frozen=True)
