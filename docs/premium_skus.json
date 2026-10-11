@@ -6,6 +6,20 @@
   "contact": "bot@sardistic.com",
   "products": [
     {
+      "key": "unattractive",
+      "sku_id": "1558762748324876308",
+      "name": "Unattractive",
+      "type": "consumable",
+      "discord_sku_type": 3,
+      "requested_price": 1.99,
+      "billing": "one_time",
+      "description": "Activate 10 minutes of intentionally unattractive chat and newly generated visuals for everyone in one selected server. Buy, then confirm /unattractive activate in that server. Additional purchases add 10 minutes. Server managers can stop active and queued time. Models, limits, accuracy and cached images remain unchanged.",
+      "benefits": [
+        {"name": "10-minute server effect", "description": "Unappealing chat style and visual aesthetics across the selected server, expiring automatically."},
+        {"name": "Explicit activation", "description": "Choose the server by activating there after purchase; used purchases cannot be reactivated."}
+      ]
+    },
+    {
       "key": "unthrottled",
       "sku_id": "1558736446351872112",
       "name": "fUnThrottled",

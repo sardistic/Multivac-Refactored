@@ -96,6 +96,8 @@ def extract_width_height_from_prompt(prompt: str) -> tuple[int, int]:
 
 
 async def generate_stability_image(image_prompt: str, width: int = 960, height: int = 768) -> Optional[BytesIO]:
+    from services.server_effects import visual_prompt
+    image_prompt = visual_prompt(image_prompt)
     if not (STABILITY_AVAILABLE and STABILITY_KEY and stability_client and generation):
         logger.warning("generate_stability_image called but Stability is not configured.")
         return None
@@ -289,6 +291,8 @@ async def generate_gpt_image(
     "imagine this in an art museum" then reaches the model with nothing to
     resolve "this" against.
     """
+    from services.server_effects import visual_prompt
+    prompt = visual_prompt(prompt)
     try:
         background_type = "transparent" if "transparent background" in prompt.lower() else "auto"
         result = None
@@ -529,6 +533,8 @@ async def edit_image_with_prompt(image_input: str | list[str], prompt: str) -> O
             base_img = await decode_img(urls[0])
             return edit_gemini_image(base_img, prompt[11:].strip())
 
+        from services.server_effects import visual_prompt
+        prompt = visual_prompt(prompt)
         base_img = await decode_img(urls[0])
         result = await get_openai_image_client().images.edit(
             model=OPENAI_IMAGE_MODEL,

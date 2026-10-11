@@ -122,6 +122,18 @@ requests to base limits. Refunded or removed entitlements may lose their
 remaining benefits, subject to applicable law; requests already completed
 cannot be undone.
 
+**Unattractive costs $1.99 per consumable purchase.** After purchase, activate
+and confirm it in the intended server with `/unattractive`. Each activation
+adds 10 minutes of deliberately unappealing chat style and newly generated
+visual aesthetics for everyone in that server; additional purchases queue
+another 10 minutes. The effect expires automatically. Members with Manage
+Server or Administrator permission can stop active and queued time. Used
+purchases cannot be reactivated. Existing saved images, model settings and
+request limits are unchanged. Results are model-dependent, and requests already
+submitted may finish after expiry or manager stop. The purchase does not renew
+or grant a throttle benefit. Pending activations can be recovered in the original
+server. Contact bot@sardistic.com for purchase or delivery problems.
+
 ## 7. Privacy and shared channels
 
 Requests and responses in a Discord channel may be visible to other people with

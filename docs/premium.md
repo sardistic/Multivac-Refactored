@@ -12,10 +12,15 @@ the SKU API does not expose checkout prices. Listing copy is in
 | Donate | `1558738728720007219` | Consumable (`3`) | $2.99 once | `/premium_redeem donate` records one support purchase; no throttle benefit |
 | Donate More | `1558739372851859466` | Consumable (`3`) | $9.99 once | `/premium_redeem donate_more` records one support purchase; no throttle benefit |
 | GFL2-inspired character portrait | `1558749059609665566` | Durable (`2`) | $0.99 once | One saved PNG, generated on purchase; `/character` recovers/downloads it |
+| Unattractive | `1558762748324876308` | Consumable (`3`) | $1.99 once | `/unattractive activate` adds 10 minutes of unattractive chat and new visuals for everyone in the selected server |
 
 The new character product uses a separate durable delivery ledger and fixed
 Sunburst 2.5 low-quality renderer. See [character portraits](character_portraits.md)
 for source, checkout availability, and recovery details. It grants no throttle benefit.
+
+Unattractive uses a separate timed server-effect ledger within `premium.db`.
+See [Unattractive](unattractive.md) for activation, stacking, manager stop,
+expiry and refund handling. It is separate from `/premium_configure` mappings.
 
 This supersedes the earlier proposed $10 guild subscription, $5 personal pass,
 and $1 reset. The additional Server Goon SKU found in Discord is not configured

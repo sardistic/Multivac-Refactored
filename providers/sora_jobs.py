@@ -9,6 +9,7 @@ import aiohttp
 from PIL import Image, ImageOps
 
 from providers.sora_client import API_BASE, build_session, sora_headers
+from services.server_effects import visual_prompt
 
 logger = logging.getLogger("sora_utils")
 DEFAULT_VIDEO_SIZE = "1280x720"
@@ -112,6 +113,7 @@ async def create_sora_job(
     image_filename: Optional[str] = None,
     image_content_type: Optional[str] = None,
 ) -> Dict[str, Any]:
+    prompt = visual_prompt(prompt)
     url = f"{API_BASE}/videos"
     resolved_size = size or DEFAULT_VIDEO_SIZE
     if image_data and size in (None, "", "auto"):
@@ -156,6 +158,7 @@ async def create_sora_job(
 
 
 async def remix_sora_video(video_id: str, prompt: str) -> Dict[str, Any]:
+    prompt = visual_prompt(prompt)
     url = f"{API_BASE}/videos/{video_id}/remix"
     payload = {"prompt": prompt}
     async with build_session() as session:

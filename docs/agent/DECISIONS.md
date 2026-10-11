@@ -1,5 +1,24 @@
 # Architectural Decisions
 
+## 2026-10-11: Consumable Unattractive server-wide generation context
+
+The owner selected $1.99, everyone in the selected server, and both chat and
+visual results for SKU 1558762748324876308. Discord verified a consumable SKU,
+initially unavailable for checkout. Explicit requester confirmation selects the
+server before consuming a purchase; no timer or guild is inferred from a user
+entitlement gateway event. Each purchase adds a 600-second persisted window.
+Pending recovery freezes the target guild; refunds leave durable tombstones.
+Managers can stop active/queued time, and normal model/quota policies remain.
+
+Separate tables in premium.db preserve existing SKU mappings and redemption
+behavior. Public response provider dispatch receives an additional system style;
+image/edit/video submission paths receive visual context. The effect is resolved
+from request-local guild identity at submission, with no cross-server/DM scope,
+no model change, and no classifier/tool/control modifier. Facts and task content
+remain accurate. Cached paid images and automatic DM renders remain unchanged.
+Effects expire without a background timer; gateway plus periodic REST checks
+reconcile revocation. Only transaction metadata is added to retained storage.
+
 ## 2026-10-11: App actions, guild policy, and active-channel purchase access
 
 Discord message context menus expose character checkout/recovery, ordinary

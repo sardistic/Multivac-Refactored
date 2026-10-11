@@ -95,7 +95,7 @@ class PremiumCog(commands.Cog, name="Premium"):
     async def on_entitlement_delete(self, entitlement: discord.Entitlement):
         self.service.observe(entitlement, self.bot.application_id, deleted=True)
 
-    @app_commands.command(name="premium", description="Subscribe to fUnThrottled or support MultiVAC with a donation.")
+    @app_commands.command(name="premium", description="Browse MultiVAC subscriptions, donations, character portraits and server effects.")
     async def shop(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         verified = await self._refresh()
@@ -135,6 +135,25 @@ class PremiumCog(commands.Cog, name="Premium"):
             character_sku = self.service.catalog.get(character_cog.service.sku_id)
             if character_allowed and verified and character_sku and character_sku.type == discord.SKUType.durable and character_sku.flags.available:
                 view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=character_sku.id))
+        effect_cog = self.bot.get_cog("Unattractive") if hasattr(self.bot, "get_cog") else None
+        if effect_cog and effect_cog.service.sku_id:
+            from services.server_policy import require_active_channel, interaction_guild
+            effect_description = "Everyone in this server gets 10 minutes of unattractive chat and new visuals. Buy, then use /unattractive activate here and confirm. Managers can stop it. No throttle benefit."
+            try:
+                guild = interaction_guild(interaction)
+                if guild is None:
+                    raise PremiumError("Use /unattractive in the server you want to affect.")
+                await require_active_channel(self.bot, guild, getattr(interaction, "channel", None))
+                effect_sku = await effect_cog.service.product(self.bot)
+                if effect_sku.flags.available:
+                    view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=effect_sku.id))
+                else:
+                    effect_description += " Currently unavailable for checkout."
+            except PremiumError as exc:
+                effect_description = str(exc)
+            except Exception:
+                effect_description = "Unattractive purchase verification is temporarily unavailable."
+            embed.add_field(name="Unattractive — $1.99 per 10 minutes",value=effect_description,inline=False)
         if not view.children:
             embed.description = "Purchases are not currently available. Please contact the operator."
         await interaction.followup.send(embed=embed, view=view if view.children else None, ephemeral=True)

@@ -202,6 +202,8 @@ async def generate_veo_video(
     generate_audio: bool = False,
     progress_state: Optional[dict[str, Any]] = None,
 ) -> tuple[bytes | None, str | None]:
+    from services.server_effects import visual_prompt
+    prompt = visual_prompt(prompt)
     client = get_gemini_client()
     if not client or not types:
         return None, "GEMINI_API_KEY is not configured for Veo video generation."

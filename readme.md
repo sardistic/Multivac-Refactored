@@ -19,6 +19,8 @@ before publishing them.
   automatic delivery, and saved downloads; see [character portraits](docs/character_portraits.md)
 - Discord Apps menu actions, `$1 random` mention shortcuts, and server-manager
   model ceilings and stricter limits; see [app actions](docs/app_actions.md)
+- [Unattractive](docs/unattractive.md): $1.99 for 10 minutes of server-wide
+  unappealing chat and visual style, with explicit activation and manager stop
 - Gemini text, image, multimodal chat, code execution, Google Search, and reference-image flows
 - Image generation, image editing, image description, and multimodal file analysis
 - Sora and Veo video generation, including image-to-video references and Sora remix flow

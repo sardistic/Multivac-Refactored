@@ -62,6 +62,8 @@ async def invoke_provider(
 ) -> Any:
     user_id = get_request_context().get("user_id")
     async with provider_capacity(user_id):
+        from services.server_effects import decorate_provider_call
+        args, kwargs = decorate_provider_call(name, args, kwargs)
         snapshot = _snapshot()
         if snapshot.get("providers", name) is not None:
             return await BEHAVIOR_REGISTRY.invoke(

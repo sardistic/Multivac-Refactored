@@ -47,6 +47,12 @@ Depending on the enabled features and your interactions, MultiVAC processes:
 - **Server app controls:** server and channel IDs, server model defaults and
   maximum tiers, stricter throttle settings, channel activity timestamps, and
   enabled/disabled state used to authorize media app actions.
+- **Paid server effects:** buyer, server, SKU and entitlement IDs, activation
+  windows, consumption/grant state, and stop/refund records. The style timer
+  expires automatically; its transaction ledger has no automatic deletion
+  deadline. It stores no extra prompt or output content. During an active
+  effect, temporary style instructions accompany affected requests to their
+  selected generation providers.
 
 Do not send passwords, access tokens, payment card details, private medical
 records, or other sensitive personal information. MultiVAC does not need your

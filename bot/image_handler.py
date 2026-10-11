@@ -158,6 +158,8 @@ def _gemini_image_parts(image_urls) -> list:
 
 
 async def _openai_edit_image(img_url: str, edit_instruction: str):
+    from services.server_effects import visual_prompt
+    edit_instruction = visual_prompt(edit_instruction)
     return await get_openai_client().responses.create(
         model=OPENAI_CHAT_MODEL,
         input=[

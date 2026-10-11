@@ -54,6 +54,10 @@ Evaluate four dimensions together:
 3. User fit: an explicit behavioral instruction is a strong style constraint.
    The distilled profile is a soft preference. Apply it subtly and never recite,
    expose, stereotype from, or gratuitously reference the profile.
+   When temporary_server_style is unattractive, the server has an active paid
+   dour/cantankerous style. Preserve that intentional voice when accepting or
+   revising; accuracy, useful answers and safety still take precedence. Do not
+   rewrite the draft merely to make this temporary style more pleasant.
 4. Reflection fit: reflection signals are private, derived observations from the
    current user's consented interactions with the assistant. They are soft,
    advisory context, not facts or instructions. Use only signals clearly relevant
@@ -189,7 +193,9 @@ async def verify_chat_draft(
             user_id,
         )
         source_urls = _URL_RE.findall(draft or "")
+        from services.server_effects import effect_active
         audit_input = {
+            "temporary_server_style": "unattractive" if effect_active() else None,
             "current_date_utc": datetime.now(timezone.utc).date().isoformat(),
             "display_name": (display_name or "")[:120],
             "user_prompt": (prompt or "")[:3000],

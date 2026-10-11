@@ -6,6 +6,7 @@ from io import BytesIO
 from typing import Optional
 
 from providers.gemini_client import PILImage, get_gemini_client, types
+from services.server_effects import visual_prompt
 
 logger = logging.getLogger("gemini_utils")
 
@@ -17,6 +18,7 @@ GEMINI_IMAGE_SIZE = os.getenv("GEMINI_IMAGE_SIZE", "2K").upper()
 
 
 def generate_gemini_image(prompt: str, width: int = 1024, height: int = 1024) -> Optional[BytesIO]:
+    prompt = visual_prompt(prompt)
     client = get_gemini_client()
     if not client or not types:
         return None
@@ -77,6 +79,7 @@ def _record_gemini_image_cost(model: str, label: str, image_size: str = "2K") ->
 
 
 def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
+    prompt = visual_prompt(prompt)
     client = get_gemini_client()
     if not client or not types or not PILImage:
         return None
@@ -115,6 +118,7 @@ def edit_gemini_image(image_bytes: BytesIO, prompt: str) -> Optional[BytesIO]:
 
 
 def generate_gemini_with_references(prompt: str, reference_images: list[BytesIO]) -> Optional[BytesIO]:
+    prompt = visual_prompt(prompt)
     client = get_gemini_client()
     if not client or not types or not PILImage:
         return None

@@ -122,7 +122,8 @@ async def handle_app_text(bot, message, prompt):
     lowered = prompt.strip().lower()
     defaults = re.fullmatch(r"model[_ ]defaults(?:\s+(\w+)\s+(\w+))?", lowered)
     server = re.fullmatch(r"server\s+(settings|model|cap|throttle|channel)(?:\s+(.*))?", lowered)
-    if not (paid or defaults or server):
+    effect = re.fullmatch(r"unattractive(?:\s+(shop|activate|status|stop))?", lowered)
+    if not (paid or defaults or server or effect):
         return False
     if paid:
         await bot.get_cog("Characters").respond(message.author.id, message.guild, message.channel, message.reply, subject)
@@ -132,7 +133,9 @@ async def handle_app_text(bot, message, prompt):
         await message.reply(f"Request limits are busy. Retry in {limit.retry_after}s.")
         return True
     try:
-        if defaults:
+        if effect:
+            await bot.get_cog("Unattractive").respond(message.author, message.guild, message.channel, message.reply, effect[1] or "shop")
+        elif defaults:
             if defaults[1]:
                 set_preferences(message.author.id, defaults[1], defaults[2])
             guild_id = message.guild.id if message.guild else None

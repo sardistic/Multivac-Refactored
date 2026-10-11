@@ -95,6 +95,7 @@ from services.progress import (
 from services.security_limits import check_rate_limit
 from bot.model_defaults import ModelDefaultsCog
 from bot.characters import CharacterCog
+from bot.unattractive import UnattractiveCog
 from bot.app_actions import AppActionsCog, handle_app_text
 from bot.server_settings import ServerSettingsCog
 from services.server_policy import server_scope, note_activity
@@ -671,6 +672,8 @@ async def on_ready():
         await bot.add_cog(ModelDefaultsCog())
     if bot.get_cog("Characters") is None:
         await bot.add_cog(CharacterCog(bot))
+    if bot.get_cog("Unattractive") is None:
+        await bot.add_cog(UnattractiveCog(bot))
     if bot.get_cog("ServerSettings") is None:
         await bot.add_cog(ServerSettingsCog())
     if bot.get_cog("AppActions") is None:
