@@ -3,7 +3,8 @@
 SKU `1558749059609665566` belongs to MultiVAC application
 `1087777433459118100`. Authenticated Discord inspection on October 11, 2026
 verified its name as `gfl2 3d character model`, its type as durable (`2`), and its
-availability flags as `0` (unavailable for checkout). The operator selected
+availability flags initially as `0` (unavailable for checkout). Post-deployment
+verification later that day confirmed checkout available. The operator selected
 **$0.99 once for one rendered character image**. Checkout supplies the actual
 price; the SKU API does not return prices.
 
@@ -24,8 +25,9 @@ Purchase gateway events generate and DM the image automatically. A two-minute
 REST reconciliation also discovers purchases missed while the bot was offline.
 If DMs are closed, `/character` retrieves the saved result privately. The
 `/premium` shop links this offer and includes its native purchase button when the
-SKU is verified and available. The owner still needs to enable checkout in the
-Discord Developer Portal; deployment does not publish a SKU or set its price.
+SKU is verified and available. Checkout availability and price are controlled
+in the Discord Developer Portal; deployment does not publish a SKU or set its
+price.
 
 ## Character source and rendering costs
 

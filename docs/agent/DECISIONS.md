@@ -20,8 +20,9 @@ capacity directly to keep its promised model fixed across behavior overrides.
 Failed image calls require an explicit retry, capped at three attempts;
 no automatic provider switch or quality upgrade is authorized by this product.
 The source count is over 100,000, not claimed to cover all possible characters.
-The SKU was unavailable for checkout during inspection; publishing remains a
-Developer Portal action. This product changes no subscription/donation benefits.
+The SKU was unavailable during initial inspection and available during deployment
+verification. Publishing remains a Developer Portal action. This product changes
+no subscription/donation benefits.
 
 ## 2026-10-11: Requester consent for Gemini retries and personal workload tiers
 
