@@ -41,7 +41,8 @@ Depending on the enabled features and your interactions, MultiVAC processes:
   and consumption state, dates, and revocation status. Earlier local pass/reset
   records, if any, also contain grant periods and reset generations. Payments occur through
   Discord checkout; the bot does not collect your payment card details.
-- **Purchased character images:** saved subject choices, buyer and entitlement
+- **Purchased character images:** saved subject choices, purchase consumption
+  confirmation, buyer and entitlement
   identifiers, selected character/source metadata, render attempts and delivery
   status, refund records, and the completed PNG retained for repeat downloads.
 - **Server app controls:** server and channel IDs, server model defaults and

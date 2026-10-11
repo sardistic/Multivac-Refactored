@@ -51,7 +51,8 @@ def character_caption(row):
     data = json.loads(row["character_json"])
     name = discord.utils.escape_markdown(data["name"])
     source = f"\nCharacter source: <{data['url']}>" if data.get("url") else ""
-    return f"**{name}** — your GFL2-inspired 3D character portrait.{source}\nOne saved PNG image per purchase. Use /character to download it again."
+    return (f"**{name}** — your GFL2-inspired 3D character portrait.{source}\n"
+            f"One saved PNG per purchase. Download this image with /character purchase_id:{row['entitlement_id']}.")
 
 
 class CharacterCog(commands.Cog, name="Characters"):
@@ -101,7 +102,7 @@ class CharacterCog(commands.Cog, name="Characters"):
 
     @commands.Cog.listener()
     async def on_entitlement_delete(self, entitlement):
-        if entitlement.application_id == self.bot.application_id and entitlement.sku_id == self.service.sku_id:
+        if entitlement.application_id == self.bot.application_id and entitlement.sku_id in self.service.sku_ids:
             self.service.store.revoke(entitlement.id)
 
     @commands.Cog.listener()
@@ -114,7 +115,7 @@ class CharacterCog(commands.Cog, name="Characters"):
             try:
                 if self.bot.is_ready() and self.service.sku_id:
                     await self.service.product(self.bot)
-                    async for ent in self.bot.entitlements(limit=None, skus=[discord.Object(self.service.sku_id)], exclude_ended=True):
+                    async for ent in self.bot.entitlements(limit=None, skus=[discord.Object(value) for value in self.service.sku_ids], exclude_ended=True):
                         row = self.service.store.row(ent.id)
                         # Failed API calls require an explicit retry, preventing runaway costs.
                         if row is None or row["state"] == "pending" or (row["state"] == "ready" and not row["delivery_attempted"]):
@@ -125,50 +126,72 @@ class CharacterCog(commands.Cog, name="Characters"):
             await asyncio.sleep(120)
 
     @app_commands.command(name="character", description="Get your purchased character image, or choose a name before buying.")
-    @app_commands.describe(character_name="Before buying: any character/person's name, or 'random' for a random character.")
-    async def character(self, interaction: discord.Interaction, character_name: str | None = None):
-        await self.handle_interaction(interaction, character_name)
+    @app_commands.describe(character_name="Before buying: any character/person's name, or 'random' for a random character.",
+                           purchase_id="Optional purchase ID from a saved image to recover that particular image.")
+    async def character(self, interaction: discord.Interaction, character_name: str | None = None, purchase_id: str | None = None):
+        await self.handle_interaction(interaction, character_name, purchase_id)
 
-    async def handle_interaction(self, interaction, character_name=None):
+    async def handle_interaction(self, interaction, character_name=None, purchase_id=None):
         await interaction.response.defer(ephemeral=True)
         try:
             guild = server_policy.interaction_guild(interaction)
         except PremiumError as exc:
             await interaction.followup.send(str(exc), ephemeral=True)
             return
-        await self.respond(interaction.user.id, guild, getattr(interaction, "channel", None), interaction.followup.send, character_name, private=True)
+        kwargs = {'purchase_id':purchase_id} if purchase_id is not None else {}
+        await self.respond(interaction.user.id, guild, getattr(interaction, "channel", None), interaction.followup.send, character_name, private=True, **kwargs)
 
-    async def respond(self, user_id, guild, channel, send, character_name=None, *, private=False):
+    async def respond(self, user_id, guild, channel, send, character_name=None, *, private=False, purchase_id=None):
         flags = {"ephemeral": True} if private else {}
         try:
             await server_policy.require_active_channel(self.bot, guild, channel)
             quota = check_rate_limit("request", user_id=user_id, guild_id=guild.id if guild else "DM")
             if not quota.allowed:
                 raise PremiumError(f"Request limits are busy. Retry in {quota.retry_after}s; your purchase is retained.")
-            ent = await self.service.purchase(self.bot, user_id)
+            if purchase_id is not None:
+                if not purchase_id.isascii() or not purchase_id.isdecimal() or not 0 < int(purchase_id) < 2**64:
+                    raise PremiumError("Use the purchase ID shown below your saved character image.")
+                ent = await self.service.checked(self.bot, int(purchase_id), user_id)
+            else:
+                ent = await self.service.purchase(self.bot, user_id)
             existing = self.service.store.row(ent.id) if ent else None
             if not (existing and existing["state"] == "ready") and server_policy.get_policy(guild.id if guild else "DM")["ceilings"].get("image") == "economy":
                 raise PremiumError("This server's image maximum excludes Sunburst. Use /character in a DM for this product.")
             if character_name is not None:
                 normalized = None if character_name.casefold().strip() == "random" else character_name.strip()
-                if existing and existing["requested_name"] != normalized:
+                if existing and existing["requested_name"] != normalized and (existing['state']!='ready' or purchase_id is not None):
                     raise PremiumError("Your purchase already has a fixed selection. Download it without specifying a new name.")
                 self.service.store.choice(user_id, normalized)
+                if existing and existing['state']=='ready' and purchase_id is None:
+                    # A completed purchase stays fixed; the new choice is for the
+                    # next checkout, not a reroll of the saved entitlement.
+                    ent = None
             if ent:
                 async def before_render():
                     await server_policy.require_active_channel(self.bot, guild, channel)
                 row = await self.service.render(self.bot, ent.id, user_id, guild_id=guild.id if guild else "DM", before_render=before_render)
                 await self.service.checked(self.bot, ent.id, user_id)
                 await server_policy.require_active_channel(self.bot, guild, channel)
-                await send(character_caption(row), file=discord.File(io.BytesIO(row["image"]), "character.png"), allowed_mentions=discord.AllowedMentions.none(), **flags)
+                view = None
+                if server_policy.get_policy(guild.id if guild else 'DM')['ceilings'].get('image') != 'economy':
+                    try:
+                        product = await self.service.product(self.bot)
+                        view = CharacterOfferView(self, user_id, product)
+                    except (PremiumError, discord.HTTPException, OSError, asyncio.TimeoutError):
+                        pass  # Saved downloads do not depend on the new offer.
+                await send(character_caption(row), file=discord.File(io.BytesIO(row["image"]), "character.png"), view=view,
+                           allowed_mentions=discord.AllowedMentions.none(), **flags)
                 self.service.store.delivery_attempt(ent.id)
             else:
+                if server_policy.get_policy(guild.id if guild else 'DM')['ceilings'].get('image') == 'economy':
+                    raise PremiumError("This server's image maximum excludes Sunburst. Use /character in a DM for this product.")
                 product = await self.service.product(self.bot)
                 view = CharacterOfferView(self, user_id, product)
-                text = ("**GFL2-inspired character portrait — $0.99 once**\n"
-                        "One rendered PNG image per account. Choose any name with /character character_name:NAME "
+                text = ("**GFL2-inspired character portrait — $0.99 per purchase**\n"
+                        "Each purchase delivers one rendered PNG. Choose any name with /character character_name:NAME "
                         "before buying, or leave it random. The image is delivered by DM after purchase; "
-                        "/character recovers it if DMs are closed. Later downloads reuse the same image. "
+                        "/character recovers it if DMs are closed. Later downloads reuse the saved image; "
+                        "buy again for another image. Earlier one-time purchases stay recoverable. "
                         "No throttle benefit. Discord checkout shows the final price.")
                 if not product.flags.available:
                     text += "\nThis product is not available for checkout yet."

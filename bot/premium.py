@@ -121,7 +121,7 @@ class PremiumCog(commands.Cog, name="Premium"):
         if character_cog and character_cog.service.sku_id:
             from services.server_policy import require_active_channel, get_policy, interaction_guild
             character_allowed = True
-            availability = "One saved character image per account. Use /character to choose a name, purchase, or retrieve your image. No throttle benefit."
+            availability = "One saved character PNG per purchase. Buy again for another image; previous purchases remain recoverable. Use /character to choose a name, purchase, or retrieve your images. No throttle benefit."
             try:
                 guild = interaction_guild(interaction)
                 await require_active_channel(self.bot, guild, getattr(interaction, "channel", None))
@@ -130,10 +130,10 @@ class PremiumCog(commands.Cog, name="Premium"):
             except PremiumError as exc:
                 character_allowed = False
                 availability = str(exc)
-            embed.add_field(name="GFL2-inspired character portrait — $0.99 once",
+            embed.add_field(name="GFL2-inspired character portrait — $0.99 per purchase",
                             value=availability, inline=False)
             character_sku = self.service.catalog.get(character_cog.service.sku_id)
-            if character_allowed and verified and character_sku and character_sku.type == discord.SKUType.durable and character_sku.flags.available:
+            if character_allowed and verified and character_sku and character_sku.type == discord.SKUType.consumable and character_sku.flags.available:
                 view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=character_sku.id))
         effect_cog = self.bot.get_cog("Unattractive") if hasattr(self.bot, "get_cog") else None
         if effect_cog and effect_cog.service.sku_id:

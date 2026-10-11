@@ -3,9 +3,10 @@
 Right-click or long-press a Discord user profile (including MultiVAC) or a
 message, then open **Apps**:
 
-- **Character portrait $0.99** opens the existing one-time character purchase
+- **Character portrait $0.99** opens the repeatable character purchase
   and saved-image recovery. Choose character opens a subject-name form. The
-  purchase keeps Sunburst 2.5 low quality at 1024 square and one saved PNG.
+  purchase keeps Sunburst 2.5 low quality at 1024 square and one saved PNG per
+  purchase. Earlier one-time purchases stay recoverable.
 - **Generate image** opens an editable description form. This is ordinary image
   generation with your model defaults and normal quotas, separate from the paid
   character product. Message actions prefill the description from the message;
@@ -44,7 +45,9 @@ Use an explicit mention or reply to MultiVAC:
 `$1`, `$1.00`, `$.99`, and `$0.99` are aliases for the existing $0.99 SKU.
 The bot offers Discord checkout if you do not own it, or returns your saved
 image if you do. Typing a dollar amount never charges your account. A completed
-image is reused; another shortcut does not buy or reroll it. A named selection
+image is reused; another shortcut does not buy or reroll it. The saved-image
+response offers another checkout. An explicit new character choice after a
+completed image opens the next offer without changing that saved image. A named selection
 is fixed when the purchase is reserved. Ordinary mentions such as `imagine a
 cat` retain their existing image route.
 

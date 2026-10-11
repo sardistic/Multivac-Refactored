@@ -373,8 +373,8 @@ class GuildPolicyTests(unittest.IsolatedAsyncioTestCase):
     async def test_paid_sunburst_maximum_blocks_new_render_but_dm_recovery_works(self):
         service = CharacterRenderService(CharacterStore(self.path/'characters.db'), catalog=SimpleNamespace(choose=AsyncMock(return_value={
             'name':'Sonic','description':'','source':'Named selection','url':'','image':''})))
-        product = SimpleNamespace(id=CHARACTER_SKU_ID, application_id=42, type=discord.SKUType.durable)
-        entitlement = SimpleNamespace(id=10,user_id=7,sku_id=CHARACTER_SKU_ID,application_id=42,guild_id=None,deleted=False,starts_at=None,ends_at=None)
+        product = SimpleNamespace(id=CHARACTER_SKU_ID, application_id=42, type=discord.SKUType.consumable)
+        entitlement = SimpleNamespace(id=10,user_id=7,sku_id=CHARACTER_SKU_ID,application_id=42,guild_id=None,deleted=False,starts_at=None,ends_at=None,consumed=False,consume=AsyncMock())
         client = SimpleNamespace(application_id=42,fetch_skus=AsyncMock(return_value=[product]),fetch_entitlement=AsyncMock(return_value=entitlement))
         server_policy.update_policy(40,workload='image',max_tier='economy')
         with patch.object(stability_generation,'generate_gpt_image',new=AsyncMock(return_value=png())) as generate:

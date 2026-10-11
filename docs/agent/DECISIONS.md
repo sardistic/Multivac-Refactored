@@ -1,5 +1,28 @@
 # Architectural Decisions
 
+## 2026-10-11: Repeatable consumable character portraits with legacy recovery
+
+The operator replaced new character checkout with published consumable SKU
+1558875787321679992 at $0.99. Each entitlement gets one separately frozen
+selection and saved Sunburst PNG. The previous durable SKU 1558749059609665566
+is unpublished but remains accepted for recovery and is never consumed. No
+existing entitlement, image, selection or retry state is migrated to a new SKU.
+
+Commit ready image bytes before calling Discord consume. A consumption error
+keeps the ready state; restart/retry performs only consumption confirmation.
+Consumed purchases without local ready bytes are denied. An additive confirmation
+column avoids repeated successful consumes, while actual ownership, validity and
+refund checks remain authoritative. Consumption never grants another render for
+the same entitlement. Existing limits and fixed Sunburst low 1024-square settings
+remain. Refund races revoke bytes before delivery.
+
+Commands prioritize unfinished, unused, then newest saved purchases. Captions
+include a purchase selector for older images; runtime ownership checks protect
+it. A saved response offers new checkout where allowed, and a post-completion
+subject choice targets only the next purchase. Gateway and REST processing watch
+both SKU IDs. Product descriptions now say one image per purchase; local legal
+draft changes do not publish the public legal site.
+
 ## 2026-10-11: Image edit parameters depend on model support
 
 The first live paid reference render failed with OpenAI's

@@ -1,4 +1,4 @@
-"""One cached image per Discord durable entitlement, with restart recovery."""
+"""One cached image per Discord purchase, with consumable and legacy recovery."""
 
 import asyncio
 import io
@@ -20,7 +20,8 @@ from services import usage_costs
 from services.url_utils import fetch_url_bytes_async
 
 logger = logging.getLogger("discord_bot")
-CHARACTER_SKU_ID = 1558749059609665566
+CHARACTER_SKU_ID = 1558875787321679992
+LEGACY_CHARACTER_SKU_ID = 1558749059609665566
 CHARACTER_MODEL = "gpt-image-2.5-sunburst"
 
 
@@ -40,6 +41,9 @@ class CharacterStore:
                     delivery_attempted INTEGER NOT NULL DEFAULT 0
                 );
             """)
+            conn.execute("BEGIN IMMEDIATE")
+            if 'consumption_confirmed' not in {r[1] for r in conn.execute('PRAGMA table_info(character_renders)')}:
+                conn.execute('ALTER TABLE character_renders ADD COLUMN consumption_confirmed INTEGER NOT NULL DEFAULT 0')
         os.chmod(self.path, 0o600)
 
     @contextmanager
@@ -115,6 +119,12 @@ class CharacterStore:
             return bool(conn.execute("UPDATE character_renders SET delivery_attempted=1 WHERE entitlement_id=? AND state='ready' AND delivery_attempted=0",
                                      (str(entitlement_id),)).rowcount)
 
+    def confirm_consumption(self, entitlement_id):
+        with self.connect() as conn:
+            if not conn.execute("UPDATE character_renders SET consumption_confirmed=1 WHERE entitlement_id=? AND state='ready' AND image IS NOT NULL",
+                                (str(entitlement_id),)).rowcount:
+                raise PremiumError("This purchase was removed before delivery.")
+
     def revoke(self, entitlement_id):
         with self.connect() as conn:
             conn.execute("INSERT OR IGNORE INTO character_revocations VALUES(?)", (str(entitlement_id),))
@@ -122,28 +132,69 @@ class CharacterStore:
 
 
 class CharacterRenderService:
-    def __init__(self, store, *, sku_id=CHARACTER_SKU_ID, catalog=None):
+    def __init__(self, store, *, sku_id=CHARACTER_SKU_ID, legacy_sku_id=LEGACY_CHARACTER_SKU_ID, catalog=None):
         self.store, self.sku_id = store, sku_id
+        self.sku_ids = tuple(dict.fromkeys(value for value in (sku_id, legacy_sku_id) if value)) if sku_id else ()
+        self._consume_lock = asyncio.Lock()
         self.catalog = catalog or CharacterCatalog()
 
-    async def product(self, client):
-        if not self.sku_id:
+    @staticmethod
+    def sku_type(sku_id):
+        return discord.SKUType.durable if sku_id == LEGACY_CHARACTER_SKU_ID else discord.SKUType.consumable
+
+    async def product(self, client, sku_id=None):
+        sku_id = self.sku_id if sku_id is None else sku_id
+        if sku_id not in self.sku_ids:
             raise PremiumError("Character purchases are disabled.")
-        sku = next((s for s in await client.fetch_skus() if s.id == self.sku_id), None)
-        if sku is None or sku.application_id != client.application_id or sku.type != discord.SKUType.durable:
-            raise PremiumError("The character product must be this application's durable one-time SKU.")
+        sku = next((s for s in await client.fetch_skus() if s.id == sku_id), None)
+        if sku is None or sku.application_id != client.application_id or sku.type != self.sku_type(sku_id):
+            raise PremiumError("The character product must have its expected SKU type and belong to MultiVAC.")
         return sku
 
     async def purchase(self, client, user_id):
-        await self.product(client)
-        async for ent in client.entitlements(limit=None, user=discord.Object(int(user_id)), skus=[discord.Object(self.sku_id)], exclude_ended=True):
+        if not self.sku_ids:
+            return None
+        choices = []
+        async for ent in client.entitlements(limit=None, user=discord.Object(int(user_id)), skus=[discord.Object(value) for value in self.sku_ids], exclude_ended=True):
             if self.valid(ent, client.application_id, user_id):
-                return ent
-        return None
+                row = self.store.row(ent.id)
+                priority = 0 if row and row['state'] not in {'ready','revoked'} else 1 if row is None else 2
+                choices.append((priority, -ent.id, ent))
+        return min(choices, key=lambda item: item[:2])[2] if choices else None
 
     def valid(self, entitlement, app_id, user_id):
-        return (entitlement.user_id is not None and str(entitlement.user_id) == str(user_id)
-                and entitlement.guild_id is None and entitlement_valid(entitlement, app_id, self.sku_id, time.time()))
+        if not (entitlement.sku_id in self.sku_ids and entitlement.user_id is not None
+                and str(entitlement.user_id) == str(user_id) and entitlement.guild_id is None
+                and entitlement_valid(entitlement, app_id, entitlement.sku_id, time.time())):
+            return False
+        row = self.store.row(entitlement.id)
+        if row and (row['state']=='revoked' or row['user_id']!=str(user_id) or row['sku_id']!=str(entitlement.sku_id)):
+            return False
+        # Consumed purchases can recover only their already-saved image.
+        return not getattr(entitlement,'consumed',False) or bool(row and row['state']=='ready' and row['image'])
+
+    async def finish(self, client, entitlement_id, user_id):
+        async with self._consume_lock:
+            ent = await self.checked(client, entitlement_id, user_id)
+            row = self.store.row(ent.id)
+            if self.sku_type(ent.sku_id) == discord.SKUType.consumable and not row['consumption_confirmed']:
+                if not ent.consumed:
+                    try:
+                        await ent.consume()
+                    except (discord.HTTPException, OSError, asyncio.TimeoutError) as exc:
+                        # A lost response may follow successful consumption. Fetch
+                        # again; otherwise retain ready bytes for a consume-only retry.
+                        try:
+                            ent = await self.checked(client, entitlement_id, user_id)
+                        except PremiumError:
+                            raise
+                        except Exception:
+                            raise PremiumError("Your image is saved, but Discord did not confirm the purchase. Retry /character; no new render is needed.") from exc
+                        if not ent.consumed:
+                            raise PremiumError("Your image is saved, but Discord did not confirm the purchase. Retry /character; no new render is needed.") from exc
+                await self.checked(client, entitlement_id, user_id)
+                self.store.confirm_consumption(ent.id)
+            return self.store.row(ent.id)
 
     async def checked(self, client, entitlement_id, user_id):
         try:
@@ -161,15 +212,15 @@ class CharacterRenderService:
         return ent
 
     async def render(self, client, entitlement_id, user_id, *, guild_id="DM", before_render=None):
-        await self.product(client)
         ent = await self.checked(client, entitlement_id, user_id)
+        await self.product(client, ent.sku_id)
         self.store.reserve(ent)
         from services.server_policy import get_policy
         if self.store.row(ent.id)["state"] != "ready" and get_policy(guild_id)["ceilings"].get("image") == "economy":
             raise PremiumError("This server's image maximum excludes Sunburst. Your purchase is retained; use /character in a DM to recover it.")
         lease = self.store.claim(ent.id, time.time())
         if lease is None:
-            return self.store.row(ent.id)
+            return await self.finish(client, ent.id, user_id)
         previous_context = usage_costs.get_request_context()
         usage_costs.set_request_context(user_id=str(user_id), guild_id=str(guild_id), intent="character_render")
         try:
@@ -216,7 +267,6 @@ class CharacterRenderService:
                 picture.verify()
             await self.checked(client, ent.id, user_id)
             self.store.update(ent.id, lease, image=raw, state="ready", lease_until=0)
-            return self.store.row(ent.id)
         except BaseException:
             try:
                 self.store.update(ent.id, lease, state="failed", lease_until=0)
@@ -225,6 +275,9 @@ class CharacterRenderService:
             raise
         finally:
             usage_costs.set_request_context(**previous_context)
+        # Consumption happens after ready bytes are committed and outside the
+        # render error handler, so a consume failure cannot make them rerender.
+        return await self.finish(client, ent.id, user_id)
 
 
 _SERVICE = None

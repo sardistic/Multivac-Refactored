@@ -1,18 +1,20 @@
 # Purchased GFL2-inspired character portraits
 
-SKU `1558749059609665566` belongs to MultiVAC application
+The active SKU `1558875787321679992` belongs to MultiVAC application
 `1087777433459118100`. Authenticated Discord inspection on October 11, 2026
-verified its name as `gfl2 3d character model`, its type as durable (`2`), and its
-availability flags initially as `0` (unavailable for checkout). Post-deployment
-verification later that day confirmed checkout available. The operator selected
-**$0.99 once for one rendered character image**. Checkout supplies the actual
-price; the SKU API does not return prices.
+verified its name as `random gfl2 3d character model`, consumable type (`3`),
+and checkout availability. The operator's listing shows **$0.99 per purchase**.
+Checkout supplies the actual localized price; the SKU API does not return prices.
+The earlier durable SKU `1558749059609665566` is no longer available for new
+checkout, but its existing purchases remain recoverable.
 
 The delivered artifact is a PNG showing a character in a GFL2-inspired 3D game
 render style. It is not a downloadable mesh or an official game asset. Each
 verified entitlement earns one completed saved image; later downloads return
-that image. A durable SKU can normally be purchased once per account. It grants
-no throttle benefit and is never sent to Discord's consumable consume endpoint.
+that image. After saving the completed image, the bot consumes the new SKU's
+entitlement to allow another purchase. Each new purchase gets its own selection
+and saved image. No throttle benefit is included. The earlier durable SKU is
+never consumed or converted into an additional render.
 
 Use `/character` before buying to view the offer and native purchase button.
 `/character character_name:NAME` saves any named subject before purchase;
@@ -21,11 +23,18 @@ fixed when the purchase is reserved. A named subject does not need a catalog
 entry; fidelity depends on the image model's knowledge of that subject.
 Without a named choice, purchases use a random catalog character.
 
-The **Apps → Character portrait $0.99** message action opens the same flow.
+The **Apps → Character portrait $0.99** profile or message action opens the same flow.
 `@MultiVAC $1 random plz` is a shortcut to this $0.99 SKU, not an immediate
 charge or another render. Server purchase offers and media app actions require
 previous bot activity in that channel and respect server-manager restrictions;
 DM recovery remains available. See [app actions](app_actions.md).
+
+`/character` prioritizes an unfinished purchase, then an unused purchase, then
+the most recent saved image. Captions include `/character purchase_id:ID` to
+retrieve a particular older image. Selecting another member's purchase is
+denied. Saved downloads offer the next checkout where the channel and server
+model maximum allow it. Choosing a new name after completion changes only the
+next purchase's choice, not any previously saved selection.
 
 Purchase gateway events generate and DM the image automatically. A two-minute
 REST reconciliation also discovers purchases missed while the bot was offline.
@@ -74,10 +83,17 @@ still needs compute. No reliable unlimited free hosted renderer was verified.
 
 `character_renders.db` in application state stores named choices, entitlement
 and buyer IDs, the fixed character/source record, render attempt/lease state,
-the saved PNG, and refund tombstones. Include it in backups, privacy access,
+the saved PNG, consumption confirmation, and refund tombstones. Include it in backups, privacy access,
 and full-data deletion procedures. It has no automatic expiry. Refund/deletion
 events remove the stored PNG and deny access; retrieval rechecks the actual
 Discord entitlement before returning an image.
+
+An additive `consumption_confirmed` column preserves existing ledger rows. A
+consumption timeout or uncertain response keeps ready image bytes; recovery
+checks Discord and retries only consumption, not generation. A consumed
+entitlement without an existing ready image is rejected. A crash after Discord
+consumes but before local confirmation is recovered from the saved image.
+Refunds during consumption still remove the image and block delivery.
 
 A SQLite transaction claims each entitlement so concurrent gateway events,
 command invocations, and processes cannot start duplicate completed jobs.
@@ -96,5 +112,6 @@ Delivery attempts are recorded before DM sends to avoid repeating failed DMs
 on every poll; customers retain private command recovery.
 
 `MULTIVAC_CHARACTER_SKU_ID=0` disables purchase processing. Its default is the
-verified supplied ID; changing it still requires validation against a durable
-SKU belonging to this app. No new API key or infrastructure service is needed.
+new consumable ID; alternate primary products must be consumable and belong to
+this app. The known earlier durable SKU is accepted for recovery while processing
+is enabled. No new API key or infrastructure service is needed.

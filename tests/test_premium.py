@@ -609,10 +609,10 @@ class PremiumCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(interaction.edit_original_response.call_args.kwargs["view"])
         self.assertTrue(view.is_finished())
 
-    async def test_character_purchase_button_requires_available_durable_sku(self):
-        for kind, flags, expected in [(discord.SKUType.durable, 4, True),
-                                      (discord.SKUType.durable, 0, False),
-                                      (discord.SKUType.consumable, 4, False)]:
+    async def test_character_purchase_button_requires_available_consumable_sku(self):
+        for kind, flags, expected in [(discord.SKUType.consumable, 4, True),
+                                      (discord.SKUType.consumable, 0, False),
+                                      (discord.SKUType.durable, 4, False)]:
             with self.subTest(kind=kind, flags=flags):
                 service = SimpleNamespace(refresh=AsyncMock(), config=SKUConfig(),
                                           catalog={700: sku(700, kind, flags)}, user_boost=2, guild_boost=2)
