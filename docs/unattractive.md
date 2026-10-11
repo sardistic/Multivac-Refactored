@@ -3,9 +3,9 @@
 SKU `1558762748324876308` is a **$1.99 consumable**. One confirmed activation
 adds **10 minutes** of intentionally unappealing chat and newly generated
 visuals for **everyone in the selected server**. It grants no throttle benefit.
-The SKU was verified as type 3 and unavailable for checkout during initial
-inspection; publish it in Discord after deploying the integration. Discord
-checkout provides the final localized price.
+The SKU was verified as type 3 and available for checkout during live
+post-deployment verification. Discord checkout provides the final localized
+price; publishing and availability are controlled in the Developer Portal.
 
 Use `/unattractive` or `@MultiVAC unattractive` for checkout. After buying,
 use `/unattractive action:activate` or `@MultiVAC unattractive activate` in
