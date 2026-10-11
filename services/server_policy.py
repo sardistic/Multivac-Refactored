@@ -161,6 +161,9 @@ async def require_active_channel(bot, guild, channel):
             text = getattr(original, "content", "")
             import re
             text = re.sub(r"<@!?\d+>", "", text).strip()
+            from services.server_effects import unattractive_action
+            if unattractive_action(text) is not None:
+                continue
             if text.startswith(("$", "/character", "/generate_image")) or text.lower().startswith(("model defaults", "server ")):
                 continue
             if original.author.bot:

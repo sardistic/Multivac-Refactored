@@ -96,7 +96,7 @@ from services.security_limits import check_rate_limit
 from bot.model_defaults import ModelDefaultsCog
 from bot.characters import CharacterCog
 from bot.unattractive import UnattractiveCog
-from bot.app_actions import AppActionsCog, handle_app_text
+from bot.app_actions import AppActionsCog, handle_app_text, unattractive_action
 from bot.server_settings import ServerSettingsCog
 from services.server_policy import server_scope, note_activity
 from services.security_utils import public_error_detail, sanitize_diagnostic_text
@@ -789,6 +789,9 @@ async def on_raw_reaction_add(payload):
 async def _builtin_on_command_error(ctx, error):
     """Surface command failures to the user instead of hanging a deferred
     interaction on silent 'thinking'."""
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.reply("That text command isn't available. Choose a command from Discord's / menu, or mention MultiVAC with your request.", allowed_mentions=discord.AllowedMentions.none())
+        return
     root = getattr(error, "original", None) or error.__cause__ or error
     logger.error(
         "Command %s failed: %r",
@@ -2112,6 +2115,9 @@ async def _builtin_on_message(message: discord.Message):
 
     # Pass-through slash/! commands
     if message.content.startswith(bot.command_prefix):
+        if unattractive_action(message.content) is not None:
+            await handle_app_text(bot, message, message.content)
+            return
         await bot.process_commands(message)
         return
 

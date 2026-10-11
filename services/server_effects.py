@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -15,6 +16,17 @@ from services.usage_costs import get_request_context
 
 UNATTRACTIVE_SKU_ID = 1558762748324876308
 EFFECT_SECONDS = 600
+
+
+class NoUnusedEffectPurchase(PremiumError):
+    """The buyer needs checkout rather than a generic activation error."""
+
+
+def unattractive_action(prompt):
+    match = re.fullmatch(r"/?unattractive(?:\s+(?:action:)?(shop|activate|status|stop))?",prompt.strip(),re.I)
+    return (match[1] or 'shop').lower() if match else None
+
+
 STYLE_MARKER = "[MultiVAC Unattractive mode]"
 CHAT_STYLE = (
     STYLE_MARKER + " A paid temporary server-wide style is active. Answer the actual request "
@@ -166,7 +178,7 @@ class ServerEffectService:
                         entitlement = candidate
                         break
                 if entitlement is None:
-                    raise PremiumError("No unused Unattractive purchase was found. Buy it with /unattractive, then activate it in this server.")
+                    raise NoUnusedEffectPurchase("No unused Unattractive purchase was found. Buy it with /unattractive, then activate it in this server.")
             if not self.valid(entitlement,client.application_id,user_id):
                 if pending:
                     self.store.revoke(entitlement.id)

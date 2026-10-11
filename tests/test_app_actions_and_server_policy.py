@@ -185,6 +185,55 @@ class GuildPolicyTests(unittest.IsolatedAsyncioTestCase):
         paid.respond.assert_awaited_once_with(7,None,item.channel,item.reply,'random')
         classify.assert_not_awaited()
 
+    async def test_literal_unattractive_prefix_uses_app_flow_without_legacy_command_or_classifier(self):
+        import discord_bot
+        for content, action in (('/unattractive','shop'),('/unattractive activate','activate'),('/unattractive action:status','status')):
+            with self.subTest(content=content):
+                item = request()
+                item.id=1002; item.content=content
+                effect = SimpleNamespace(respond=AsyncMock())
+                reflection = SimpleNamespace(observe_message=AsyncMock(return_value=set()))
+                with patch.object(discord_bot.bot,'get_cog',return_value=effect), \
+                     patch.object(discord_bot,'_already_processed',return_value=False), \
+                     patch.object(discord_bot,'_get_reflection_worker',return_value=reflection), \
+                     patch.object(discord_bot.bot,'process_commands',new_callable=AsyncMock) as legacy, \
+                     patch.object(discord_bot,'classify_intent',new_callable=AsyncMock) as classify:
+                    await discord_bot._builtin_on_message(item)
+                effect.respond.assert_awaited_once_with(item.author,item.guild,item.channel,item.reply,action)
+                legacy.assert_not_awaited()
+                classify.assert_not_awaited()
+
+    async def test_other_prefix_commands_still_use_legacy_handler(self):
+        import discord_bot
+        item = request(); item.id=1003; item.content='/help'
+        reflection = SimpleNamespace(observe_message=AsyncMock(return_value=set()))
+        with patch.object(discord_bot,'_already_processed',return_value=False), \
+             patch.object(discord_bot,'_get_reflection_worker',return_value=reflection), \
+             patch.object(discord_bot.bot,'process_commands',new_callable=AsyncMock) as legacy:
+            await discord_bot._builtin_on_message(item)
+        legacy.assert_awaited_once_with(item)
+
+    async def test_unknown_text_command_returns_guidance_without_internal_error(self):
+        import discord_bot
+        from discord.ext import commands
+        context = SimpleNamespace(command=None,reply=AsyncMock())
+        with patch.object(discord_bot.logger,'error') as log_error:
+            await discord_bot._builtin_on_command_error(context,commands.CommandNotFound('missing'))
+        text = context.reply.await_args.args[0]
+        self.assertIn("Discord's / menu",text)
+        self.assertNotIn('CommandNotFound',text)
+        log_error.assert_not_called()
+
+    async def test_history_does_not_count_unattractive_checkout_as_normal_activity(self):
+        item = request()
+        original = SimpleNamespace(author=item.user,content='/unattractive')
+        previous = SimpleNamespace(author=SimpleNamespace(id=99),reference=SimpleNamespace(resolved=original),content='Buy Unattractive here',webhook_id=None)
+        async def past(**kwargs): yield previous
+        item.channel.history = past
+        with self.assertRaises(PremiumError):
+            await server_policy.require_active_channel(self.bot,item.guild,item.channel)
+        self.assertEqual(server_policy.channel_state(40,5),0)
+
     async def test_explicit_external_provider_and_fallback_cannot_bypass_ceiling(self):
         server_policy.update_policy(40,workload='chat',max_tier='economy')
         item=request();item.content='claude hello'

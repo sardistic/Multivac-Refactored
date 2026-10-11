@@ -1,5 +1,16 @@
 # Architectural Decisions
 
+## 2026-10-11: Plain-text Unattractive slash syntax and checkout recovery
+
+A plain /unattractive message previously entered the legacy prefix-command
+handler, although Unattractive is registered as an application command only.
+Route its exact known text forms, including action:VALUE, through the existing
+app text handler before legacy dispatch. Other prefix commands retain their
+handler. Unknown text commands return command-picker guidance instead of an
+internal CommandNotFound error. Purchase confirmation with no unused entitlement
+opens the verified native checkout offer directly, without consumption or grant.
+These checkout/control messages do not establish historical channel activity.
+
 ## 2026-10-11: Consumable Unattractive server-wide generation context
 
 The owner selected $1.99, everyone in the selected server, and both chat and

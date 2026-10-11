@@ -14,6 +14,7 @@ from services import server_policy, usage_costs
 from services.model_preferences import image_choice, set_preferences
 from services.premium import PremiumError
 from services.security_limits import check_rate_limit, provider_capacity
+from services.server_effects import unattractive_action
 
 logger = logging.getLogger("discord_bot")
 _PRICE = re.compile(r"^\$(?:1(?:\.00)?|0?\.99)(?:\s+(.*))?$", re.I)
@@ -122,7 +123,7 @@ async def handle_app_text(bot, message, prompt):
     lowered = prompt.strip().lower()
     defaults = re.fullmatch(r"model[_ ]defaults(?:\s+(\w+)\s+(\w+))?", lowered)
     server = re.fullmatch(r"server\s+(settings|model|cap|throttle|channel)(?:\s+(.*))?", lowered)
-    effect = re.fullmatch(r"unattractive(?:\s+(shop|activate|status|stop))?", lowered)
+    effect = unattractive_action(prompt)
     if not (paid or defaults or server or effect):
         return False
     if paid:
@@ -134,7 +135,11 @@ async def handle_app_text(bot, message, prompt):
         return True
     try:
         if effect:
-            await bot.get_cog("Unattractive").respond(message.author, message.guild, message.channel, message.reply, effect[1] or "shop")
+            cog = bot.get_cog("Unattractive")
+            if cog is None:
+                await message.reply("Unattractive is still starting up. Try again shortly.")
+                return True
+            await cog.respond(message.author, message.guild, message.channel, message.reply, effect)
         elif defaults:
             if defaults[1]:
                 set_preferences(message.author.id, defaults[1], defaults[2])

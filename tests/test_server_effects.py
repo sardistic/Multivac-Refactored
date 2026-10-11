@@ -265,6 +265,36 @@ class ServerEffectTests(unittest.IsolatedAsyncioTestCase):
         interaction.user.id,interaction.guild_id = 7,40
         self.assertTrue(await view.interaction_check(interaction))
 
+    async def test_missing_purchase_confirmation_opens_native_checkout_without_consumption(self):
+        self.client.items = {}
+        cog = UnattractiveCog(self.client,self.service)
+        view = EffectActivationView(cog,7,40)
+        interaction = SimpleNamespace(user=SimpleNamespace(id=7),guild_id=40,guild=SimpleNamespace(id=40),channel=SimpleNamespace(),
+            response=SimpleNamespace(defer=AsyncMock()),edit_original_response=AsyncMock())
+        with patch('bot.unattractive.server_policy.require_active_channel',new=AsyncMock()), \
+             patch('bot.unattractive.check_rate_limit',return_value=SimpleNamespace(allowed=True)):
+            await view.confirm.callback(interaction)
+        result = interaction.edit_original_response.await_args.kwargs
+        self.assertIn('$1.99',result['content'])
+        self.assertEqual(result['view'].children[0].style,discord.ButtonStyle.premium)
+        self.assertEqual(result['view'].children[0].sku_id,400)
+        self.assertIsNone(self.service.active_until(40))
+        self.assertIsNone(self.store.pending(7))
+
+    def test_effect_syntax_accepts_plain_slash_and_action_field_without_matching_conversation(self):
+        for prompt, action in (('/unattractive','shop'),('unattractive','shop'),('/unattractive activate','activate'),
+                               ('/unattractive action:stop','stop'),('UNATTRACTIVE STATUS','status')):
+            self.assertEqual(server_effects.unattractive_action(prompt),action)
+        for prompt in ('an unattractive image','/unattractive activate please','/unattractive2','unattractive unknown'):
+            self.assertIsNone(server_effects.unattractive_action(prompt))
+
+    async def test_text_checkout_during_startup_returns_retry_guidance(self):
+        from bot.app_actions import handle_app_text
+        message=SimpleNamespace(author=SimpleNamespace(id=7),guild=SimpleNamespace(id=40),reply=AsyncMock())
+        with patch('bot.app_actions.check_rate_limit',return_value=SimpleNamespace(allowed=True)):
+            self.assertTrue(await handle_app_text(SimpleNamespace(get_cog=lambda name:None),message,'/unattractive'))
+        self.assertIn('starting up',message.reply.await_args.args[0])
+
     async def test_ordinary_member_cannot_stop_server_effect(self):
         await self.activate()
         interaction = SimpleNamespace(guild=SimpleNamespace(id=40),guild_id=40,

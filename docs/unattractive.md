@@ -14,6 +14,12 @@ must already be eligible for media app actions and still permit the bot to
 view/send. A purchase alone does not pick a server or start the timer. Purchases
 made outside the server can be activated here later; DMs cannot activate it.
 
+Sending `/unattractive` as an ordinary text message also opens checkout;
+`/unattractive activate` and `/unattractive action:activate` open confirmation.
+If confirmation finds no unused purchase, it opens native checkout directly
+without consuming anything or starting the timer. True Discord slash commands
+remain available in the command picker.
+
 Any member with access to MultiVAC can activate their own purchase. Repeated
 purchases queue another 10-minute window after existing active/queued time.
 `/unattractive action:status` shows the current server timer. Members with

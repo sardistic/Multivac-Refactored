@@ -12,7 +12,7 @@ from bot.server_settings import can_manage_server
 from services import server_policy
 from services.premium import PremiumError
 from services.security_limits import check_rate_limit
-from services.server_effects import get_server_effect_service
+from services.server_effects import get_server_effect_service, NoUnusedEffectPurchase
 
 logger = logging.getLogger('discord_bot')
 
@@ -41,6 +41,13 @@ class EffectActivationView(discord.ui.View):
             text = (f"Unattractive activated for this server: <t:{int(result['grant_start'])}:T> "
                     f"through <t:{int(result['grant_end'])}:T>. Everyone's chat and newly generated "
                     "visuals use the unappealing style during that window. Server managers can stop it with /unattractive stop.")
+        except NoUnusedEffectPurchase:
+            async def edit_offer(content, **kwargs):
+                await interaction.edit_original_response(content=content, **kwargs)
+
+            await self.cog.respond(interaction.user, interaction.guild, interaction.channel, edit_offer, 'shop')
+            self.stop()
+            return
         except PremiumError as exc:
             text = str(exc)
         except Exception as exc:
