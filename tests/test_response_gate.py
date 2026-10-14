@@ -115,7 +115,7 @@ class DiscordSilenceGateTests(unittest.IsolatedAsyncioTestCase):
         notice = message.reply.call_args.kwargs
         self.assertIn("2 seconds", notice["content"])
         self.assertIsInstance(notice["view"], ThrottleShopView)
-        self.assertEqual(notice["view"].user_id, 7)
+        self.assertTrue(notice["view"].is_persistent())
         notice["view"].stop()
 
 

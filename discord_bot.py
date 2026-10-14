@@ -93,7 +93,7 @@ from services.progress import (
     start_progress_bar,
 )
 from services.security_limits import check_rate_limit
-from bot.throttle import throttle_notice
+from bot.throttle import shop_request, throttle_notice
 from bot.model_defaults import ModelDefaultsCog
 from bot.characters import CharacterCog
 from bot.unattractive import UnattractiveCog
@@ -2116,7 +2116,7 @@ async def _builtin_on_message(message: discord.Message):
 
     # Pass-through slash/! commands
     if message.content.startswith(bot.command_prefix):
-        if unattractive_action(message.content) is not None:
+        if unattractive_action(message.content) is not None or shop_request(message.content):
             await handle_app_text(bot, message, message.content)
             return
         await bot.process_commands(message)
@@ -2138,6 +2138,10 @@ async def _builtin_on_message(message: discord.Message):
 
     if not (is_direct_mention or is_reply_to_bot) or message.mention_everyone:
         return
+
+    if shop_request(raw_prompt, ref_msg, bot.user.id):
+        await handle_app_text(bot, message, raw_prompt, reference=ref_msg)
+        return
     
     # Skip if user is currently responding to an image selection prompt
     if message.author.id in _pending_image_selection:
@@ -2148,7 +2152,7 @@ async def _builtin_on_message(message: discord.Message):
     if await should_suppress_response(raw_prompt):
         return
 
-    if await handle_app_text(bot, message, raw_prompt):
+    if await handle_app_text(bot, message, raw_prompt, reference=ref_msg):
         return
 
     try:

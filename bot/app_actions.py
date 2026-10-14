@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from bot.model_defaults import ModelDefaultsCog, defaults_text, ModelDefaultsView
 from bot.server_settings import can_manage_server, settings_text
-from bot.throttle import throttle_notice
+from bot.throttle import shop_request, throttle_notice
 from services import server_policy, usage_costs
 from services.model_preferences import image_choice, set_preferences
 from services.premium import PremiumError
@@ -135,8 +135,17 @@ class AppActionsCog(commands.Cog, name="AppActions"):
             usage_costs.set_request_context(**previous)
 
 
-async def handle_app_text(bot, message, prompt):
+async def handle_app_text(bot, message, prompt, *, reference=None):
     """Return handled only for explicit local syntax, before intent classification."""
+    if shop_request(prompt, reference, getattr(getattr(bot, "user", None), "id", None)):
+        cog = bot.get_cog("Premium")
+        if cog is None:
+            await message.reply("The shop is temporarily unavailable. Try /shop or /premium shortly.")
+        else:
+            async def send(**kwargs):
+                await message.reply(**kwargs, allowed_mentions=discord.AllowedMentions.none())
+            await cog.send_shop(message, send)
+        return True
     paid, subject = paid_subject(prompt)
     lowered = prompt.strip().lower()
     defaults = re.fullmatch(r"model[_ ]defaults(?:\s+(\w+)\s+(\w+))?", lowered)

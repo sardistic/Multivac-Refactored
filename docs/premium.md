@@ -80,18 +80,23 @@ and consumes one unused entitlement so it cannot be recorded twice.
 Neither support product renews automatically, and no charitable
 tax-deductibility representation is made.
 
-`/premium` displays configured products with native Discord purchase buttons
+`/shop` (also `/premium`) displays configured products with native Discord purchase buttons
 when the SKUs are available and verified. `/premium_status` reports subscription
 status, the current entitlement end time when supplied by Discord, and effective
 limits. Subscription access is automatic; no redemption is needed.
 
-Throttle notices retain the retry time and offer an **Open shop** button to the
-requester. It opens the same private `/premium` shop, even while request counters
-are capped. Bot-wide cap notices suggest fUnThrottled; personal and server cap
+Throttle notices retain the retry time and offer a persistent **Open shop** button.
+Anyone clicking it opens their own private shop, even while request counters
+are capped. The navigation survives restarts and recovers older, expired shop
+buttons. Bot-wide cap notices suggest fUnThrottled; personal and server cap
 notices explain that the subscription does not remove those caps. Browsing never
 spends a purchase or retries the denied request. Checkout buttons still require
-verified, available SKUs. The shop shortcut expires after five minutes; `/premium`
-remains available afterward.
+verified, available SKUs. Use `/shop` or `/premium` any time. Plain-text `/shop`,
+`@MultiVAC shop`, “your shop” and “where can I access the shop” open the same
+verified storefront directly. A reply asking to link a bot-owned shop notice
+again reopens it. These controls do not need generation quota or a chat-model
+response. Text requests show the product listing in the requesting channel;
+button and native command requests show it privately.
 
 ## Verification and recovery
 

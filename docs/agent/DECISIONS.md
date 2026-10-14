@@ -1,5 +1,22 @@
 # Architectural Decisions
 
+## 2026-10-14: Persistent shop access and explicit storefront routing
+
+The five-minute requester-bound navigation stranded users at expired messages
+and left ordinary shop requests to a model without storefront knowledge. Shop
+navigation now uses a stable persistent component ID, registered at startup;
+any clicker opens their own verified ephemeral shop. A narrow interaction listener
+recovers legacy random-ID Open shop buttons only on this bot's own messages and
+never handles the new registered ID. Browsing carries no purchase or redemption
+authority, so binding public navigation to the original capped user is unnecessary.
+
+Add the native /shop alias and route exact plain-text shop/premium commands,
+explicit storefront questions and link-again replies to bot-owned shop notices
+before quota/classifier work. Reuse the existing shop presentation and media
+eligibility gates; text listings are channel replies, interaction listings remain
+private. Unrelated link requests and general questions about shops retain chat.
+No entitlement, quota, database or provider behavior changes are required.
+
 ## 2026-10-13: Offer the existing shop from throttle notices
 
 Discord throttle replies keep their retry delay and add a requester-bound

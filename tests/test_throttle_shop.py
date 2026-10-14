@@ -1,4 +1,5 @@
 import unittest
+import asyncio
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -10,7 +11,7 @@ import discord_bot
 from bot import app_actions, provider_intents
 from bot.characters import CharacterCog
 from bot.premium import PremiumCog
-from bot.throttle import ThrottleShopView, throttle_notice
+from bot.throttle import SHOP_CUSTOM_ID, ThrottleShopView, is_shop_message, shop_request, throttle_notice
 from bot.unattractive import EffectActivationView, UnattractiveCog
 from services.premium import SKUConfig
 from services.security_limits import RateLimitDecision
@@ -23,7 +24,7 @@ class ThrottleShopTests(unittest.IsolatedAsyncioTestCase):
             catalog={400: SimpleNamespace(id=400, flags=SimpleNamespace(available=True))},
             user_boost=2, guild_boost=2,
         )
-        self.bot = SimpleNamespace(get_cog=lambda name: self.cog if name == "Premium" else None)
+        self.bot = SimpleNamespace(user=SimpleNamespace(id=999), get_cog=lambda name: self.cog if name == "Premium" else None)
         self.cog = PremiumCog(self.bot, self.service)
         self.interaction = SimpleNamespace(
             user=SimpleNamespace(id=7), guild=None, guild_id=None, channel=None,
@@ -43,6 +44,8 @@ class ThrottleShopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("bypasses bot-wide caps", result["content"])
         self.assertIn("Personal and server limits still apply", result["content"])
         self.assertEqual(result["view"].children[0].label, "Open shop")
+        self.assertTrue(result["view"].is_persistent())
+        self.assertIn("Use /shop or /premium any time", result["content"])
         self.service.refresh.assert_not_awaited()
 
     async def test_personal_and_server_notices_do_not_promise_relief(self):
@@ -77,11 +80,113 @@ class ThrottleShopTests(unittest.IsolatedAsyncioTestCase):
         await self.notice()["view"].open_shop.callback(self.interaction)
         self.assertIsNone(self.interaction.followup.send.call_args.kwargs["view"])
 
-    async def test_other_account_cannot_use_requesters_button(self):
+    async def test_another_account_can_open_its_own_private_shop(self):
         self.interaction.user.id = 8
-        self.assertFalse(await self.notice()["view"].interaction_check(self.interaction))
-        self.assertTrue(self.interaction.response.send_message.call_args.kwargs["ephemeral"])
-        self.service.refresh.assert_not_awaited()
+        view = self.notice()["view"]
+        self.assertTrue(await view.interaction_check(self.interaction))
+        await view.open_shop.callback(self.interaction)
+        self.interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+        result = self.interaction.followup.send.call_args.kwargs
+        self.assertTrue(result["ephemeral"])
+        result["view"].stop()
+
+    async def test_persistent_view_registered_on_startup_and_routes_after_restart(self):
+        bot = discord.ext.commands.Bot(command_prefix="/", intents=discord.Intents.none())
+        self.addAsyncCleanup(bot.close)
+        cog = PremiumCog(bot, self.service)
+        bot.get_cog = lambda name: cog if name == "Premium" else None
+        await cog.cog_load()
+        self.addAsyncCleanup(cog.cog_unload)
+        registered = next(view for view in bot.persistent_views if view.children[0].custom_id == SHOP_CUSTOM_ID)
+        self.assertIsNone(registered.timeout)
+        self.assertEqual(self.notice()["view"].children[0].custom_id, registered.children[0].custom_id)
+        delivered = asyncio.Event()
+        async def sent(**kwargs):
+            delivered.set()
+        self.interaction.followup.send.side_effect = sent
+        self.interaction.message = SimpleNamespace(id=1234567, interaction_metadata=None)
+        self.interaction.data = {"component_type": 2, "custom_id": SHOP_CUSTOM_ID}
+        bot._connection._view_store.dispatch_view(2, SHOP_CUSTOM_ID, self.interaction)
+        await asyncio.wait_for(delivered.wait(), timeout=2)
+        result = self.interaction.followup.send.call_args.kwargs
+        self.assertTrue(result["ephemeral"])
+        result["view"].stop()
+
+    async def test_native_shop_alias_opens_same_verified_private_store(self):
+        await PremiumCog.shop_alias.callback(self.cog, self.interaction)
+        client = discord.Client(intents=discord.Intents.none())
+        self.addAsyncCleanup(client.close)
+        tree = discord.app_commands.CommandTree(client)
+        self.assertEqual(PremiumCog.shop_alias.to_dict(tree)["name"], "shop")
+        result = self.interaction.followup.send.call_args.kwargs
+        self.assertTrue(result["ephemeral"])
+        self.assertEqual(result["view"].children[0].sku_id, 400)
+        result["view"].stop()
+
+    def legacy_message(self, custom_id="a" * 32, author_id=999):
+        return SimpleNamespace(
+            author=SimpleNamespace(id=author_id), embeds=[], guild=None, channel=None,
+            components=[SimpleNamespace(children=[SimpleNamespace(custom_id=custom_id, label="Open shop")])],
+        )
+
+    async def test_old_expired_button_is_recovered_without_a_live_view(self):
+        self.interaction.type = discord.InteractionType.component
+        self.interaction.data = {"custom_id": "a" * 32}
+        self.interaction.message = self.legacy_message()
+        self.interaction.response.is_done = lambda: False
+        await self.cog.on_interaction(self.interaction)
+        self.interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+        result = self.interaction.followup.send.call_args.kwargs
+        result["view"].stop()
+
+    async def test_legacy_recovery_ignores_current_buttons_foreign_messages_and_other_actions(self):
+        self.interaction.type = discord.InteractionType.component
+        self.interaction.response.is_done = lambda: False
+        for custom_id, author_id in ((SHOP_CUSTOM_ID, 999), ("a" * 32, 8), ("other", 999)):
+            with self.subTest(custom_id=custom_id, author_id=author_id):
+                self.interaction.data = {"custom_id": custom_id}
+                self.interaction.message = self.legacy_message(custom_id, author_id)
+                await self.cog.on_interaction(self.interaction)
+        self.interaction.response.defer.assert_not_awaited()
+
+    async def test_shop_text_and_reference_recovery_bypass_throttles(self):
+        message = SimpleNamespace(author=SimpleNamespace(id=7), guild=None, channel=None, reply=AsyncMock())
+        reference = self.legacy_message()
+        for prompt in ("/shop", "/premium", "shop", "Where can I access the shop", "your shop", "Can you link this again please"):
+            with self.subTest(prompt=prompt), patch.object(app_actions, "check_rate_limit") as quota:
+                self.assertTrue(await app_actions.handle_app_text(self.bot, message, prompt, reference=reference))
+                quota.assert_not_called()
+                result = message.reply.call_args.kwargs
+                self.assertEqual(result["view"].children[0].sku_id, 400)
+                result["view"].stop()
+
+    async def test_generic_link_requests_require_a_bot_owned_shop_reference(self):
+        for prompt, reference in (("Can you link this again please", None),
+                                  ("Can you link this again please", self.legacy_message(author_id=8)),
+                                  ("How do I build an online shop?", self.legacy_message()),
+                                  ("Where is the shop in this game?", None)):
+            with self.subTest(prompt=prompt):
+                self.assertFalse(shop_request(prompt, reference, 999))
+
+    async def test_shop_ingress_avoids_classifier_and_quota_for_mentions_and_plain_prefix(self):
+        reference = self.legacy_message()
+        for content in ("/shop", "<@999> /shop", "<@999> your shop", "<@999> Can you link this again please"):
+            message = SimpleNamespace(id=90702, content=content, author=SimpleNamespace(id=7, bot=False),
+                                      guild=None, channel=SimpleNamespace(id=3), mention_everyone=False, reply=AsyncMock())
+            reflection = SimpleNamespace(observe_message=AsyncMock(return_value=set()))
+            with patch.object(discord_bot.bot._connection, "user", self.bot.user), patch.object(
+                discord_bot.bot, "get_cog", side_effect=self.bot.get_cog
+            ), patch.object(discord_bot, "_already_processed", return_value=False), patch.object(
+                discord_bot, "_get_reflection_worker", return_value=reflection
+            ), patch.object(discord_bot, "resolve_reference_message", new=AsyncMock(return_value=(reference, True))), patch.object(
+                discord_bot, "check_rate_limit"
+            ) as quota, patch.object(discord_bot, "should_suppress_response", new=AsyncMock()) as classify:
+                await discord_bot._builtin_on_message(message)
+            quota.assert_not_called()
+            classify.assert_not_awaited()
+            result = message.reply.call_args.kwargs
+            self.assertEqual(result["view"].children[0].sku_id, 400)
+            result["view"].stop()
 
     async def test_shop_removed_after_notice_returns_private_recovery(self):
         view = self.notice()["view"]

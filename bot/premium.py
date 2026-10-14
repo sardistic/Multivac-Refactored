@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from functools import partial
 
 import discord
 from discord import app_commands
@@ -11,6 +13,7 @@ from discord.ext import commands
 
 from services.premium import PremiumError, PremiumService, SKUConfig
 from services.security_limits import DEFAULT_RULES
+from bot.throttle import SHOP_CUSTOM_ID, ThrottleShopView, is_shop_message
 
 
 logger = logging.getLogger("discord_bot")
@@ -66,6 +69,7 @@ class PremiumCog(commands.Cog, name="Premium"):
             return False
 
     async def cog_load(self):
+        self.bot.add_view(ThrottleShopView(self.bot))
         await self._refresh()
         self._poll_task = asyncio.create_task(self._poll(), name="multivac-premium-entitlements")
 
@@ -95,9 +99,33 @@ class PremiumCog(commands.Cog, name="Premium"):
     async def on_entitlement_delete(self, entitlement: discord.Entitlement):
         self.service.observe(entitlement, self.bot.application_id, deleted=True)
 
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        """Recover random-ID shop buttons sent before persistent navigation."""
+        if interaction.type != discord.InteractionType.component:
+            return
+        custom_id = (interaction.data or {}).get("custom_id", "")
+        if custom_id == SHOP_CUSTOM_ID or not re.fullmatch(r"[0-9a-f]{32}", custom_id):
+            return
+        message = interaction.message
+        if not is_shop_message(message, self.bot.user.id):
+            return
+        if not any(getattr(item, "custom_id", None) == custom_id and getattr(item, "label", None) == "Open shop"
+                   for row in message.components for item in row.children):
+            return
+        if not interaction.response.is_done():
+            await self.shop.callback(self, interaction)
+
+    @app_commands.command(name="shop", description="Open MultiVAC's subscriptions, donations, character portraits and server effects.")
+    async def shop_alias(self, interaction: discord.Interaction):
+        await self.shop.callback(self, interaction)
+
     @app_commands.command(name="premium", description="Browse MultiVAC subscriptions, donations, character portraits and server effects.")
     async def shop(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+        await self.send_shop(interaction, partial(interaction.followup.send, ephemeral=True))
+
+    async def send_shop(self, location, send):
         verified = await self._refresh()
         embed = discord.Embed(title="Support MultiVAC", color=discord.Color.blurple())
         products = {
@@ -123,8 +151,8 @@ class PremiumCog(commands.Cog, name="Premium"):
             character_allowed = True
             availability = "Generate any named or random character as a gfl2 3d character model using Sunburst. Use /character to choose. $0.99 per image."
             try:
-                guild = interaction_guild(interaction)
-                await require_active_channel(self.bot, guild, getattr(interaction, "channel", None))
+                guild = interaction_guild(location)
+                await require_active_channel(self.bot, guild, getattr(location, "channel", None))
                 if get_policy(guild.id if guild else "DM")["ceilings"].get("image") == "economy":
                     raise PremiumError("This server's image maximum excludes Sunburst. Use /character in a DM for this product.")
             except PremiumError as exc:
@@ -140,10 +168,10 @@ class PremiumCog(commands.Cog, name="Premium"):
             from services.server_policy import require_active_channel, interaction_guild
             effect_description = "Everyone in this server gets 10 minutes of unattractive chat and new visuals. Buy, then use /unattractive activate here and confirm. Managers can stop it. No throttle benefit."
             try:
-                guild = interaction_guild(interaction)
+                guild = interaction_guild(location)
                 if guild is None:
                     raise PremiumError("Use /unattractive in the server you want to affect.")
-                await require_active_channel(self.bot, guild, getattr(interaction, "channel", None))
+                await require_active_channel(self.bot, guild, getattr(location, "channel", None))
                 effect_sku = await effect_cog.service.product(self.bot)
                 if effect_sku.flags.available:
                     view.add_item(discord.ui.Button(style=discord.ButtonStyle.premium, sku_id=effect_sku.id))
@@ -156,7 +184,7 @@ class PremiumCog(commands.Cog, name="Premium"):
             embed.add_field(name="Unattractive — $1.99 per 10 minutes",value=effect_description,inline=False)
         if not view.children:
             embed.description = "Purchases are not currently available. Please contact the operator."
-        await interaction.followup.send(embed=embed, view=view if view.children else None, ephemeral=True)
+        await send(embed=embed, view=view if view.children else None)
 
     @app_commands.command(name="premium_status", description="See your active bonuses and effective personal/guild limits.")
     async def status(self, interaction: discord.Interaction):
