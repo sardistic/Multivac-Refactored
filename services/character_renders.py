@@ -231,7 +231,7 @@ class CharacterRenderService:
                 self.store.update(ent.id, lease, character_json=json.dumps(character))
             await self.checked(client, ent.id, user_id)
             from providers.stability_generation import generate_gpt_image
-            from services.security_limits import check_rate_limit, provider_capacity
+            from services.security_limits import ThrottleError, check_rate_limit, provider_capacity
             # This purchased product fixes the provider/model rather than accepting
             # behavior overrides. Claim a paid attempt only after capacity opens.
             async with provider_capacity(user_id):
@@ -242,7 +242,7 @@ class CharacterRenderService:
                     raise PremiumError("This server's image maximum excludes Sunburst. Your purchase is retained; use /character in a DM.")
                 decision = check_rate_limit("image", user_id=user_id, guild_id=guild_id)
                 if not decision.allowed:
-                    raise PremiumError(f"Image limits are busy. Retry /character in {decision.retry_after}s; your purchase is retained.")
+                    raise ThrottleError(f"Image limits are busy. Retry /character in {decision.retry_after}s; your purchase is retained.", decision)
                 self.store.start_render(ent.id, lease)
                 image = await asyncio.wait_for(generate_gpt_image(
                     character_prompt(character),

@@ -69,6 +69,16 @@ class CharacterRenderTests(unittest.IsolatedAsyncioTestCase):
         self.old_context = usage_costs.get_request_context()
         self.addCleanup(lambda: usage_costs.set_request_context(**self.old_context))
 
+    async def test_image_cap_keeps_decision_and_spends_no_render_or_consumption(self):
+        decision = security_limits.RateLimitDecision(False, 12, 'global')
+        self.limit.return_value = decision
+        with self.assertRaises(security_limits.ThrottleError) as caught:
+            await self.service.render(self.client, 10, 7)
+        self.assertIs(caught.exception.decision, decision)
+        self.assertEqual(self.store.row(10)['attempts'], 0)
+        self.render.assert_not_awaited()
+        self.client.item.consume.assert_not_awaited()
+
     async def test_one_render_survives_restart_and_repeated_downloads(self):
         result = await self.service.render(self.client, 10, 7)
         restarted = CharacterRenderService(CharacterStore(self.path), catalog=self.catalog)

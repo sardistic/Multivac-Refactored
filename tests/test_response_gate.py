@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import discord_bot
 from bot import intent_dispatcher, response_policy
+from bot.throttle import ThrottleShopView
 
 
 class SilencePolicyTests(unittest.IsolatedAsyncioTestCase):
@@ -98,17 +99,24 @@ class DiscordSilenceGateTests(unittest.IsolatedAsyncioTestCase):
             reference=None, mention_everyone=False, reply=AsyncMock(),
         )
         reflection = SimpleNamespace(observe_message=AsyncMock(return_value=set()))
+        premium = SimpleNamespace(service=SimpleNamespace(config=SimpleNamespace(unthrottled=400)))
         with (
             patch.object(discord_bot.bot._connection, "user", SimpleNamespace(id=999)),
             patch.object(discord_bot, "_already_processed", return_value=False),
             patch.object(discord_bot, "_get_reflection_worker", return_value=reflection),
             patch.object(discord_bot.bot, "is_owner", new=AsyncMock(return_value=False)),
-            patch.object(discord_bot, "check_rate_limit", return_value=SimpleNamespace(allowed=False, retry_after=2)),
+            patch.object(discord_bot.bot, "get_cog", return_value=premium),
+            patch.object(discord_bot, "check_rate_limit", return_value=SimpleNamespace(allowed=False, retry_after=2, scope="global")),
             patch("providers.openai_utils.classify_silence_request", new=AsyncMock(return_value=False)) as classify,
         ):
             await discord_bot._builtin_on_message(message)
         classify.assert_awaited_once_with("how does server shutdown work?")
         message.reply.assert_awaited_once()
+        notice = message.reply.call_args.kwargs
+        self.assertIn("2 seconds", notice["content"])
+        self.assertIsInstance(notice["view"], ThrottleShopView)
+        self.assertEqual(notice["view"].user_id, 7)
+        notice["view"].stop()
 
 
 class DispatchSilenceGateTests(unittest.IsolatedAsyncioTestCase):

@@ -11,7 +11,8 @@ from discord.ext import commands
 from bot.server_settings import can_manage_server
 from services import server_policy
 from services.premium import PremiumError
-from services.security_limits import check_rate_limit
+from services.security_limits import ThrottleError, check_rate_limit
+from bot.throttle import throttle_notice
 from services.server_effects import get_server_effect_service, NoUnusedEffectPurchase
 
 logger = logging.getLogger('discord_bot')
@@ -46,6 +47,10 @@ class EffectActivationView(discord.ui.View):
                 await interaction.edit_original_response(content=content, **kwargs)
 
             await self.cog.respond(interaction.user, interaction.guild, interaction.channel, edit_offer, 'shop')
+            self.stop()
+            return
+        except ThrottleError as exc:
+            await interaction.edit_original_response(**throttle_notice(self.cog.bot, self.user_id, exc.decision, str(exc)))
             self.stop()
             return
         except PremiumError as exc:
@@ -102,7 +107,7 @@ class UnattractiveCog(commands.Cog, name='Unattractive'):
         await guard()
         limit = check_rate_limit('request',user_id=interaction.user.id,guild_id=guild.id)
         if not limit.allowed:
-            raise PremiumError(f'Request limits are busy. Retry in {limit.retry_after}s; no purchase was spent.')
+            raise ThrottleError(f'Request limits are busy. Retry in {limit.retry_after}s; no purchase was spent.', limit)
         return await self.service.activate(self.bot,interaction.user.id,guild.id,before_consume=guard)
 
     @app_commands.command(name='unattractive',description='Buy or activate 10 minutes of unattractive chat and visuals for this server.')

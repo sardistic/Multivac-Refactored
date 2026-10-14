@@ -10,10 +10,11 @@ from discord.ext import commands
 
 from bot.model_defaults import ModelDefaultsCog, defaults_text, ModelDefaultsView
 from bot.server_settings import can_manage_server, settings_text
+from bot.throttle import throttle_notice
 from services import server_policy, usage_costs
 from services.model_preferences import image_choice, set_preferences
 from services.premium import PremiumError
-from services.security_limits import check_rate_limit, provider_capacity
+from services.security_limits import ThrottleError, check_rate_limit, provider_capacity
 from services.server_effects import unattractive_action
 
 logger = logging.getLogger("discord_bot")
@@ -107,14 +108,14 @@ class AppActionsCog(commands.Cog, name="AppActions"):
             user_id = interaction.user.id
             request = check_rate_limit("request", user_id=user_id, guild_id=guild_id or "DM")
             if not request.allowed:
-                raise PremiumError(f"Request limits are busy. Retry in {request.retry_after}s.")
+                raise ThrottleError(f"Request limits are busy. Retry in {request.retry_after}s.", request)
             usage_costs.set_request_context(user_id=str(user_id), guild_id=str(guild_id or "DM"), intent="generate_image")
             with server_policy.server_scope(guild_id):
                 async with provider_capacity(user_id):
                     await server_policy.require_active_channel(self.bot, guild, getattr(interaction, "channel", None))
                     limit = check_rate_limit("image", user_id=user_id, guild_id=guild_id or "DM")
                     if not limit.allowed:
-                        raise PremiumError(f"Image limits are busy. Retry in {limit.retry_after}s.")
+                        raise ThrottleError(f"Image limits are busy. Retry in {limit.retry_after}s.", limit)
                     choice = image_choice(user_id)
                     from providers.stability_generation import generate_gpt_image
                     output = await asyncio.wait_for(generate_gpt_image(prompt, model=choice.model, quality=choice.quality), timeout=600)
@@ -123,6 +124,8 @@ class AppActionsCog(commands.Cog, name="AppActions"):
             await server_policy.require_active_channel(self.bot, guild, getattr(interaction, "channel", None))
             await interaction.followup.send(f"Image generated with {choice.label}.", file=discord.File(output, "image.png"),
                                             ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+        except ThrottleError as exc:
+            await interaction.followup.send(**throttle_notice(self.bot, interaction.user.id, exc.decision, str(exc)), ephemeral=True)
         except PremiumError as exc:
             await interaction.followup.send(str(exc), ephemeral=True)
         except Exception as exc:
@@ -146,7 +149,7 @@ async def handle_app_text(bot, message, prompt):
         return True
     limit = check_rate_limit("request", user_id=message.author.id, guild_id=message.guild.id if message.guild else "DM")
     if not limit.allowed:
-        await message.reply(f"Request limits are busy. Retry in {limit.retry_after}s.")
+        await message.reply(**throttle_notice(bot, message.author.id, limit, f"Request limits are busy. Retry in {limit.retry_after}s."))
         return True
     try:
         if effect:

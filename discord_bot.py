@@ -93,6 +93,7 @@ from services.progress import (
     start_progress_bar,
 )
 from services.security_limits import check_rate_limit
+from bot.throttle import throttle_notice
 from bot.model_defaults import ModelDefaultsCog
 from bot.characters import CharacterCog
 from bot.unattractive import UnattractiveCog
@@ -1286,10 +1287,10 @@ async def _natural_code_proposal(message, intent: str, prompt: str, status_msg=N
             ),
         )
         if not quota.allowed:
-            await message.reply(
+            await message.reply(**throttle_notice(bot, requester_id, quota,
                 "⏳ Code-generation quota reached for now. "
                 f"Try again in about {quota.retry_after} seconds."
-            )
+            ))
             return
         status_msg = None
         baseline = await asyncio.to_thread(get_baseline_sha)
@@ -2162,10 +2163,10 @@ async def _builtin_on_message(message: discord.Message):
         guild_id=str(message.guild.id) if message.guild else "DM",
     )
     if not request_quota.allowed:
-        await message.reply(
+        await message.reply(**throttle_notice(bot, user_id, request_quota,
             "⏳ I'm receiving too many requests right now. "
             f"Try again in about {request_quota.retry_after} seconds."
-        )
+        ))
         return
 
     try:
@@ -2402,12 +2403,13 @@ async def _builtin_on_message(message: discord.Message):
                 "⏳ Media-generation quota reached for now. "
                 f"Try again in about {media_quota.retry_after} seconds."
             )
+            notice_kwargs = throttle_notice(bot, user_id, media_quota, notice)
             _preflight_status_by_message_id.pop(message.id, None)
             if preflight_status is not None:
                 with contextlib.suppress(Exception):
-                    await preflight_status.edit(content=notice)
+                    await preflight_status.edit(**notice_kwargs)
             else:
-                await message.reply(notice)
+                await message.reply(**notice_kwargs)
             return
 
     logger.info(
@@ -2439,6 +2441,7 @@ async def _builtin_on_message(message: discord.Message):
                 raw_prompt=raw_prompt,
                 user_id=user_id,
                 bot_user=bot.user,
+                bot_client=bot,
                 ref_msg=ref_msg,
                 is_reply_to_bot=is_reply_to_bot,
                 is_owner=is_app_owner,

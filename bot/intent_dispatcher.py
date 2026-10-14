@@ -266,6 +266,7 @@ class DispatchContext:
     send_or_edit_with_truncation: Optional[Callable] = None
     prompt_for_image_selection: Optional[Callable] = None
     moderation_view_factory: Any = None
+    bot_client: Any = None
 
 
 async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
@@ -303,6 +304,7 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
     if ctx.intent == "gemini_chat":
         await handle_gemini_chat_intent(
             message=message,
+            bot=ctx.bot_client,
             prompt=ctx.prompt,
             gemini_parts=ctx.gemini_parts,
             live_status_with_progress=ctx.live_status_with_progress,
@@ -349,6 +351,7 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
     if ctx.intent == "summarize_url" and ctx.general_url_match and not ctx.image_urls:
         await handle_summarize_url_intent(
             message=message,
+            bot=ctx.bot_client,
             url=ctx.general_url_match.group(0),
             duration_estimate=duration_estimate,
             stream_ok=ctx.stream_ok,

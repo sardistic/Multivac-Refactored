@@ -23,6 +23,7 @@ from bot.research_policy import build_fresh_search_query, is_reverse_image_reque
 from bot.response_policy import apply_personality_overrides, build_message_user_style_system_messages
 from services.memory_utils import build_channel_message_window
 from services.security_limits import check_rate_limit
+from bot.throttle import throttle_notice
 from services.security_utils import public_error_detail
 from services.url_utils import extract_main_text, fetch_url_content, reduce_text_length
 from services.youtube_utils import extract_youtube_id, fetch_youtube_transcript
@@ -290,6 +291,7 @@ async def handle_claude_chat_intent(
 async def handle_gemini_chat_intent(
     *,
     message,
+    bot=None,
     prompt: str,
     gemini_parts,
     live_status_with_progress,
@@ -319,10 +321,10 @@ async def handle_gemini_chat_intent(
             guild_id=str(message.guild.id) if message.guild else "DM",
         )
         if not compute_quota.allowed:
-            await message.reply(
+            await message.reply(**throttle_notice(bot, message.author.id, compute_quota,
                 "⏳ Code-execution quota reached for now. "
                 f"Try again in about {compute_quota.retry_after} seconds."
-            )
+            ))
             return
 
     if extract_youtube_id(clean_prompt):
@@ -332,10 +334,10 @@ async def handle_gemini_chat_intent(
             guild_id=str(message.guild.id) if message.guild else "DM",
         )
         if not url_quota.allowed:
-            await message.reply(
+            await message.reply(**throttle_notice(bot, message.author.id, url_quota,
                 "⏳ URL-fetch quota reached for now. "
                 f"Try again in about {url_quota.retry_after} seconds."
-            )
+            ))
             return
 
     context_msgs = []
@@ -584,6 +586,7 @@ async def handle_gemini_chat_intent(
 async def handle_summarize_url_intent(
     *,
     message,
+    bot=None,
     url: str,
     duration_estimate: int,
     stream_ok: bool,
@@ -596,10 +599,10 @@ async def handle_summarize_url_intent(
         guild_id=str(message.guild.id) if message.guild else "DM",
     )
     if not quota.allowed:
-        await message.reply(
+        await message.reply(**throttle_notice(bot, message.author.id, quota,
             "⏳ URL-fetch quota reached for now. "
             f"Try again in about {quota.retry_after} seconds."
-        )
+        ))
         return
 
     async def _do_summarize():

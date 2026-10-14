@@ -13,7 +13,8 @@ from discord.ext import commands
 from services.character_renders import get_character_service
 from services.premium import PremiumError
 from services import server_policy
-from services.security_limits import check_rate_limit
+from services.security_limits import ThrottleError, check_rate_limit
+from bot.throttle import throttle_notice
 
 logger = logging.getLogger("discord_bot")
 
@@ -145,7 +146,7 @@ class CharacterCog(commands.Cog, name="Characters"):
             await server_policy.require_active_channel(self.bot, guild, channel)
             quota = check_rate_limit("request", user_id=user_id, guild_id=guild.id if guild else "DM")
             if not quota.allowed:
-                raise PremiumError(f"Request limits are busy. Retry in {quota.retry_after}s; your purchase is retained.")
+                raise ThrottleError(f"Request limits are busy. Retry in {quota.retry_after}s; your purchase is retained.", quota)
             if purchase_id is not None:
                 if not purchase_id.isascii() or not purchase_id.isdecimal() or not 0 < int(purchase_id) < 2**64:
                     raise PremiumError("Use a valid purchase ID to recover an earlier image.")
@@ -191,6 +192,8 @@ class CharacterCog(commands.Cog, name="Characters"):
                 if not product.flags.available:
                     text += "\nThis product is not available for checkout yet."
                 await send(text, view=view, allowed_mentions=discord.AllowedMentions.none(), **flags)
+        except ThrottleError as exc:
+            await send(**throttle_notice(self.bot, user_id, exc.decision, str(exc)), **flags)
         except PremiumError as exc:
             await send(str(exc), **flags)
         except Exception as exc:

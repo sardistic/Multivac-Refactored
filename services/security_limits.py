@@ -11,6 +11,8 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 
+from services.premium import PremiumError
+
 
 @dataclass(frozen=True)
 class RateLimitRule:
@@ -25,6 +27,14 @@ class RateLimitDecision:
     allowed: bool
     retry_after: int = 0
     scope: str = ""
+
+
+class ThrottleError(PremiumError):
+    """Carry a denied limiter decision to the Discord presentation boundary."""
+
+    def __init__(self, message: str, decision: RateLimitDecision):
+        super().__init__(message)
+        self.decision = decision
 
 
 def _env_int(name: str, default: int, *, minimum: int = 1) -> int:
@@ -190,6 +200,7 @@ __all__ = [
     "RateLimitDecision",
     "RateLimitRule",
     "SlidingWindowLimiter",
+    "ThrottleError",
     "check_rate_limit",
     "provider_capacity",
 ]

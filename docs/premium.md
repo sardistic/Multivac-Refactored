@@ -85,6 +85,14 @@ when the SKUs are available and verified. `/premium_status` reports subscription
 status, the current entitlement end time when supplied by Discord, and effective
 limits. Subscription access is automatic; no redemption is needed.
 
+Throttle notices retain the retry time and offer an **Open shop** button to the
+requester. It opens the same private `/premium` shop, even while request counters
+are capped. Bot-wide cap notices suggest fUnThrottled; personal and server cap
+notices explain that the subscription does not remove those caps. Browsing never
+spends a purchase or retries the denied request. Checkout buttons still require
+verified, available SKUs. The shop shortcut expires after five minutes; `/premium`
+remains available afterward.
+
 ## Verification and recovery
 
 Private `premium.db` stores mappings, entitlement/user IDs, consumable recording

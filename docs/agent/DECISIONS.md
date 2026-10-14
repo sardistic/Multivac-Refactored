@@ -1,5 +1,17 @@
 # Architectural Decisions
 
+## 2026-10-13: Offer the existing shop from throttle notices
+
+Discord throttle replies keep their retry delay and add a requester-bound
+Open shop button. Clicking opens the existing ephemeral premium command without
+another request-limit check, so capped users can reach verified Discord checkout.
+It never buys, consumes, grants access, or retries work automatically. Global cap
+copy suggests fUnThrottled; other scopes explicitly retain personal/server caps.
+A disabled subscription is not advertised, and a missing shop preserves the
+original notice. Provider failures and capacity limits remain separate errors.
+Paid-product quota failures carry their limiter decision to the Discord layer,
+preserving the purchase and its unspent render attempts.
+
 ## 2026-10-11: Exact GFL2 image prompt and direct image replies
 
 The operator's reference result came from the ordinary prompt `[character] as a
