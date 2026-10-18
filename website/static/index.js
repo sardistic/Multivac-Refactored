@@ -35,3 +35,38 @@
       $("usage").hidden = false;
     }
   })();
+
+  // what it costs and what people have given: the bot's ledger (estimated API spend by month), fixed costs, and Ko-fi
+  (async () => {
+    const get = async u => { try { const r = await fetch(u, { cache: "no-store" }); return r.ok ? r.json() : null; } catch (e) { return null; } };
+    const [U, F] = await Promise.all([get("/api/public/metrics"), get("/api/public/funding")]);
+    const C = U && U.costs;
+    if (!C || !F) return;
+    const $ = id => document.getElementById(id), usd = n => "$" + (Math.round(n * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const name = m => new Date(m + "-15T12:00:00Z").toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+    const now = new Date().toLocaleString("sv-SE", { timeZone: U.timezone || "America/New_York" }).slice(0, 7);
+    const api = Object.fromEntries((C.months || []).map(m => [m.month, m])), given = Object.fromEntries((F.donations.months || []).map(m => [m.month, m]));
+    const fixedIn = m => (F.fixed || []).filter(f => (!f.from || f.from <= m) && (!f.until || m <= f.until)).reduce((t, f) => t + f.usdPerMonth, 0);
+    const months = [...new Set([...Object.keys(api), ...Object.keys(given)])].filter(m => m <= now).sort().reverse();
+    if (!months.length) return;
+    const kinds = ["chat", "images", "video", "tools"], label = { chat: "Chat", images: "Images", video: "Video", tools: "Tools" };
+    const tot = { spent: 0, given: 0, fixed: 0 }; kinds.forEach(k => tot[k] = 0);
+    const rows = months.map(m => {
+      const a = api[m] || { usd: 0, kinds: {} }, fx = fixedIn(m), g = given[m] ? given[m].usd : 0, spent = a.usd + fx, net = g - spent;
+      kinds.forEach(k => tot[k] += a.kinds[k] || 0); tot.fixed += fx; tot.spent += spent; tot.given += g;
+      return `<tr><td>${name(m)}${m === now ? "<small>SO FAR</small>" : ""}</td>${kinds.map(k => `<td class="${a.kinds[k] ? "" : "dim"}">${usd(a.kinds[k] || 0)}</td>`).join("")}<td class="${fx ? "" : "dim"}">${usd(fx)}</td><td class="sum">${usd(spent)}</td><td class="${g ? "pos" : "dim"}">${usd(g)}</td><td class="${net >= 0 ? "pos" : "neg"}">${net < 0 ? "−" : "+"}${usd(Math.abs(net))}</td></tr>`;
+    });
+    const tnet = tot.given - tot.spent;
+    $("f-table").innerHTML = `<thead><tr><th>Month</th>${kinds.map(k => `<th>${label[k]}</th>`).join("")}<th>Hosting &amp; fixed</th><th>Spent</th><th>Given</th><th>Difference</th></tr></thead><tbody>${rows.join("")}`
+      + `<tr class="total"><td>All months</td>${kinds.map(k => `<td>${usd(tot[k])}</td>`).join("")}<td>${usd(tot.fixed)}</td><td>${usd(tot.spent)}</td><td>${usd(tot.given)}</td><td class="${tnet >= 0 ? "pos" : "neg"}">${tnet < 0 ? "−" : "+"}${usd(Math.abs(tnet))}</td></tr></tbody>`;
+    const cur = api[now] || { usd: 0 }, curSpent = cur.usd + fixedIn(now), curGiven = given[now] ? given[now].usd : 0, donors = (F.donations.months || []).reduce((t, m) => t + (m.count || 0), 0);
+    $("f-given").textContent = usd(tot.given); $("f-given-c").textContent = donors ? donors + (donors === 1 ? " payment" : " payments") + " on Ko-fi" : "on Ko-fi";
+    $("f-spent").textContent = usd(tot.spent); $("f-spent-c").textContent = usd(tot.spent - tot.fixed) + " API · " + usd(tot.fixed) + " fixed";
+    $("f-month-l").textContent = name(now) + " so far"; $("f-month").textContent = usd(curSpent); $("f-month-c").textContent = usd(curGiven) + " given";
+    $("f-net").textContent = (tnet < 0 ? "−" : "+") + usd(Math.abs(tnet)); $("f-net-c").textContent = tnet < 0 ? "paid out of pocket" : "ahead";
+    $("f-net").className = tnet < 0 ? "neg" : "pos";
+    if (F.kofi) $("f-kofi").href = F.kofi;
+    const fixedNotes = (F.fixed || []).map(f => f.name + " " + usd(f.usdPerMonth) + "/mo" + (f.note ? " (" + f.note + ")" : "")).join(", ");
+    $("f-note").textContent = "API spend is the bot's own estimate from token counts and each provider's published prices. " + (fixedNotes ? "Fixed: " + fixedNotes + ". " : "") + (F.donations.live ? "Ko-fi payments show up here as they arrive." : "");
+    $("funding").hidden = false;
+  })();

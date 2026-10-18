@@ -502,6 +502,57 @@ def all_time() -> Dict[str, Any]:
     return _aggregate_where("1=1", ())
 
 
+def _cost_provider(model: str) -> str:
+    """Coarse provider family for public spend; never the model itself."""
+    m = (model or "").lower()
+    if m.startswith(("gpt", "o1", "o3", "o4", "sora", "dall-e", "whisper", "tts", "text-embedding", "omni", "chatgpt")):
+        return "openai"
+    if m.startswith(("gemini", "veo", "imagen", "google")):
+        return "google"
+    if m.startswith("claude"):
+        return "anthropic"
+    return "other"
+
+
+def _cost_kind(model: str) -> str:
+    """What the money bought: conversation, pictures, video, or a metered tool call."""
+    m = (model or "").lower()
+    if m.startswith(("veo", "sora")):
+        return "video"
+    if "image" in m or m.startswith(("dall-e", "imagen")):
+        return "images"
+    if m.startswith(("gpt", "o1", "o3", "o4", "gemini", "claude", "chatgpt", "omni")):
+        return "chat"
+    return "tools"
+
+
+def _monthly_costs(conn, months: int = 12) -> Dict[str, Any]:
+    """Estimated spend per calendar month (report timezone), by kind and provider."""
+    out: Dict[str, Dict[str, Any]] = {}
+    total = 0.0
+    rows = conn.execute(
+        "SELECT substr(ts_utc,1,13), model, COALESCE(SUM(cost_usd),0.0) FROM usage_logs GROUP BY 1, 2"
+    ).fetchall()
+    for hour, model, cost in rows:
+        try:
+            month = datetime.fromisoformat(hour + ":00:00+00:00").astimezone(REPORT_TZ).strftime("%Y-%m")
+        except (TypeError, ValueError):
+            continue
+        cost = float(cost or 0.0)
+        total += cost
+        entry = out.setdefault(month, {"month": month, "usd": 0.0, "kinds": {}, "providers": {}})
+        entry["usd"] += cost
+        kind, provider = _cost_kind(model), _cost_provider(model)
+        entry["kinds"][kind] = entry["kinds"].get(kind, 0.0) + cost
+        entry["providers"][provider] = entry["providers"].get(provider, 0.0) + cost
+    recent = sorted(out.values(), key=lambda e: e["month"])[-months:]
+    for entry in recent:
+        entry["usd"] = round(entry["usd"], 2)
+        entry["kinds"] = {k: round(v, 2) for k, v in sorted(entry["kinds"].items())}
+        entry["providers"] = {k: round(v, 2) for k, v in sorted(entry["providers"].items())}
+    return {"currency": "USD", "estimated": True, "allTimeUsd": round(total, 2), "months": recent}
+
+
 def _public_metrics_snapshot(now_utc: datetime | None = None) -> Dict[str, Any]:
     """Build a public aggregate without identity, prompts, labels, or models."""
     now = now_utc or datetime.now(timezone.utc)
@@ -549,6 +600,7 @@ def _public_metrics_snapshot(now_utc: datetime | None = None) -> Dict[str, Any]:
             "SELECT ts_utc, total_tokens FROM usage_logs WHERE ts_utc >= ? ORDER BY ts_utc",
             (series_start_local.astimezone(timezone.utc).isoformat(),),
         ).fetchall()
+        costs = _monthly_costs(c)
 
     daily_totals = {
         (series_start_local + timedelta(days=offset)).date().isoformat(): 0
@@ -588,6 +640,7 @@ def _public_metrics_snapshot(now_utc: datetime | None = None) -> Dict[str, Any]:
             "monthToDate": window(19),
             "allTime": window(1),
         },
+        "costs": costs,
     }
 
 

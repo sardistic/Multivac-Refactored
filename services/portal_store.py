@@ -43,6 +43,10 @@ class PortalStore:
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY, value TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS kofi (
+                    message_id TEXT PRIMARY KEY, at INTEGER NOT NULL,
+                    kind TEXT NOT NULL, amount_cents INTEGER NOT NULL, currency TEXT NOT NULL
+                );
             """)
 
     @contextmanager
@@ -124,3 +128,13 @@ class PortalStore:
     def audit(self):
         with self.connection() as conn:
             return [dict(row) for row in conn.execute("SELECT * FROM audit ORDER BY id DESC LIMIT 100")]
+
+    def record_kofi(self, message_id, at, kind, amount_cents, currency):
+        """One Ko-fi payment: when, how much and what kind. Never who, or what they wrote."""
+        with self.connection() as conn:
+            conn.execute("INSERT OR IGNORE INTO kofi VALUES(?,?,?,?,?)",
+                         (str(message_id)[:80], int(at), str(kind)[:40], int(amount_cents), str(currency)[:8].upper()))
+
+    def kofi_payments(self):
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute("SELECT at,kind,amount_cents,currency FROM kofi ORDER BY at")]

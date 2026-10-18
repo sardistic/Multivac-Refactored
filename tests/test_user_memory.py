@@ -251,9 +251,26 @@ class UsageCostsTests(unittest.TestCase):
         self.assertNotIn("guilds", snapshot)                          # unknown server count: left out, not zero
         self.assertTrue(usage_costs.publish_metrics_snapshot(7))
         self.assertEqual(json.loads(Path(usage_costs.METRICS_PATH).read_text(encoding="utf-8"))["guilds"], 7)
+        # spend is published only as monthly totals by coarse kind and provider family
+        self.assertEqual(snapshot["costs"]["allTimeUsd"], 99.0)
+        self.assertEqual(snapshot["costs"]["months"][-1]["kinds"], {"tools": 99.0})
+        self.assertEqual(snapshot["costs"]["months"][-1]["providers"], {"other": 99.0})
         serialized = json.dumps(snapshot)
-        for private_value in ("private-user", "private-label", "private-model", "must not leak", "99.0"):
+        for private_value in ("private-user", "private-label", "private-model", "must not leak"):
             self.assertNotIn(private_value, serialized)
+
+    def test_public_costs_group_by_month_kind_and_provider(self):
+        for model, cost in (("gpt-6-luna", 1.25), ("gpt-image-1.5", 2.5), ("veo-3.1-generate-preview", 4.0),
+                            ("claude-sonnet-5", 0.5), ("google-cloud-vision-web-detection", 0.25)):
+            usage_costs.record(model, {"prompt_tokens": 1, "total_tokens": 1}, cost)
+        with usage_costs._conn_rw() as conn:
+            conn.execute("UPDATE usage_logs SET ts_utc = '2026-08-15T12:00:00+00:00' WHERE model = 'gpt-6-luna'")
+        costs = usage_costs._public_metrics_snapshot()["costs"]
+        self.assertEqual(costs["allTimeUsd"], 8.5)
+        aug, latest = costs["months"][0], costs["months"][-1]
+        self.assertEqual(aug, {"month": "2026-08", "usd": 1.25, "kinds": {"chat": 1.25}, "providers": {"openai": 1.25}})
+        self.assertEqual(latest["kinds"], {"chat": 0.5, "images": 2.5, "tools": 0.25, "video": 4.0})
+        self.assertEqual(latest["providers"], {"anthropic": 0.5, "google": 4.25, "openai": 2.5})
 
     def test_record_with_request_context_attributes_user(self):
         usage_costs.set_request_context(user_id="42", intent="chat")

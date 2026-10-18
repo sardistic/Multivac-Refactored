@@ -173,6 +173,35 @@ class PortalTests(unittest.IsolatedAsyncioTestCase):
         response=await self.client.get('/api/admin?days=1000',headers=self.session_headers())
         self.assertEqual(response.status,400)
 
+    async def kofi_post(self, **fields):
+        data = {'verification_token':'kofi-test-token','message_id':'m1','timestamp':'2026-10-05T15:00:00Z',
+                'type':'Donation','amount':'3.50','currency':'USD','from_name':'Private Name','message':'private note',**fields}
+        return await self.client.post('/api/kofi', data={'data': json.dumps(data)})
+
+    async def test_kofi_webhook_requires_configuration_and_token(self):
+        self.assertEqual((await self.kofi_post()).status, 503)
+        self.portal.kofi_token = 'kofi-test-token'
+        self.assertEqual((await self.kofi_post(verification_token='wrong')).status, 403)
+        self.assertEqual((await self.kofi_post(amount='-1')).status, 400)
+        self.assertEqual(self.portal.db.kofi_payments(), [])
+
+    async def test_kofi_payments_feed_public_funding_without_identities(self):
+        self.portal.kofi_token = 'kofi-test-token'
+        self.portal.funding_path = str(Path(self.tmp.name)/'funding.json')
+        Path(self.portal.funding_path).write_text(json.dumps({
+            'fixed':[{'name':'Domain','usdPerMonth':1.25,'from':'2026-10','note':'insufficient.dev'}],
+            'priorDonations':[{'month':'2026-09','usd':10,'count':2}]}))
+        self.assertEqual((await self.kofi_post()).status, 200)
+        self.assertEqual((await self.kofi_post()).status, 200)                       # Ko-fi retries are idempotent
+        self.assertEqual((await self.kofi_post(message_id='m2', amount='5', currency='EUR')).status, 200)
+        response = await self.client.get('/api/public/funding')
+        body = await response.json()
+        self.assertEqual(body['donations']['months'], [{'month':'2026-09','usd':10.0,'count':2},{'month':'2026-10','usd':3.5,'count':1}])
+        self.assertEqual(body['donations']['allTimeUsd'], 13.5)
+        self.assertTrue(body['donations']['live'])
+        self.assertEqual(body['fixed'][0]['usdPerMonth'], 1.25)
+        self.assertNotIn('Private Name', json.dumps(body)); self.assertNotIn('private note', json.dumps(body))
+
     async def test_csrf_and_origin_required_for_reviews(self):
         self.portal.db.seed_existing([{'id':'123','name':'Existing'}],'owner')
         for origin,csrf in [('https://evil.example','csrf'),('https://insufficient.dev','wrong')]:

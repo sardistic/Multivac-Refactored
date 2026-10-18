@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MultiVAC — a Discord bot that thinks with every model</title>
-<meta name="description" content="MultiVAC is a modular Discord bot: chat routed across OpenAI, Gemini and Claude, image and video generation, real tools, and memory that stays scoped to you.">
+<title>insufficient.dev</title>
+<meta name="description" content="MultiVAC, a Discord bot by sardistic. Mention it and it answers with GPT, Gemini or Claude, searches the web, reads links and videos, draws, makes short clips, and remembers what you ask it to.">
 <link rel="canonical" href="https://insufficient.dev/">
 <link rel="icon" href="/static/eye.svg" type="image/svg+xml">
 <meta name="theme-color" content="#f3efe7" media="(prefers-color-scheme: light)">
@@ -22,17 +22,17 @@
 <div class="wrap">
   <header>
     <a class="home" href="https://sardistic.com/"><img src="/static/eye.svg" alt="" width="28" height="28">SARDISTIC<small>.COM</small></a>
-    <nav aria-label="MultiVAC"><a href="#what">What it does</a><a href="#usage">Usage</a><a href="#models">Models</a><a href="#tools">Tools</a><a href="#memory">Memory</a><a href="/policies">Policies</a><a href="/admin">Sign in</a></nav>
+    <nav aria-label="MultiVAC"><a href="#what">What it does</a><a href="#usage">Usage</a><a href="#funding">Funding</a><a href="#models">Models</a><a href="#tools">Tools</a><a href="#memory">Memory</a><a href="/policies">Policies</a><a href="/admin">Sign in</a></nav>
   </header>
 
   <div class="hero">
     <div>
       <div class="kicker">A Discord bot · by <a href="https://sardistic.com/about/">sardistic</a></div>
       <h1>MULTI<span>VAC</span></h1>
-      <p class="lede">One bot, every model. MultiVAC routes your conversation to OpenAI, Gemini or Claude, makes images and video, reaches for real tools when it needs facts, and remembers only what you let it.</p>
+      <p class="lede">I built this for a few Discord servers I hang out in. You @ it and it answers, with GPT, Gemini or Claude depending on the question. It searches the web when it doesn't know something, reads whatever link or YouTube video you paste, draws pictures, makes short videos, and remembers things about you if you ask it to. It forgets them when you ask, too.</p>
       <div class="cta">
         <a class="btn primary" href="/request">Request a server invite →</a>
-        <a class="btn" href="#what">See what it does</a>
+        <a class="btn" href="https://ko-fi.com/sardistic/goal?g=32" rel="noopener">Help pay for it on Ko-fi</a>
       </div>
     </div>
     <div class="terminal" aria-label="An example exchange with MultiVAC" id="term">
@@ -78,6 +78,20 @@
     <p class="asof" id="u-asof"></p>
   </section>
 
+  <section id="funding" hidden>
+    <h2>Funding</h2>
+    <p class="fund-intro">It's free to use, but it isn't free to run. Every answer, picture and video is a small API bill, and the machine it lives on costs a bit too. Here is all of it, month by month, straight from the bot's own ledger, next to what people have put in on Ko-fi.</p>
+    <div class="usage fund-sum">
+      <div><i>Given, all time</i><b id="f-given">—</b><span id="f-given-c"></span></div>
+      <div><i>Spent, all time</i><b id="f-spent">—</b><span id="f-spent-c"></span></div>
+      <div><i id="f-month-l">This month</i><b id="f-month">—</b><span id="f-month-c"></span></div>
+      <div><i>Difference</i><b id="f-net">—</b><span id="f-net-c"></span></div>
+    </div>
+    <div class="cta fund-cta"><a class="btn primary" id="f-kofi" href="https://ko-fi.com/sardistic/goal?g=32" rel="noopener">Chip in on Ko-fi →</a></div>
+    <div class="fund-wrap"><table class="fund" id="f-table" aria-label="Costs and income by month"></table></div>
+    <p class="asof" id="f-note"></p>
+  </section>
+
   <section id="models">
     <div class="two">
       <div>
@@ -117,5 +131,6 @@
   </footer>
 </div>
 <script src="/static/index.js" defer></script>
+<script src="/static/tab.js" defer></script>
 </body>
 </html>

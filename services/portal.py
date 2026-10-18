@@ -8,8 +8,11 @@ import os
 import secrets
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
+from zoneinfo import ZoneInfo
 
 from aiohttp import ClientSession, ClientTimeout, web
 
@@ -43,6 +46,8 @@ class Portal:
         self.report_path = env.get('PORTAL_REPORT_PATH', './state/portal-metrics/usage.json')
         self.metrics_path = env.get('USAGE_METRICS_PATH', '')
         self.tz = env.get('USAGE_TZ', 'America/New_York')
+        self.kofi_token = env.get('KOFI_VERIFICATION_TOKEN', '')
+        self.funding_path = env.get('FUNDING_PATH', str(ROOT / 'funding.json'))
         self.sessions = {}
         self.states = {}
         self.limits = defaultdict(deque)
@@ -230,6 +235,53 @@ class Portal:
                 data['guilds'] = len(self.inventory[1])
         return web.json_response(data)
 
+    async def kofi(self, request):
+        """Ko-fi's webhook: a form post whose `data` field is JSON carrying our verification token."""
+        if not self.kofi_token:
+            raise web.HTTPServiceUnavailable(text='Ko-fi is not configured.')
+        data = json.loads((await request.post())['data'])
+        if not secrets.compare_digest(str(data.get('verification_token', '')), self.kofi_token):
+            raise web.HTTPForbidden(text='Verification failed.')
+        try:
+            cents = int((Decimal(str(data['amount'])) * 100).to_integral_value())
+        except (InvalidOperation, KeyError):
+            raise web.HTTPBadRequest(text='Invalid amount.')
+        if not 0 < cents < 10_000_000:
+            raise web.HTTPBadRequest(text='Invalid amount.')
+        at = datetime.fromisoformat(str(data['timestamp']).replace('Z', '+00:00'))
+        await asyncio.to_thread(self.db.record_kofi, data['message_id'], at.timestamp(),
+                                data.get('type') or 'Donation', cents, data.get('currency') or 'USD')
+        return web.json_response({'ok': True})
+
+    async def public_funding(self, request):
+        """What the bot costs to run and what supporters have given, month by month."""
+        try:
+            config = json.loads(await asyncio.to_thread(Path(self.funding_path).read_text, encoding='utf8'))
+        except (OSError, ValueError):
+            config = {}
+        currency = str(config.get('currency') or 'USD').upper()
+        tz, months = ZoneInfo(self.tz), {}
+        for row in config.get('priorDonations') or []:
+            entry = months.setdefault(str(row['month']), {'month': str(row['month']), 'usd': 0.0, 'count': 0})
+            entry['usd'] += float(row.get('usd') or 0)
+            entry['count'] += int(row.get('count') or 0)
+        for row in await asyncio.to_thread(self.db.kofi_payments):
+            if row['currency'] != currency:
+                continue
+            month = datetime.fromtimestamp(row['at'], timezone.utc).astimezone(tz).strftime('%Y-%m')
+            entry = months.setdefault(month, {'month': month, 'usd': 0.0, 'count': 0})
+            entry['usd'] += row['amount_cents'] / 100
+            entry['count'] += 1
+        donations = sorted(({**e, 'usd': round(e['usd'], 2)} for e in months.values()), key=lambda e: e['month'])
+        return web.json_response({
+            'currency': currency,
+            'kofi': config.get('kofi') or 'https://ko-fi.com/sardistic/goal?g=32',
+            'fixed': [{'name': str(f['name']), 'usdPerMonth': float(f['usdPerMonth']), 'from': f.get('from'),
+                       'until': f.get('until'), 'note': f.get('note', '')} for f in config.get('fixed') or []],
+            'donations': {'months': donations, 'allTimeUsd': round(sum(e['usd'] for e in donations), 2),
+                          'live': bool(self.kofi_token)},
+        })
+
     async def page(self, request):
         name = request.match_info.get('page', 'index')
         return web.FileResponse(ROOT / (name + '.html'))
@@ -301,6 +353,8 @@ class Portal:
         app.router.add_get('/api/admin', self.admin)
         app.router.add_post('/api/admin/requests/{guild_id}', self.review)
         app.router.add_get('/api/public/metrics', self.public_metrics)
+        app.router.add_get('/api/public/funding', self.public_funding)
+        app.router.add_post('/api/kofi', self.kofi)
         app.router.add_get('/', self.page)
         app.router.add_get('/{page:admin|request|terms|privacy|policies}', self.page)
         app.router.add_static('/static/', ROOT / 'static')
