@@ -1,0 +1,19 @@
+{
+  "currency": "USD",
+  "kofi": "https://ko-fi.com/sardistic/goal?g=32",
+  "fixed": [
+    {
+      "name": "Power",
+      "usdPerMonth": 0.29,
+      "from": "2026-07",
+      "note": "its ~12% share of a home server averaging ~22 W, at ~15¢/kWh"
+    },
+    {
+      "name": "Domain",
+      "usdPerMonth": 1.02,
+      "from": "2026-10",
+      "note": "insufficient.dev, ~$12.20 a year"
+    }
+  ],
+  "priorDonations": []
+}
