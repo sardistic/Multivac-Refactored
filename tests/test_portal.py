@@ -190,7 +190,8 @@ class PortalTests(unittest.IsolatedAsyncioTestCase):
         self.portal.funding_path = str(Path(self.tmp.name)/'funding.json')
         Path(self.portal.funding_path).write_text(json.dumps({
             'fixed':[{'name':'Domain','usdPerMonth':1.25,'from':'2026-10','note':'insufficient.dev'}],
-            'priorDonations':[{'month':'2026-09','usd':10,'count':2}]}))
+            'priorDonations':[{'month':'2026-09','usd':10,'count':2}],
+            'paid':[{'month':'2026-09','provider':'openai','usd':30}],'undated':[{'name':'Subscriptions','usd':80}]}))
         self.assertEqual((await self.kofi_post()).status, 200)
         self.assertEqual((await self.kofi_post()).status, 200)                       # Ko-fi retries are idempotent
         self.assertEqual((await self.kofi_post(message_id='m2', amount='5', currency='EUR')).status, 200)
@@ -200,6 +201,8 @@ class PortalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body['donations']['allTimeUsd'], 13.5)
         self.assertTrue(body['donations']['live'])
         self.assertEqual(body['fixed'][0]['usdPerMonth'], 1.25)
+        self.assertEqual(body['paid'], [{'month':'2026-09','provider':'openai','usd':30.0}])
+        self.assertEqual(body['undated'], [{'name':'Subscriptions','usd':80.0,'note':''}])
         self.assertNotIn('Private Name', json.dumps(body)); self.assertNotIn('private note', json.dumps(body))
 
     async def test_csrf_and_origin_required_for_reviews(self):

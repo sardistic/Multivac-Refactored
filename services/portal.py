@@ -280,6 +280,12 @@ class Portal:
                        'until': f.get('until'), 'note': f.get('note', '')} for f in config.get('fixed') or []],
             'donations': {'months': donations, 'allTimeUsd': round(sum(e['usd'] for e in donations), 2),
                           'live': bool(self.kofi_token)},
+            # what providers actually billed, by month; it stands in for the bot's estimate where present
+            'paid': [{'month': str(p['month']), 'provider': str(p['provider']), 'usd': round(float(p['usd']), 2)}
+                     for p in config.get('paid') or []],
+            'undated': [{'name': str(u['name']), 'usd': round(float(u['usd']), 2), 'note': str(u.get('note', ''))}
+                        for u in config.get('undated') or []],
+            'notes': {str(k): str(v) for k, v in (config.get('notes') or {}).items()},
         })
 
     async def page(self, request):

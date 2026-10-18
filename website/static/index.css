@@ -92,3 +92,9 @@
   @media (max-width: 560px) { .wrap { padding: 0 16px; } .grid { grid-template-columns: 1fr; } .tools { columns: 1; } .model { grid-template-columns: 1fr; gap: 4px; } .lede { font-size: 19px; } }
   @media (prefers-reduced-motion: reduce) { .caret { animation: none; } .btn { transition: none; } }
   .usage b.pos { color: #2f8a4a; } .usage b.neg { color: var(--red); }
+  .fund td.est { color: var(--dim); font-style: italic; }
+  .fund tr.more td { text-align: center; padding: 14px; }
+  .fund tr.more button { font: 600 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; background: none; border: 1px solid var(--ink); color: inherit; padding: 9px 14px; cursor: pointer; }
+  .fund tr.more button:hover { color: var(--red); border-color: var(--red); }
+  .fund tr.und td { color: var(--dim); }
+  .fund tr.und td:nth-child(2) { text-align: left; }

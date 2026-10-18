@@ -15,5 +15,263 @@
       "note": "insufficient.dev, ~$12.20 a year"
     }
   ],
-  "priorDonations": []
+  "priorDonations": [
+    {
+      "month": "2023-03",
+      "usd": 69.0,
+      "count": 3
+    },
+    {
+      "month": "2023-04",
+      "usd": 150.0,
+      "count": 8
+    },
+    {
+      "month": "2023-05",
+      "usd": 5.0,
+      "count": 1
+    },
+    {
+      "month": "2023-06",
+      "usd": 100.0,
+      "count": 1
+    },
+    {
+      "month": "2023-07",
+      "usd": 10.0,
+      "count": 1
+    },
+    {
+      "month": "2023-09",
+      "usd": 53.0,
+      "count": 2
+    },
+    {
+      "month": "2023-11",
+      "usd": 200.0,
+      "count": 3
+    },
+    {
+      "month": "2023-12",
+      "usd": 60.0,
+      "count": 2
+    },
+    {
+      "month": "2024-03",
+      "usd": 50.0,
+      "count": 1
+    },
+    {
+      "month": "2024-04",
+      "usd": 260.0,
+      "count": 3
+    },
+    {
+      "month": "2024-06",
+      "usd": 20.0,
+      "count": 1
+    },
+    {
+      "month": "2024-09",
+      "usd": 50.0,
+      "count": 1
+    },
+    {
+      "month": "2025-03",
+      "usd": 50.0,
+      "count": 2
+    },
+    {
+      "month": "2025-04",
+      "usd": 105.0,
+      "count": 4
+    },
+    {
+      "month": "2025-09",
+      "usd": 50.0,
+      "count": 1
+    },
+    {
+      "month": "2025-10",
+      "usd": 20.0,
+      "count": 1
+    },
+    {
+      "month": "2025-12",
+      "usd": 50.0,
+      "count": 1
+    },
+    {
+      "month": "2026-01",
+      "usd": 10.0,
+      "count": 1
+    },
+    {
+      "month": "2026-03",
+      "usd": 150.0,
+      "count": 3
+    }
+  ],
+  "paid": [
+    {
+      "month": "2023-04",
+      "provider": "openai",
+      "usd": 123.24
+    },
+    {
+      "month": "2023-05",
+      "provider": "openai",
+      "usd": 82.51
+    },
+    {
+      "month": "2023-06",
+      "provider": "openai",
+      "usd": 26.54
+    },
+    {
+      "month": "2023-07",
+      "provider": "openai",
+      "usd": 15.07
+    },
+    {
+      "month": "2023-08",
+      "provider": "openai",
+      "usd": 25.12
+    },
+    {
+      "month": "2023-09",
+      "provider": "openai",
+      "usd": 9.69
+    },
+    {
+      "month": "2023-10",
+      "provider": "openai",
+      "usd": 9.42
+    },
+    {
+      "month": "2023-11",
+      "provider": "openai",
+      "usd": 9.52
+    },
+    {
+      "month": "2023-12",
+      "provider": "openai",
+      "usd": 256.8
+    },
+    {
+      "month": "2024-01",
+      "provider": "openai",
+      "usd": 153.04
+    },
+    {
+      "month": "2024-02",
+      "provider": "openai",
+      "usd": 105.79
+    },
+    {
+      "month": "2024-03",
+      "provider": "openai",
+      "usd": 60.3
+    },
+    {
+      "month": "2024-04",
+      "provider": "openai",
+      "usd": 46.58
+    },
+    {
+      "month": "2025-06",
+      "provider": "openai",
+      "usd": 6.18
+    },
+    {
+      "month": "2025-07",
+      "provider": "openai",
+      "usd": 84.83
+    },
+    {
+      "month": "2025-08",
+      "provider": "openai",
+      "usd": 73.77
+    },
+    {
+      "month": "2025-09",
+      "provider": "openai",
+      "usd": 86.71
+    },
+    {
+      "month": "2025-10",
+      "provider": "openai",
+      "usd": 171.17
+    },
+    {
+      "month": "2025-11",
+      "provider": "openai",
+      "usd": 26.76
+    },
+    {
+      "month": "2025-12",
+      "provider": "openai",
+      "usd": 6.48
+    },
+    {
+      "month": "2026-01",
+      "provider": "openai",
+      "usd": 6.48
+    },
+    {
+      "month": "2026-02",
+      "provider": "openai",
+      "usd": 21.0
+    },
+    {
+      "month": "2026-03",
+      "provider": "openai",
+      "usd": 10.0
+    },
+    {
+      "month": "2026-04",
+      "provider": "openai",
+      "usd": 40.0
+    },
+    {
+      "month": "2026-05",
+      "provider": "openai",
+      "usd": 20.0
+    },
+    {
+      "month": "2026-06",
+      "provider": "openai",
+      "usd": 20.0
+    },
+    {
+      "month": "2026-07",
+      "provider": "openai",
+      "usd": 20.0
+    },
+    {
+      "month": "2026-08",
+      "provider": "openai",
+      "usd": 40.0
+    },
+    {
+      "month": "2026-09",
+      "provider": "openai",
+      "usd": 30.0
+    },
+    {
+      "month": "2026-10",
+      "provider": "openai",
+      "usd": 10.0
+    }
+  ],
+  "undated": [
+    {
+      "name": "ChatGPT Plus and Claude Pro",
+      "usd": 80.0,
+      "note": "subscriptions used while building it"
+    }
+  ],
+  "notes": {
+    "paid": "OpenAI is what was actually billed: invoices Apr 2023 to Apr 2024, prepaid credits from Jun 2025. Google Cloud billing isn't included yet; Gemini shows only as the bot's own estimate from Jul 2026."
+  }
 }

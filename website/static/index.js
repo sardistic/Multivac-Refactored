@@ -36,37 +36,50 @@
     }
   })();
 
-  // what it costs and what people have given: the bot's ledger (estimated API spend by month), fixed costs, and Ko-fi
+  // what it costs and what people have given: OpenAI as billed, the rest as the bot's own estimate, fixed costs, and Ko-fi
   (async () => {
     const get = async u => { try { const r = await fetch(u, { cache: "no-store" }); return r.ok ? r.json() : null; } catch (e) { return null; } };
     const [U, F] = await Promise.all([get("/api/public/metrics"), get("/api/public/funding")]);
-    const C = U && U.costs;
-    if (!C || !F) return;
+    if (!F) return;
+    const C = (U && U.costs) || { months: [] };
     const $ = id => document.getElementById(id), usd = n => "$" + (Math.round(n * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const signed = n => (n < 0 ? "−" : "+") + usd(Math.abs(n));
     const name = m => new Date(m + "-15T12:00:00Z").toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
-    const now = new Date().toLocaleString("sv-SE", { timeZone: U.timezone || "America/New_York" }).slice(0, 7);
-    const api = Object.fromEntries((C.months || []).map(m => [m.month, m])), given = Object.fromEntries((F.donations.months || []).map(m => [m.month, m]));
+    const now = new Date().toLocaleString("sv-SE", { timeZone: (U && U.timezone) || "America/New_York" }).slice(0, 7);
+    const est = Object.fromEntries((C.months || []).map(m => [m.month, m.providers || {}]));
+    const given = Object.fromEntries((F.donations.months || []).map(m => [m.month, m]));
+    const paid = {}; for (const p of F.paid || []) (paid[p.month] = paid[p.month] || {})[p.provider] = (paid[p.month][p.provider] || 0) + p.usd;
     const fixedIn = m => (F.fixed || []).filter(f => (!f.from || f.from <= m) && (!f.until || m <= f.until)).reduce((t, f) => t + f.usdPerMonth, 0);
-    const months = [...new Set([...Object.keys(api), ...Object.keys(given)])].filter(m => m <= now).sort().reverse();
+    const months = [...new Set([...Object.keys(est), ...Object.keys(given), ...Object.keys(paid)])].filter(m => m <= now).sort().reverse();
     if (!months.length) return;
-    const kinds = ["chat", "images", "video", "tools"], label = { chat: "Chat", images: "Images", video: "Video", tools: "Tools" };
-    const tot = { spent: 0, given: 0, fixed: 0 }; kinds.forEach(k => tot[k] = 0);
-    const rows = months.map(m => {
-      const a = api[m] || { usd: 0, kinds: {} }, fx = fixedIn(m), g = given[m] ? given[m].usd : 0, spent = a.usd + fx, net = g - spent;
-      kinds.forEach(k => tot[k] += a.kinds[k] || 0); tot.fixed += fx; tot.spent += spent; tot.given += g;
-      return `<tr><td>${name(m)}${m === now ? "<small>SO FAR</small>" : ""}</td>${kinds.map(k => `<td class="${a.kinds[k] ? "" : "dim"}">${usd(a.kinds[k] || 0)}</td>`).join("")}<td class="${fx ? "" : "dim"}">${usd(fx)}</td><td class="sum">${usd(spent)}</td><td class="${g ? "pos" : "dim"}">${usd(g)}</td><td class="${net >= 0 ? "pos" : "neg"}">${net < 0 ? "−" : "+"}${usd(Math.abs(net))}</td></tr>`;
+    // a provider's month: what it billed if we have the bill, otherwise the bot's estimate (marked);
+    // before the bot kept a ledger, a provider with no bills on file is unknown rather than zero
+    const ledgerFrom = Object.keys(est).sort()[0] || now, billed = p => (F.paid || []).some(x => x.provider === p);
+    const cell = (m, p) => paid[m] && paid[m][p] != null ? { v: paid[m][p], est: false } : est[m] && est[m][p] ? { v: est[m][p], est: true }
+      : m < ledgerFrom && !billed(p) ? { v: 0, unknown: true } : { v: 0, est: false };
+    const COLS = [["openai", "OpenAI"], ["google", "Google"], ["anthropic", "Anthropic"], ["other", "Other"]].filter(([p]) => months.some(m => cell(m, p).v));
+    const tot = { spent: 0, given: 0, fixed: 0 }; COLS.forEach(([p]) => tot[p] = 0);
+    const rows = months.map((m, i) => {
+      const cs = COLS.map(([p]) => cell(m, p)), fx = fixedIn(m), g = given[m] ? given[m].usd : 0, spent = cs.reduce((t, c) => t + c.v, 0) + fx, net = g - spent;
+      COLS.forEach(([p], k) => tot[p] += cs[k].v); tot.fixed += fx; tot.spent += spent; tot.given += g;
+      return `<tr${i >= 12 ? ' class="older" hidden' : ""}><td>${name(m)}${m === now ? "<small>SO FAR</small>" : ""}</td>${cs.map(c => c.unknown ? `<td class="dim" title="No bills on file for this month">—</td>` : `<td class="${c.v ? (c.est ? "est" : "") : "dim"}">${usd(c.v)}${c.v && c.est ? "<small>EST</small>" : ""}</td>`).join("")}<td class="${fx ? "" : "dim"}">${usd(fx)}</td><td class="sum">${usd(spent)}</td><td class="${g ? "pos" : "dim"}">${usd(g)}</td><td class="${net >= 0 ? "pos" : "neg"}">${signed(net)}</td></tr>`;
     });
-    const tnet = tot.given - tot.spent;
-    $("f-table").innerHTML = `<thead><tr><th>Month</th>${kinds.map(k => `<th>${label[k]}</th>`).join("")}<th>Hosting &amp; fixed</th><th>Spent</th><th>Given</th><th>Difference</th></tr></thead><tbody>${rows.join("")}`
-      + `<tr class="total"><td>All months</td>${kinds.map(k => `<td>${usd(tot[k])}</td>`).join("")}<td>${usd(tot.fixed)}</td><td>${usd(tot.spent)}</td><td>${usd(tot.given)}</td><td class="${tnet >= 0 ? "pos" : "neg"}">${tnet < 0 ? "−" : "+"}${usd(Math.abs(tnet))}</td></tr></tbody>`;
-    const cur = api[now] || { usd: 0 }, curSpent = cur.usd + fixedIn(now), curGiven = given[now] ? given[now].usd : 0, donors = (F.donations.months || []).reduce((t, m) => t + (m.count || 0), 0);
-    $("f-given").textContent = usd(tot.given); $("f-given-c").textContent = donors ? donors + (donors === 1 ? " payment" : " payments") + " on Ko-fi" : "on Ko-fi";
-    $("f-spent").textContent = usd(tot.spent); $("f-spent-c").textContent = usd(tot.spent - tot.fixed) + " API · " + usd(tot.fixed) + " fixed";
+    const und = (F.undated || []).reduce((t, u) => t + u.usd, 0); tot.spent += und;
+    const tnet = tot.given - tot.spent, older = months.length > 12;
+    $("f-table").innerHTML = `<thead><tr><th>Month</th>${COLS.map(c => `<th>${c[1]}</th>`).join("")}<th>Hosting &amp; fixed</th><th>Spent</th><th>Given</th><th>Difference</th></tr></thead><tbody>${rows.join("")}`
+      + (older ? `<tr class="more"><td colspan="${COLS.length + 5}"><button type="button" id="f-more">Show all ${months.length} months, back to ${name(months[months.length - 1])}</button></td></tr>` : "")
+      + (und ? (F.undated || []).map(u => `<tr class="und"><td>Undated</td><td colspan="${COLS.length + 1}">${u.name}${u.note ? " · " + u.note : ""}</td><td class="sum">${usd(u.usd)}</td><td></td><td class="neg">${signed(-u.usd)}</td></tr>`).join("") : "")
+      + `<tr class="total"><td>All time</td>${COLS.map(([p]) => `<td>${usd(tot[p])}</td>`).join("")}<td>${usd(tot.fixed)}</td><td>${usd(tot.spent)}</td><td>${usd(tot.given)}</td><td class="${tnet >= 0 ? "pos" : "neg"}">${signed(tnet)}</td></tr></tbody>`;
+    if (older) $("f-more").addEventListener("click", e => { document.querySelectorAll("#f-table tr.older").forEach(r => r.hidden = false); e.target.closest("tr").remove(); });
+    const curCells = COLS.map(([p]) => cell(now, p).v), curSpent = curCells.reduce((t, v) => t + v, 0) + fixedIn(now), curGiven = given[now] ? given[now].usd : 0;
+    const tips = (F.donations.months || []).reduce((t, m) => t + (m.count || 0), 0), first = months[months.length - 1];
+    $("f-given").textContent = usd(tot.given); $("f-given-c").textContent = (tips ? tips + (tips === 1 ? " tip" : " tips") + " on Ko-fi" : "on Ko-fi") + " since " + name(first);
+    $("f-spent").textContent = usd(tot.spent); $("f-spent-c").textContent = usd(tot.openai) + " OpenAI · " + usd(tot.spent - tot.openai) + " everything else";
     $("f-month-l").textContent = name(now) + " so far"; $("f-month").textContent = usd(curSpent); $("f-month-c").textContent = usd(curGiven) + " given";
-    $("f-net").textContent = (tnet < 0 ? "−" : "+") + usd(Math.abs(tnet)); $("f-net-c").textContent = tnet < 0 ? "paid out of pocket" : "ahead";
+    $("f-net").textContent = signed(tnet); $("f-net-c").textContent = tnet < 0 ? "paid out of pocket" : "ahead, thanks to you";
     $("f-net").className = tnet < 0 ? "neg" : "pos";
     if (F.kofi) $("f-kofi").href = F.kofi;
     const fixedNotes = (F.fixed || []).map(f => f.name + " " + usd(f.usdPerMonth) + "/mo" + (f.note ? " (" + f.note + ")" : "")).join(", ");
-    $("f-note").textContent = "API spend is the bot's own estimate from token counts and each provider's published prices. " + (fixedNotes ? "Fixed: " + fixedNotes + ". " : "") + (F.donations.live ? "Ko-fi payments show up here as they arrive." : "");
+    $("f-note").textContent = [(F.notes && F.notes.paid) || "", "Amounts marked EST are the bot's own estimate from token counts and published prices.", fixedNotes ? "Fixed: " + fixedNotes + "." : "", F.donations.live ? "New Ko-fi tips show up here as they arrive." : ""].filter(Boolean).join(" ");
     $("funding").hidden = false;
   })();
