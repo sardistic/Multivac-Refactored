@@ -1,5 +1,57 @@
 # Architectural Decisions
 
+## 2026-10-18: Price image choices before generation with a fixed cheap timeout
+
+Chat image generation (including reference inputs and weather widgets), the
+image slash command, and submitted Apps forms share one requester-only picker.
+Offer configured OpenAI Mini/Sunburst low/medium/high at square/portrait/landscape
+sizes and Gemini 3 Pro Image standard quality at 2K/4K in three aspect ratios.
+Keep the catalog within Discord's 25-option limit. Saved image tiers highlight
+an available configuration; after a fixed 30 seconds without a choice, always
+use Mini low 1024×1024. Selection starts immediately; cancellation, picker
+delivery errors, and an unavailable OpenAI timeout default submit nothing.
+Do not switch providers after a selected render fails. Edits retain existing
+defaults and explicit fallback consent; the fixed paid product is unchanged.
+
+Prices are USD output estimates with prompt/reference inputs additional.
+The [official OpenAI guide](https://developers.openai.com/api/docs/guides/image-generation)
+lists Mini's legacy per-image prices; [OpenAI pricing](https://developers.openai.com/api/docs/pricing)
+lists Sunburst's $30/M image output tokens. Do not reuse older-model estimates
+for Sunburst; show its variable token rate. [Google pricing](https://ai.google.dev/gemini-api/docs/pricing#gemini-3-pro-image)
+lists $0.134 per 1K/2K and $0.24 per 4K output. Verified October 18, 2026.
+Gemini's existing resolution-cost overrides feed both menu and accounting.
+Forward selected size/aspect to both reference and text-only requests.
+
+Filter against server image ceilings and recheck after the wait and at provider
+submission. Economy permits Mini low; Balanced adds Mini medium and Sunburst
+low/medium; unrestricted tiers allow all configured choices. Recheck channel
+access after the wait. Maintain requester binding, deadline and single-decision
+guards so outsiders, duplicate callbacks and late clicks cannot change a request.
+No schema, credentials, dependencies or infrastructure changes are required.
+
+## 2026-10-17: Retire Sora and preserve confirmed Veo generation
+
+OpenAI's [deprecation notice](https://developers.openai.com/api/docs/deprecations#2026-03-24-sora-2-video-generation-models-and-videos-api)
+confirms that Sora 2, Sora 2 Pro and the Videos API shut down on September 24,
+2026. Remove their provider implementation, picker configurations, remix path,
+callable tool schema/handler, obsolete probes and usage-limit APIs. Stale tool
+calls and retired configurations fail without submitting any replacement job.
+Keep the legacy sora_usage table and all historical usage/cost rows intact;
+no data deletion or schema migration is required.
+
+Keep the existing Veo prompt/image-to-video flow, requester-only cost confirmation,
+hourly limits, progress, receipts and usage accounting. Personal and server video
+tiers now preselect Veo Fast 4s (Economy), Veo Fast 8s (Balanced), or Veo 8s
+(Quality). Economy server ceilings permit only Fast 4s; Balanced permits Fast
+4/6/8s; unrestricted tiers permit the known Veo models/durations. Validate the
+configuration again after confirmation so a policy change cannot bypass a cap.
+These retain Economy/Balanced estimates of $0.40/$0.80; Quality changes from
+$2.40 to $3.20 and still requires explicit confirmation of the displayed cost.
+Stored tier choices remain valid without rewriting preferences. An unavailable
+Gemini client or empty permitted list returns a clear message before opening
+the picker. Existing-video remix/edit requests explain that the capability is
+retired rather than submitting an unrelated new render.
+
 ## 2026-10-17: Self-hosted Discord owner portal and approved server admission
 
 Keep the existing public page design and deploy an independent aiohttp website

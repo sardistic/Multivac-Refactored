@@ -1,21 +1,12 @@
 import unittest
-from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from bot import chat_handler, video_handler
 from bot.draft_verifier import DraftVerdict
-from PIL import Image
-from providers import sora_jobs
-from services import tool_handlers
 
 
 class VideoGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
-    def _png_bytes(self, width: int, height: int) -> bytes:
-        buf = BytesIO()
-        Image.new("RGB", (width, height), color="white").save(buf, format="PNG")
-        return buf.getvalue()
-
     async def test_resolve_video_reference_upload_uses_collected_image_inputs(self):
         message = SimpleNamespace(attachments=[])
 
@@ -77,59 +68,90 @@ class VideoGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
             ["data:image/png;base64,abc"],
         )
 
-    @patch("providers.sora_utils.create_sora_job", new_callable=AsyncMock)
-    @patch("services.database_utils.log_sora_usage")
-    @patch("services.database_utils.check_sora_limit", return_value=True)
-    async def test_handle_generate_sora_video_uses_context_image_reference(
-        self,
-        _mock_limit,
-        _mock_log_usage,
-        mock_create_job,
-    ):
-        mock_create_job.return_value = {"ok": True, "data": {"id": "vid_123"}}
-
-        result = await tool_handlers.handle_generate_sora_video(
-            {
-                "prompt": "animate this image with a slow camera move",
-                "_context": {
-                    "user_id": "123",
-                    "media_confirmed": True,
-                    "image_urls": ["data:image/png;base64,Zm9v"],
-                },
-            }
-        )
-
-        self.assertTrue(result["ok"])
-        self.assertEqual(mock_create_job.await_args.args[0], "animate this image with a slow camera move")
-        self.assertEqual(mock_create_job.await_args.kwargs["image_data"], b"foo")
-        self.assertEqual(mock_create_job.await_args.kwargs["image_filename"], "tool_input_1.png")
-        self.assertEqual(mock_create_job.await_args.kwargs["image_content_type"], "image/png")
-
     def test_build_video_config_options_includes_veo_when_available(self):
         options = video_handler.build_video_config_options(include_veo=True)
         options_by_value = {option["value"]: option for option in options}
 
-        self.assertEqual(options_by_value["sora|sora-2-pro|8"]["cost"], 2.40)
-        self.assertIn("720p $2.40", options_by_value["sora|sora-2-pro|8"]["label"])
+        self.assertTrue(all(option["provider"] == "veo" for option in options))
+        self.assertEqual(len(options), 6)
+        self.assertIsNone(video_handler.get_video_config_by_value("sora|sora-2-pro|8", include_veo=True))
+        self.assertEqual(video_handler.build_video_config_options(include_veo=False), [])
         self.assertEqual(options_by_value["veo|veo-3.1-generate-preview|6"]["cost"], 2.40)
         self.assertEqual(options_by_value["veo|veo-3.1-fast-generate-preview|8"]["cost"], 0.80)
 
     def test_video_cost_message_matches_dropdown_prices(self):
         message = video_handler._build_video_cost_message("a cinematic sunrise", include_veo=True)
 
-        self.assertIn("Sora estimates (OpenAI 720p pricing)", message)
-        self.assertIn("1024p at $0.50/second", message)
+        self.assertNotIn("Sora", message)
         self.assertIn("Veo 3.1**: 4s $1.60 | 6s $2.40 | 8s $3.20", message)
         self.assertIn("Veo 3.1 Fast**: 4s $0.40 | 6s $0.60 | 8s $0.80", message)
         self.assertIn("native audio is included", message)
 
-    @patch("bot.video_handler.check_sora_limit", return_value=True)
-    async def test_handle_generate_video_intent_uses_original_message_for_status_handoff(self, _mock_limit):
+    async def test_unavailable_video_returns_without_picker_or_provider_work(self):
+        message = SimpleNamespace(attachments=[], reply=AsyncMock())
+        with patch.object(video_handler, "veo_is_available", return_value=False), patch.object(
+            video_handler, "VideoConfirmationView"
+        ) as view, patch.object(video_handler, "_resolve_video_reference_upload", new_callable=AsyncMock) as upload, patch.object(
+            video_handler, "invoke_provider", new_callable=AsyncMock
+        ) as provider:
+            await video_handler.handle_generate_video_intent(message, "a cat", 123, AsyncMock(), False)
+        view.assert_not_called()
+        upload.assert_not_awaited()
+        provider.assert_not_awaited()
+        self.assertIn("currently unavailable", message.reply.await_args.args[0])
+        self.assertNotIn("view", message.reply.await_args.kwargs)
+
+    async def test_server_with_no_allowed_video_returns_without_picker(self):
+        message = SimpleNamespace(attachments=[], reply=AsyncMock())
+        with patch.object(video_handler, "veo_is_available", return_value=True), patch(
+            "services.server_policy.video_config_allowed", return_value=False
+        ), patch.object(video_handler, "VideoConfirmationView") as view:
+            await video_handler.handle_generate_video_intent(message, "a cat", 123, AsyncMock(), False)
+        view.assert_not_called()
+        self.assertIn("maximum video tier", message.reply.await_args.args[0])
+
+    async def test_remix_returns_without_picker_or_provider_work(self):
+        message = SimpleNamespace(attachments=[], reply=AsyncMock())
+        with patch.object(video_handler, "VideoConfirmationView") as view, patch.object(
+            video_handler, "invoke_provider", new_callable=AsyncMock
+        ) as provider:
+            await video_handler.handle_generate_video_intent(message, "remix my video", 123, AsyncMock(), False)
+        view.assert_not_called()
+        provider.assert_not_awaited()
+        self.assertIn("no longer available", message.reply.await_args.args[0])
+
+    async def test_retired_selection_and_changed_server_ceiling_cannot_submit(self):
+        for selection in ("sora|sora-2|4", "veo|veo-3.1-generate-preview|8"):
+            with self.subTest(selection=selection):
+                class FakeView:
+                    def __init__(self, **kwargs):
+                        self.value = selection
+
+                    async def wait(self):
+                        return
+
+                confirm = SimpleNamespace(edit=AsyncMock())
+                message = SimpleNamespace(attachments=[], reply=AsyncMock(return_value=confirm))
+                # Allow all six choices before the picker, reject after confirmation.
+                with patch.object(video_handler, "veo_is_available", return_value=True), patch.object(
+                    video_handler, "VideoConfirmationView", FakeView
+                ), patch("services.server_policy.video_config_allowed", side_effect=[True] * 6 + [False]), patch.object(
+                    video_handler, "invoke_provider", new_callable=AsyncMock
+                ) as provider, patch.object(video_handler, "check_veo_limit") as limit:
+                    await video_handler.handle_generate_video_intent(message, "a cat", 123, AsyncMock(), False)
+                provider.assert_not_awaited()
+                limit.assert_not_called()
+                content = confirm.edit.await_args.kwargs["content"]
+                self.assertIn("no longer available" if selection.startswith("sora") else "maximum video tier", content)
+
+    @patch("bot.video_handler.veo_is_available", return_value=True)
+    @patch("bot.video_handler.check_veo_limit", return_value=True)
+    async def test_handle_generate_video_intent_uses_original_message_for_status_handoff(self, _mock_limit, _mock_available):
         class FakeView:
             def __init__(self, author_id, video_options):
                 self.author_id = author_id
                 self.video_options = video_options
-                self.value = "sora|sora-2|4"
+                self.value = "veo|veo-3.1-fast-generate-preview|4"
 
             async def wait(self):
                 return
@@ -190,7 +212,7 @@ class VideoGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         async def fake_live_status_with_progress(base_message, **kwargs):
             return status_msg, await kwargs["coro"]
 
-        with patch("bot.video_handler.veo_is_available", return_value=True):
+        with patch("bot.video_handler.veo_is_available", return_value=True), patch("bot.video_handler._record_video_cost") as record:
             with patch("bot.video_handler.VideoConfirmationView", FakeView):
                 await video_handler.handle_generate_video_intent(
                     message=message,
@@ -198,58 +220,18 @@ class VideoGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
                     user_id=123,
                     live_status_with_progress=fake_live_status_with_progress,
                     stream_ok=False,
-                    image_urls=None,
+                    image_urls=["data:image/png;base64,Zm9v"],
                 )
 
         self.assertEqual(mock_generate_veo.await_args.kwargs["model"], "veo-3.1-fast-generate-preview")
         self.assertEqual(mock_generate_veo.await_args.kwargs["seconds"], 6)
         self.assertFalse(mock_generate_veo.await_args.kwargs["generate_audio"])
+        self.assertEqual(mock_generate_veo.await_args.kwargs["image_data"], b"foo")
+        self.assertEqual(mock_generate_veo.await_args.kwargs["image_content_type"], "image/png")
+        record.assert_called_once_with("veo-3.1-fast-generate-preview", 6)
         mock_log_usage.assert_called_once()
         status_msg.reply.assert_awaited()
 
-    def test_select_reference_video_size_prefers_closest_landscape_ratio(self):
-        image_data = self._png_bytes(1500, 1000)
-
-        selected = sora_jobs.select_reference_video_size(image_data, model="sora-2-pro")
-
-        self.assertEqual(selected, "1792x1024")
-
-    def test_select_reference_video_size_prefers_closest_portrait_ratio(self):
-        image_data = self._png_bytes(1080, 1920)
-
-        selected = sora_jobs.select_reference_video_size(image_data, model="sora-2")
-
-        self.assertEqual(selected, "720x1280")
-
-    def test_select_reference_video_size_keeps_default_for_square_images(self):
-        image_data = self._png_bytes(1024, 1024)
-
-        selected = sora_jobs.select_reference_video_size(image_data, model="sora-2")
-
-        self.assertEqual(selected, sora_jobs.DEFAULT_VIDEO_SIZE)
-
-    def test_select_reference_video_size_limits_standard_model_to_standard_sizes(self):
-        image_data = self._png_bytes(500, 757)
-
-        selected = sora_jobs.select_reference_video_size(image_data, model="sora-2")
-
-        self.assertEqual(selected, "720x1280")
-
-    def test_prepare_reference_image_for_size_matches_exact_target_dimensions(self):
-        image_data = self._png_bytes(500, 757)
-
-        prepared = sora_jobs.prepare_reference_image_for_size(image_data, "720x1280")
-
-        with Image.open(BytesIO(prepared)) as img:
-            self.assertEqual(img.size, (720, 1280))
-
-    def test_prepare_reference_image_for_size_preserves_existing_matching_dimensions(self):
-        image_data = self._png_bytes(720, 1280)
-
-        prepared = sora_jobs.prepare_reference_image_for_size(image_data, "720x1280")
-
-        with Image.open(BytesIO(prepared)) as img:
-            self.assertEqual(img.size, (720, 1280))
 
 
 if __name__ == "__main__":

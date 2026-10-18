@@ -613,74 +613,6 @@ async def handle_forget_fact(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "deleted": deleted}
 
 
-async def handle_generate_sora_video(args: Dict[str, Any]) -> Dict[str, Any]:
-    from providers.openai_images import image_input_to_upload
-    from providers.sora_utils import create_sora_job
-    from services.database_utils import log_sora_usage, sora_limit_status
-
-    ctx = args.get("_context", {})
-    user_id = ctx.get("user_id")
-    if not user_id:
-        return {"ok": False, "error": "missing_user_context_for_rate_limit"}
-    if not (ctx.get("is_owner") or ctx.get("media_confirmed")):
-        return {
-            "ok": False,
-            "error": "confirmation_required",
-            "message": "Use the normal video-generation flow and confirm the displayed cost first.",
-        }
-
-    status = sora_limit_status(user_id, limit=2, window_seconds=3600)
-    if not status["allowed"]:
-        mins = max(1, status["resets_in_seconds"] // 60)
-        return {
-            "ok": False,
-            "error": "rate_limit_exceeded",
-            "message": (
-                f"You've used both of your 2 Sora videos for this hour. "
-                f"Your next one unlocks in about {mins} minute{'s' if mins != 1 else ''}."
-            ),
-        }
-
-    prompt = args.get("prompt", "")
-    if not prompt:
-        return {"ok": False, "error": "missing_prompt"}
-
-    image_data = None
-    image_filename = None
-    image_content_type = None
-    for idx, image_input in enumerate((ctx.get("image_urls") or []), start=1):
-        upload = await image_input_to_upload(image_input, fallback_name=f"tool_input_{idx}")
-        if upload:
-            image_data, image_filename, image_content_type = upload
-            break
-
-    result = await create_sora_job(
-        prompt,
-        image_data=image_data,
-        image_filename=image_filename,
-        image_content_type=image_content_type,
-    )
-    if result.get("ok"):
-        video_id = ((result.get("data") or {}).get("id"))
-        log_sora_usage(user_id, video_id=video_id)
-        try:
-            import os
-
-            from services import usage_costs
-
-            usage_costs.record(
-                "sora-2-pro", None, float(os.getenv("SORA_TOOL_COST_USD", "2.40")), label="video_generation"
-            )
-        except Exception:
-            pass
-        return {"ok": True, "status": "queued", "video_id": video_id, "data": result.get("data")}
-    return {
-        "ok": False,
-        "error": "video_generation_failed",
-        "detail": public_error_detail((result or {}).get("error") or "video generation failed"),
-    }
-
-
 async def handle_list_available_tools(args: Dict[str, Any]) -> Dict[str, Any]:
     return list_tool_summaries()
 
@@ -707,5 +639,4 @@ TOOL_HANDLERS = {
     "forget_fact": handle_forget_fact,
     "read_own_logs": handle_read_own_logs,
     "list_available_tools": handle_list_available_tools,
-    "generate_sora_video": handle_generate_sora_video,
 }

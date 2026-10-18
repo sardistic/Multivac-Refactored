@@ -202,7 +202,7 @@ class ServerEffectTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(STYLE_MARKER,args[0][-1]['content'])
         _,kw = server_effects.decorate_provider_call('chat.gemini',('a question',),{'context':[{'role':'user','content':'prior'}]})
         self.assertEqual(len(kw['context']),2)
-        for name in ('classifier','code.reflect','video.sora.status','video.sora.download'):
+        for name in ('classifier','code.reflect','utility.status'):
             self.assertEqual(server_effects.decorate_provider_call(name,([],),{}),(([],),{}))
 
     async def test_real_provider_dispatch_receives_style_only_while_active(self):

@@ -15,10 +15,11 @@ def defaults_text(user_id, guild_id=None):
     with server_scope(guild_id):
         lines = ["**Your model defaults**", *[f"{key.title()}: {saved.get(key, 'auto').title()} (here: {preference_tier(user_id, key).title()})" for key in WORKLOADS]]
     lines.extend([
-        "Economy: Luna for text/vision, GPT Image Mini at low quality for images, Sora 2 at 4 seconds for video.",
-        "Balanced: Sol for text/vision, Sunburst at medium quality, Sora 2 at 8 seconds.",
-        "Quality: Astra for text/vision, Sunburst at high quality, Sora 2 Pro at 8 seconds.",
+        "Economy: Luna for text/vision, GPT Image Mini at low quality for images, Veo 3.1 Fast at 4 seconds for video.",
+        "Balanced: Sol for text/vision, Sunburst at medium quality, Veo 3.1 Fast at 8 seconds.",
+        "Quality: Astra for text/vision, Sunburst at high quality, Veo 3.1 at 8 seconds.",
         "Auto uses server defaults, then bot defaults. Server maximums apply; explicit providers require the server to allow them. Video still requires confirmation.",
+        "Image generation offers API, quality, size and output prices. Your image tier highlights a choice; after 30 seconds it uses Mini low at 1024×1024 regardless of that highlight.",
         "Gemini retries require your confirmation. Saved tiers stay selected during automatic retries.",
         "These settings change your account only. The $0.99 character product keeps Sunburst low quality.",
     ])

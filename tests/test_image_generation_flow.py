@@ -8,6 +8,7 @@ from openai.resources.images import AsyncImages
 
 from bot import image_handler, intent_dispatcher
 from providers import stability_generation
+from services.image_options import IMAGE_CONFIGS
 
 
 def image_client(**results):
@@ -30,6 +31,10 @@ def image_client(**results):
 
 
 class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.choice = next(c for c in IMAGE_CONFIGS if c.model == "gpt-image-2.5-sunburst" and c.quality == "high" and c.size == "1024x1024")
+        self.enterContext(patch.object(image_handler, "choose_image_config", AsyncMock(return_value=self.choice)))
+
     @patch("bot.intent_dispatcher.handle_generate_image_intent", new_callable=AsyncMock)
     async def test_dispatch_intent_passes_reference_message_to_generate_image_handler(self, mock_handle_generate):
         ref_msg = SimpleNamespace(content="silver armor, long white hair")
@@ -135,7 +140,7 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         )
         output_status = SimpleNamespace(edit=AsyncMock())
         channel = SimpleNamespace(send=AsyncMock())
-        message = SimpleNamespace(channel=channel)
+        message = SimpleNamespace(channel=channel, author=SimpleNamespace(id=123), reply=AsyncMock())
 
         async def live_status(_message, **kwargs):
             return output_status, await kwargs["coro"]
@@ -152,7 +157,7 @@ class ImageGenerationFlowTests(unittest.IsolatedAsyncioTestCase):
         forwarded = mock_generate.await_args.kwargs["retry_context"]
         self.assertIn("draw a complex flow chart", forwarded)
         edit_kwargs = output_status.edit.await_args.kwargs
-        self.assertEqual(edit_kwargs["content"], "✅ Image generated (GPT Image 2.5 Sunburst)")
+        self.assertEqual(edit_kwargs["content"], f"✅ Image generated ({self.choice.label})")
         self.assertEqual(len(edit_kwargs["attachments"]), 1)
         self.assertEqual(edit_kwargs["attachments"][0].filename, "generated_image.png")
         channel.send.assert_not_awaited()
@@ -220,6 +225,9 @@ class AttachedImageAsGenerationReferenceTests(unittest.IsolatedAsyncioTestCase):
 
     PNG_DATA_URI = "data:image/png;base64,Zm9v"  # b"foo"
 
+    def setUp(self):
+        self.enterContext(patch.object(image_handler, "choose_image_config", AsyncMock(return_value=IMAGE_CONFIGS[0])))
+
     async def test_imagine_with_an_attachment_still_routes_to_generation(self):
         intent = intent_dispatcher.resolve_keyword_intent(
             "imagine this in an art museum",
@@ -263,7 +271,7 @@ class AttachedImageAsGenerationReferenceTests(unittest.IsolatedAsyncioTestCase):
             return output_status, await kwargs["coro"]
 
         await image_handler.handle_generate_image_intent(
-            message=SimpleNamespace(channel=SimpleNamespace(send=AsyncMock())),
+            message=SimpleNamespace(channel=SimpleNamespace(send=AsyncMock()), author=SimpleNamespace(id=123), reply=AsyncMock()),
             prompt="imagine this in an art museum",
             ref_msg=None,
             duration_estimate=10,

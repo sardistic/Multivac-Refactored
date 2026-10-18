@@ -61,11 +61,16 @@ class AuthorizationBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(denied, {"ok": False, "error": "owner_required"})
 
-    async def test_sora_tool_requires_recorded_confirmation(self):
-        denied = await tool_handlers.handle_generate_sora_video(
-            {"prompt": "animate this", "_context": {"user_id": "123"}}
-        )
-        self.assertEqual(denied["error"], "confirmation_required")
+    async def test_retired_sora_tool_is_unavailable_even_with_owner_confirmation(self):
+        from services.tools_registry import execute_tool, get_tool_specs
+
+        self.assertNotIn("generate_sora_video", tool_handlers.TOOL_HANDLERS)
+        self.assertNotIn("generate_sora_video", {item["function"]["name"] for item in get_tool_specs()})
+        self.assertNotIn("generate_sora_video", {item["name"] for item in tool_handlers.list_tool_summaries()["tools"]})
+        denied = await execute_tool("generate_sora_video", {"prompt": "animate this"}, context={
+            "user_id": "123", "is_owner": True, "media_confirmed": True,
+        })
+        self.assertEqual(denied, {"ok": False, "error": "unknown_tool: generate_sora_video"})
 
     async def test_old_context_cannot_authorize_persistent_behavior_change(self):
         denied = await tool_handlers.handle_update_behavioral_instruction(

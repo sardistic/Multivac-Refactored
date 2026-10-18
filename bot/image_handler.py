@@ -28,6 +28,7 @@ from services.weather_utils import get_location_details, get_weather_data
 from services.behavior_registry import invoke_provider
 from services.provider_fallback import ProviderFallback
 from services.model_preferences import ImageModelChoice
+from bot.image_options import choose_image_config
 from bot.fallback_consent import confirm_provider_fallback
 from services.progress_cards import build_run_receipt, receipts_enabled, requester_label
 from services.url_utils import DEFAULT_MEDIA_BYTES, fetch_url_bytes
@@ -468,10 +469,21 @@ async def handle_generate_image_intent(
     duration_estimate: int,
     stream_ok: bool,
     live_status_with_progress,
-    use_gemini: bool = False,
     image_urls=None,
-    image_choice: ImageModelChoice | None = None,
 ):
+    guild_id = getattr(getattr(message, "guild", None), "id", None)
+    selected = await choose_image_config(message.author.id, message.reply, guild_id=guild_id)
+    if selected is None:
+        return
+    from services.server_policy import channel_state, image_config_allowed
+    if not image_config_allowed(selected, guild_id):
+        await message.reply("These image settings exceed the server's current maximum tier.")
+        return
+    channel_id = getattr(getattr(message, "channel", None), "id", None)
+    if guild_id and channel_id and channel_state(guild_id, channel_id) == -1:
+        await message.reply("Media app actions are disabled in this channel by a server manager.")
+        return
+    use_gemini = selected.provider == "gemini"
     weather_match = re.search(r"imagine\s+weather\s+(.*)", prompt, flags=re.IGNORECASE)
     if weather_match:
         loc_query = weather_match.group(1).strip()
@@ -540,18 +552,9 @@ async def handle_generate_image_intent(
                     f"Premium Apple / SF Pro typography / iOS 17 Weather app aesthetic, 8k hyper-detailed text."
                 )
                 logger.info(f"Generating extreme weather widget: {widget_prompt}")
-                if image_choice and not use_gemini:
-                    return await invoke_provider(
-                        "image.generate", handle_image_generation, message, widget_prompt,
-                        image_model=image_choice.model, image_quality=image_choice.quality,
-                        image_model_label=image_choice.label,
-                    )
                 return await invoke_provider(
-                    "image.gemini.generate",
-                    _generate_gemini_image_threaded,
-                    widget_prompt,
-                    1600,
-                    900,
+                    "image.generate", handle_image_generation, message, widget_prompt,
+                    **selected.provider_kwargs(),
                 )
             except Exception as e:
                 logger.error(f"Weather widget failed: {e}")
@@ -598,7 +601,7 @@ async def handle_generate_image_intent(
     # generation branch is entered; it starts at the best guess from routing.
     provider_state = {
         "provider": "Gemini" if use_gemini else "OpenAI",
-        "model": IMG_MODEL_GEMINI if use_gemini else (image_choice.label if image_choice else IMG_MODEL_OPENAI),
+        "model": selected.label,
     }
     # Progressive preview: the provider streams partial renders, and the
     # progress loop attaches each one as it arrives. The indicator becomes the
@@ -634,12 +637,10 @@ async def handle_generate_image_intent(
             prompt,
             reply_msg=ref_msg,
             retry_context=retry_context,
-            use_gemini=use_gemini,
             provider_state=provider_state,
-            partial_callback=_stash_partial,
+            partial_callback=None if selected.model == "gpt-image-1-mini" else _stash_partial,
             reference_urls=reference_urls,
-            **({"image_model": image_choice.model, "image_quality": image_choice.quality,
-                "image_model_label": image_choice.label} if image_choice else {}),
+            **selected.provider_kwargs(),
         ),
         duration_estimate=duration_estimate,
         summarizer=(lambda: "Rendering image… adding details…") if stream_ok else None,

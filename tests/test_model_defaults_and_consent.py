@@ -13,6 +13,7 @@ from bot.model_defaults import ModelDefaultsCog
 from providers import stability_generation
 from services import model_preferences
 from services.model_preferences import ImageModelChoice
+from services.image_options import DEFAULT_IMAGE_CONFIG
 from services.provider_fallback import ProviderFallback
 from services.sqlite_store import SQLiteStore
 
@@ -139,7 +140,7 @@ class PersonalModelDefaultsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(handle.await_args.kwargs["force_web_search"])
         self.assertTrue(handle.await_args.kwargs["model_preference_locked"])
 
-    async def test_saved_image_tier_and_explicit_gemini_provider(self):
+    async def test_generation_dispatch_defers_provider_and_tier_to_priced_picker(self):
         model_preferences.set_preferences(7, "image", "economy")
         for prompt in ("imagine a cat", "gemini imagine a cat"):
             context = intent_dispatcher.DispatchContext(
@@ -149,34 +150,43 @@ class PersonalModelDefaultsTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(intent_dispatcher, "handle_generate_image_intent", new_callable=AsyncMock) as handle:
                 await intent_dispatcher._dispatch_builtin_intent(context)
             args = handle.await_args.kwargs
-            if prompt.startswith("gemini"):
-                self.assertTrue(args["use_gemini"])
-                self.assertIsNone(args["image_choice"])
-            else:
-                self.assertEqual(args["image_choice"], ImageModelChoice("gpt-image-1-mini", "low"))
+            self.assertEqual(args["prompt"], prompt)
+            self.assertNotIn("use_gemini", args)
+            self.assertNotIn("image_choice", args)
 
 
     async def test_video_default_preselects_without_starting_a_job(self):
-        model_preferences.set_preferences(7, "video", "economy")
-        request = message()
-        async def reply(content, *, view):
-            self.assertIsNone(view.value)
-            selector = next(child for child in view.children if isinstance(child, video_handler.VideoConfigSelect))
-            selected = [option.value for option in selector.options if option.default]
-            self.assertEqual(selected, ["sora|sora-2|4"])
-            await view.cancel_button.callback(interaction())
-            return SimpleNamespace(edit=AsyncMock())
-        request.reply.side_effect = reply
-        with patch.object(video_handler, "_resolve_video_reference_upload", new=AsyncMock(return_value=None)), patch.object(
-            video_handler, "veo_is_available", return_value=False
-        ), patch.object(video_handler, "invoke_provider", new_callable=AsyncMock) as provider:
-            await video_handler.handle_generate_video_intent(request, "a cat", 7, status, False)
-        provider.assert_not_awaited()
-        defaults = [option["value"] for option in video_handler.build_video_config_options(False) if option["default"]]
-        self.assertEqual(defaults, ["sora|sora-2-pro|8"])
+        for tier, expected in (
+            ("economy", "veo|veo-3.1-fast-generate-preview|4"),
+            ("balanced", "veo|veo-3.1-fast-generate-preview|8"),
+            ("quality", "veo|veo-3.1-generate-preview|8"),
+        ):
+            with self.subTest(tier=tier):
+                model_preferences.set_preferences(7, "video", tier)
+                request = message()
+
+                async def reply(content, *, view):
+                    self.assertIsNone(view.value)
+                    selector = next(child for child in view.children if isinstance(child, video_handler.VideoConfigSelect))
+                    selected = [option.value for option in selector.options if option.default]
+                    self.assertEqual(selected, [expected])
+                    await view.cancel_button.callback(interaction())
+                    return SimpleNamespace(edit=AsyncMock())
+
+                request.reply.side_effect = reply
+                with patch.object(video_handler, "_resolve_video_reference_upload", new=AsyncMock(return_value=None)), patch.object(
+                    video_handler, "veo_is_available", return_value=True
+                ), patch.object(video_handler, "invoke_provider", new_callable=AsyncMock) as provider:
+                    await video_handler.handle_generate_video_intent(request, "a cat", 7, status, False)
+                provider.assert_not_awaited()
+        defaults = [option["value"] for option in video_handler.build_video_config_options(True) if option["default"]]
+        self.assertEqual(defaults, ["veo|veo-3.1-generate-preview|8"])
 
 
 class ProviderRetryFlowTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.enterContext(patch.object(image_handler, "choose_image_config", AsyncMock(return_value=DEFAULT_IMAGE_CONFIG)))
+
     async def test_weather_image_respects_economy_and_declined_fallback(self):
         proposal = ProviderFallback("Gemini", "Gemini Image", "OpenAI failed.", AsyncMock())
         with patch.object(image_handler, "get_location_details", new=AsyncMock(return_value={"name": "US", "lat": 1, "lon": 2})), patch.object(
@@ -189,7 +199,6 @@ class ProviderRetryFlowTests(unittest.IsolatedAsyncioTestCase):
             await image_handler.handle_generate_image_intent(
                 message=message(), prompt="imagine weather New York", ref_msg=None,
                 duration_estimate=1, stream_ok=False, live_status_with_progress=status,
-                image_choice=ImageModelChoice("gpt-image-1-mini", "low"),
             )
         self.assertEqual(render.await_args.kwargs["image_model"], "gpt-image-1-mini")
         self.assertEqual(render.await_args.kwargs["image_quality"], "low")

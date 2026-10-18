@@ -189,18 +189,14 @@ class UserMemoryStoreTests(unittest.TestCase):
         # Under target: returned untouched without any model call.
         self.assertEqual(asyncio.run(condense_long_text(text, target_chars=9000)), text)
 
-    def test_sora_limit_status_reports_reset(self):
-        status = self.store.sora_limit_status("u9", limit=2)
-        self.assertTrue(status["allowed"])
-        self.assertEqual(status["remaining"], 2)
-
-        self.store.log_sora_usage("u9", video_id="v1")
-        self.store.log_sora_usage("u9", video_id="v2")
-        status = self.store.sora_limit_status("u9", limit=2)
-        self.assertFalse(status["allowed"])
-        self.assertEqual(status["remaining"], 0)
-        self.assertGreater(status["resets_in_seconds"], 0)
-        self.assertLessEqual(status["resets_in_seconds"], 3600)
+    def test_retired_sora_usage_history_survives_store_initialization(self):
+        with self.store.logs_conn() as conn:
+            conn.execute("INSERT INTO sora_usage(user_id, video_id, timestamp) VALUES(?,?,?)",
+                         ("u9", "legacy-video", "2026-09-01T12:00:00"))
+        reopened = SQLiteStore(base_dir=Path(self._tmp.name))
+        with reopened.logs_conn() as conn:
+            rows = conn.execute("SELECT user_id, video_id, timestamp FROM sora_usage").fetchall()
+        self.assertEqual([tuple(row) for row in rows], [("u9", "legacy-video", "2026-09-01T12:00:00")])
 
 
 class UsageCostsTests(unittest.TestCase):

@@ -190,10 +190,6 @@ def set_user_seen(user_id: str, *, intent: str | None = None, prompt: str | None
     store.set_user_seen(user_id, intent=intent, prompt=prompt)
 
 
-def sora_limit_status(user_id: str, limit: int = 2, window_seconds: int = 3600) -> dict:
-    return store.sora_limit_status(user_id, limit=limit, window_seconds=window_seconds)
-
-
 def veo_limit_status(user_id: str, limit: int = 2, window_seconds: int = 3600) -> dict:
     return store.veo_limit_status(user_id, limit=limit, window_seconds=window_seconds)
 
@@ -212,22 +208,6 @@ def get_channel_last_seen(key: str) -> str | None:
 
 def set_channel_last_seen(key: str, last_seen_id: str) -> None:
     store.set_channel_last_seen(key, last_seen_id)
-
-
-def init_sora_usage():
-    return None
-
-
-def log_sora_usage(user_id: str, video_id: str = None):
-    store.log_sora_usage(user_id, video_id=video_id)
-
-
-def get_last_sora_video_id(user_id: str) -> str | None:
-    return store.get_last_sora_video_id(user_id)
-
-
-def check_sora_limit(user_id: str, limit: int = 2, window_seconds: int = 3600) -> bool:
-    return store.check_sora_limit(user_id, limit=limit, window_seconds=window_seconds)
 
 
 def init_veo_usage():

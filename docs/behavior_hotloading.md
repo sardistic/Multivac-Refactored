@@ -47,8 +47,7 @@ Handler namespaces:
   replaces. Current keys include `chat.openai`, `chat.openai_plain`,
   `chat.gemini`, `chat.claude`, `image.generate`, `image.gemini.generate`,
   `image.gemini.edit`, `image.openai.edit`, `vision.openai`,
-  `video.sora.create`, `video.sora.remix`, `video.sora.status`,
-  `video.sora.download`, and `video.veo.generate`.
+  and `video.veo.generate`.
 - `settings`: declared through `BEHAVIOR_SETTINGS`. The built-in router reads
   `intent.model.<intent>` and `intent.duration.<intent>`.
 

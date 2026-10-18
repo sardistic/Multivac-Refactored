@@ -9,10 +9,11 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.model_defaults import ModelDefaultsCog, defaults_text, ModelDefaultsView
+from bot.image_options import choose_image_config
 from bot.server_settings import can_manage_server, settings_text
 from bot.throttle import shop_request, throttle_notice
 from services import server_policy, usage_costs
-from services.model_preferences import image_choice, set_preferences
+from services.model_preferences import set_preferences
 from services.premium import PremiumError
 from services.security_limits import ThrottleError, check_rate_limit, provider_capacity
 from services.server_effects import unattractive_action
@@ -91,7 +92,7 @@ class AppActionsCog(commands.Cog, name="AppActions"):
     async def defaults_profile_menu(self, interaction: discord.Interaction, user: discord.User):
         await ModelDefaultsCog.defaults.callback(self.bot.get_cog("ModelDefaults"), interaction)
 
-    @app_commands.command(name="generate_image", description="Generate an image with your model defaults in an active bot channel.")
+    @app_commands.command(name="generate_image", description="Choose image API, quality, size and estimated cost in an active bot channel.")
     @app_commands.describe(prompt="Describe your image; this uses normal image limits, separate from the $0.99 character purchase.")
     async def image(self, interaction: discord.Interaction, prompt: app_commands.Range[str, 1, 1800]):
         await self.generate(interaction, prompt)
@@ -111,14 +112,20 @@ class AppActionsCog(commands.Cog, name="AppActions"):
                 raise ThrottleError(f"Request limits are busy. Retry in {request.retry_after}s.", request)
             usage_costs.set_request_context(user_id=str(user_id), guild_id=str(guild_id or "DM"), intent="generate_image")
             with server_policy.server_scope(guild_id):
+                limit = check_rate_limit("image", user_id=user_id, guild_id=guild_id or "DM")
+                if not limit.allowed:
+                    raise ThrottleError(f"Image limits are busy. Retry in {limit.retry_after}s.", limit)
+                async def send_picker(content, **kwargs):
+                    return await interaction.followup.send(content, **kwargs, ephemeral=True, wait=True)
+                choice = await choose_image_config(user_id, send_picker, guild_id=guild_id)
+                if choice is None:
+                    return
                 async with provider_capacity(user_id):
                     await server_policy.require_active_channel(self.bot, guild, getattr(interaction, "channel", None))
-                    limit = check_rate_limit("image", user_id=user_id, guild_id=guild_id or "DM")
-                    if not limit.allowed:
-                        raise ThrottleError(f"Image limits are busy. Retry in {limit.retry_after}s.", limit)
-                    choice = image_choice(user_id)
-                    from providers.stability_generation import generate_gpt_image
-                    output = await asyncio.wait_for(generate_gpt_image(prompt, model=choice.model, quality=choice.quality), timeout=600)
+                    if not server_policy.image_config_allowed(choice, guild_id):
+                        raise PremiumError("These image settings exceed the server's current maximum tier. Start a new request.")
+                    from providers.stability_generation import handle_image_generation
+                    output = await asyncio.wait_for(handle_image_generation(None, prompt, **choice.provider_kwargs()), timeout=600)
             if output is None:
                 raise PremiumError("No image was produced. Retry later; no other provider was contacted.")
             await server_policy.require_active_channel(self.bot, guild, getattr(interaction, "channel", None))

@@ -399,6 +399,12 @@ async def handle_image_generation(
     image_model: str = OPENAI_IMAGE_MODEL,
     image_quality: str = "high",
     image_model_label: str = IMG_MODEL_OPENAI,
+    image_size: str = "auto",
+    gemini_image_size: str | None = None,
+    gemini_aspect_ratio: str | None = None,
+    allow_stability: bool = True,
+    allow_fallback: bool = True,
+    selection=None,
 ) -> BytesIO | ProviderFallback | None:
     """Render an image request, using whatever pictures came with it.
 
@@ -422,11 +428,16 @@ async def handle_image_generation(
         return _with_reference_note(composed) if references else composed
 
     async def _gemini_render(image_prompt: str, width: int, height: int) -> Optional[BytesIO]:
+        options = {}
+        if gemini_image_size is not None:
+            options["image_size"] = gemini_image_size
+        if gemini_aspect_ratio is not None:
+            options["aspect_ratio"] = gemini_aspect_ratio
         if references:
             return await asyncio.to_thread(
-                generate_gemini_with_references, image_prompt, _reference_streams(references)
+                generate_gemini_with_references, image_prompt, _reference_streams(references), **options
             )
-        return await asyncio.to_thread(generate_gemini_image, image_prompt, width, height)
+        return await asyncio.to_thread(generate_gemini_image, image_prompt, width, height, **options)
 
     async def _openai_then_gemini(image_prompt: str, width: int, height: int):
         """Propose a Gemini retry without sending anything to it yet."""
@@ -434,12 +445,14 @@ async def handle_image_generation(
         try:
             img = await generate_gpt_image(
                 image_prompt, partial_callback=partial_callback, references=references,
-                model=image_model, quality=image_quality,
+                model=image_model, quality=image_quality, size=image_size,
             )
         except ImageModerationError:
             img = None
         if img:
             return img
+        if not allow_fallback:
+            return None
 
         async def retry():
             _set_provider("Gemini", IMG_MODEL_GEMINI)
@@ -454,9 +467,18 @@ async def handle_image_generation(
             prompt=prompt,
             reference_urls=reference_urls,
         )
+        if selection is not None:
+            from services.server_policy import channel_state, image_config_allowed
+            from services.image_options import available_image_providers
+            guild_id = getattr(getattr(message, "guild", None), "id", None)
+            channel_id = getattr(getattr(message, "channel", None), "id", None)
+            if not image_config_allowed(selection, guild_id) or not available_image_providers().get(selection.provider):
+                return None
+            if guild_id and channel_id and channel_state(guild_id, channel_id) == -1:
+                return None
         prompt_with_reply_context = _compose(prompt)
         width, height = extract_width_height_from_prompt(prompt_with_reply_context)
-        if prompt.lower().startswith("stable imagine"):
+        if prompt.lower().startswith("stable imagine") and allow_stability:
             image_prompt = _compose(prompt[15:].strip())
             # Stability takes no reference image. When the user supplied one,
             # only the OpenAI/Gemini path can honor it, so skip Stability
@@ -480,16 +502,18 @@ async def handle_image_generation(
             else:
                 core_prompt = re.sub(r"^gemini[\s,:]*", "", prompt, flags=re.IGNORECASE).strip() or prompt
             image_prompt = _compose(core_prompt)
-            _set_provider("Gemini", IMG_MODEL_GEMINI)
+            _set_provider("Gemini", image_model_label if selection is not None else IMG_MODEL_GEMINI)
             img = await _gemini_render(image_prompt, width, height)
             if img:
                 return img
+            if not allow_fallback:
+                return None
             async def retry_openai():
                 _set_provider("OpenAI", image_model_label)
                 try:
                     return await generate_gpt_image(
                         image_prompt, partial_callback=partial_callback, references=references,
-                        model=image_model, quality=image_quality,
+                        model=image_model, quality=image_quality, size=image_size,
                     )
                 except ImageModerationError:
                     return None

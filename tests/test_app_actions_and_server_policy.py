@@ -19,6 +19,7 @@ from services import model_preferences, premium, security_limits, server_policy,
 from services.character_renders import CharacterRenderService, CharacterStore, CHARACTER_SKU_ID
 from services.premium import PremiumBenefits, PremiumError
 from services.sqlite_store import SQLiteStore
+from services.image_options import IMAGE_CONFIGS
 
 
 def request(user_id=7, *, manager=False, guild_id=40):
@@ -244,11 +245,22 @@ class GuildPolicyTests(unittest.IsolatedAsyncioTestCase):
         usage_costs.set_request_context(guild_id='40',intent='chat')
         self.assertFalse(await confirm_provider_fallback(item,model='Gemini',reason='failed'))
 
-    async def test_capped_video_config_rejects_pro_veo_and_longer_durations(self):
-        server_policy.update_policy(40,workload='video',max_tier='economy')
-        self.assertTrue(server_policy.video_config_allowed(dict(provider='sora',model='sora-2',seconds=4),40))
-        for provider,model,seconds in [('sora','sora-2',8),('sora','sora-2-pro',4),('veo','veo',4)]:
-            self.assertFalse(server_policy.video_config_allowed(dict(provider=provider,model=model,seconds=seconds),40))
+    async def test_video_ceilings_allow_only_matching_veo_tiers(self):
+        from providers.veo_utils import DEFAULT_VEO_MODEL, DEFAULT_VEO_FAST_MODEL
+
+        fast = dict(provider='veo', model=DEFAULT_VEO_FAST_MODEL, seconds=4)
+        server_policy.update_policy(40, workload='video', max_tier='economy')
+        self.assertTrue(server_policy.video_config_allowed(fast, 40))
+        for config in (dict(fast, seconds=6), dict(fast, seconds=8), dict(fast, model=DEFAULT_VEO_MODEL)):
+            self.assertFalse(server_policy.video_config_allowed(config, 40))
+        server_policy.update_policy(40, workload='video', max_tier='balanced')
+        for seconds in (4, 6, 8):
+            self.assertTrue(server_policy.video_config_allowed(dict(fast, seconds=seconds), 40))
+        self.assertFalse(server_policy.video_config_allowed(dict(fast, model=DEFAULT_VEO_MODEL), 40))
+        server_policy.update_policy(40, workload='video', max_tier='quality')
+        self.assertTrue(server_policy.video_config_allowed(dict(fast, model=DEFAULT_VEO_MODEL, seconds=8), 40))
+        for config in (dict(provider='sora', model='sora-2', seconds=4), dict(fast, model='unknown'), dict(fast, seconds=12)):
+            self.assertFalse(server_policy.video_config_allowed(config, 40))
 
     async def test_default_dropdown_cannot_edit_another_account(self):
         view=ModelDefaultsView(7,40)
@@ -287,10 +299,11 @@ class GuildPolicyTests(unittest.IsolatedAsyncioTestCase):
         model_preferences.set_preferences(7,'image','quality')
         server_policy.update_policy(40,workload='image',max_tier='balanced')
         server_policy.note_activity(40,5)
-        with patch.object(stability_generation,'generate_gpt_image',new=AsyncMock(return_value=png())) as generate:
+        choice = next(c for c in IMAGE_CONFIGS if c.model == 'gpt-image-2.5-sunburst' and c.quality == 'medium' and c.size == '1024x1024')
+        with patch.object(app_actions, 'choose_image_config', AsyncMock(return_value=choice)), patch.object(stability_generation,'handle_image_generation',new=AsyncMock(return_value=png())) as generate:
             item=request();await app_actions.AppActionsCog(self.bot).generate(item,'a cat')
-            self.assertEqual(generate.await_args.kwargs['model'],'gpt-image-2.5-sunburst')
-            self.assertEqual(generate.await_args.kwargs['quality'],'medium')
+            self.assertEqual(generate.await_args.kwargs['image_model'],'gpt-image-2.5-sunburst')
+            self.assertEqual(generate.await_args.kwargs['image_quality'],'medium')
             self.assertTrue(item.followup.send.await_args.kwargs['ephemeral'])
 
     async def test_paid_offer_is_unavailable_in_inactive_channel_without_entitlement_queries(self):

@@ -8,9 +8,14 @@ message, then open **Apps**:
   purchase keeps Sunburst 2.5 low quality at 1024 square and one saved PNG per
   purchase. Earlier one-time purchases stay recoverable.
 - **Generate image** opens an editable description form. This is ordinary image
-  generation with your model defaults and normal quotas, separate from the paid
+  generation with normal quotas, separate from the paid
   character product. Message actions prefill the description from the message;
-  profile actions start with a blank description. Submit the form to generate;
+  profile actions start with a blank description. Submitting opens a priced
+  API/quality/size picker shared with `/generate_image` and chat image requests.
+  Choosing an option starts generation. After 30 seconds without a selection,
+  it uses OpenAI GPT Image Mini, low quality, 1024×1024 (about $0.005 output
+  plus inputs), regardless of the saved tier highlighted in the menu. Cancel
+  sends no image request. Only the requester can choose or cancel;
   merely opening it does not call the image provider.
 - **Model defaults** opens your own workload and tier selectors, regardless of
   whose profile or message you selected. Only the requesting account can change
@@ -113,7 +118,10 @@ Maximum tiers apply to built-in primary response/generation models. Cheaper
 maximums restrict explicit external providers and provider retries for that
 workload, preserving the maximum even if the requester approves a fallback.
 Internal classification, verification, safety, and support-tool models remain
-operator controlled. Video options above the maximum are removed and the
+operator controlled. Image options above the maximum are removed and checked
+again before submission. Economy permits Mini low; Balanced adds Mini medium
+and Sunburst low/medium. Quality/Auto allow all configured choices, including
+Gemini. Video options above the maximum are removed and the
 configuration is checked again after confirmation. The fixed paid product is
 never silently switched away from Sunburst.
 

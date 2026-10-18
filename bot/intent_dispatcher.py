@@ -326,8 +326,6 @@ async def _dispatch_builtin_intent(ctx: DispatchContext) -> bool:
             duration_estimate=duration_estimate,
             stream_ok=ctx.stream_ok,
             live_status_with_progress=ctx.live_status_with_progress,
-            use_gemini=wants_gemini(ctx.prompt) or wants_gemini(ctx.raw_prompt),
-            image_choice=None if wants_gemini(ctx.prompt) or wants_gemini(ctx.raw_prompt) or ctx.prompt.lower().startswith("stable imagine") or preference_tier(ctx.user_id, "image") == "auto" else image_choice(ctx.user_id),
             # A generation can have a subject the user attached ("imagine this
             # in an art museum"). Only edit_image used to receive these, so
             # that picture was dropped and the model invented a subject.
@@ -460,7 +458,7 @@ async def dispatch_intent(ctx: DispatchContext) -> bool:
         workload = workload_for_intent(ctx.intent)
         explicit_external = (ctx.intent in {"claude_chat", "gemini_chat"} or wants_gemini(ctx.prompt)
                              or wants_gemini(ctx.raw_prompt) or ctx.prompt.lower().startswith("stable imagine"))
-        if capped(workload) and explicit_external:
+        if capped(workload) and explicit_external and ctx.intent != "generate_image":
             await ctx.message.reply("This server's maximum tier restricts this workload to the configured OpenAI models. Use the default route or ask a server manager to change the maximum.")
             return False
         channel = getattr(ctx.message, "channel", None)

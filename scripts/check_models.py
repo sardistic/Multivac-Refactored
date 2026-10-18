@@ -17,9 +17,9 @@ def check_models():
         models = [m["id"] for m in data.get("data", [])]
         
         # Filter
-        sora_models = [m for m in models if "sora" in m or "video" in m or "dall-e" in m]
+        image_models = [m for m in models if "image" in m or "dall-e" in m]
         print(f"Found {len(models)} models.")
-        print("Relevant models:", sora_models)
+        print("Image models:", image_models)
         
     except Exception as e:
         print(f"Failed: {e}")

@@ -36,7 +36,6 @@ _MUTATING_TOOLS = {
     "update_behavioral_instruction": re.compile(r"\b(?:from now on|remember to|always|stop|don't|do not)\b", re.I),
     "remember_fact": re.compile(r"\b(?:remember|save|store|keep)\b", re.I),
     "forget_fact": re.compile(r"\b(?:forget|delete|remove|erase)\b", re.I),
-    "generate_sora_video": re.compile(r"\b(?:generate|create|make|render|animate)\b.{0,50}\b(?:video|clip|movie|animation)\b", re.I),
 }
 _TRANSIENT_RE = re.compile(
     r"(?:timeout|temporar|rate.?limit|429|\b5\d\d\b|connection|unavailable|try again)",

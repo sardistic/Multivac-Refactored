@@ -258,7 +258,7 @@ TOOL_SPECS = [
                 "properties": {
                     "provider": {
                         "type": "string",
-                        "description": "Optional provider filter such as 'openai', 'gemini', 'anthropic', 'sora', or 'stability'."
+                        "description": "Optional provider filter such as 'openai', 'gemini', 'anthropic', or 'stability'."
                     },
                     "max_results": {"type": "integer", "description": "Maximum results to return", "default": 12},
                 },
@@ -360,23 +360,6 @@ TOOL_SPECS = [
             "name": "list_available_tools",
             "description": "List all my available tools and what they do. Call this to see what capabilities I have.",
             "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_sora_video",
-            "description": "Generate a video using OpenAI Sora only after the application's normal confirmation flow records user approval. If the current message includes images, the first image is used as a reference automatically. STRICT LIMIT: 2 videos per user per hour.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "Detailed description of the video to generate."
-                    }
-                },
-                "required": ["prompt"],
-            },
         },
     },
 ]

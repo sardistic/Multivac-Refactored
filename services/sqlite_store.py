@@ -766,34 +766,11 @@ class SQLiteStore:
             )
             conn.commit()
 
-    def log_sora_usage(self, user_id: str, video_id: str | None = None) -> None:
-        self._log_video_usage("sora_usage", user_id, video_id=video_id)
-
     def log_veo_usage(self, user_id: str, video_id: str | None = None) -> None:
         self._log_video_usage("veo_usage", user_id, video_id=video_id)
 
-    def get_last_sora_video_id(self, user_id: str) -> str | None:
-        with self.logs_conn() as conn:
-            row = conn.execute(
-                """
-                SELECT video_id
-                FROM sora_usage
-                WHERE user_id = ? AND video_id IS NOT NULL
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-                (str(user_id),),
-            ).fetchone()
-        return row[0] if row else None
-
-    def check_sora_limit(self, user_id: str, limit: int = 2, window_seconds: int = 3600) -> bool:
-        return self._check_usage_limit("sora_usage", user_id, limit=limit, window_seconds=window_seconds)
-
     def check_veo_limit(self, user_id: str, limit: int = 2, window_seconds: int = 3600) -> bool:
         return self._check_usage_limit("veo_usage", user_id, limit=limit, window_seconds=window_seconds)
-
-    def sora_limit_status(self, user_id: str, limit: int = 2, window_seconds: int = 3600) -> dict:
-        return self._usage_limit_status("sora_usage", user_id, limit=limit, window_seconds=window_seconds)
 
     def veo_limit_status(self, user_id: str, limit: int = 2, window_seconds: int = 3600) -> dict:
         return self._usage_limit_status("veo_usage", user_id, limit=limit, window_seconds=window_seconds)
@@ -961,6 +938,7 @@ class SQLiteStore:
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_code_control_pending
                     ON code_control_requests (proposal_id, action) WHERE status='pending';
 
+                -- Archive retained after Sora retirement; no runtime writes.
                 CREATE TABLE IF NOT EXISTS sora_usage (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT,

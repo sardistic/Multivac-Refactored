@@ -23,7 +23,7 @@ before publishing them.
   unappealing chat and visual style, with explicit activation and manager stop
 - Gemini text, image, multimodal chat, code execution, Google Search, and reference-image flows
 - Image generation, image editing, image description, and multimodal file analysis
-- Sora and Veo video generation, including image-to-video references and Sora remix flow
+- Veo video generation, including image-to-video references and cost confirmation
 - Reply-aware video prompts that can turn a replied-to message into the generation brief
 - Weather, stock, URL summarization, web search, genuine reverse-image lookup, YouTube transcript, and repo inspection tools
 - Responses-first OpenAI orchestration plus the same bounded tool loop for Claude Fable
@@ -52,7 +52,7 @@ before publishing them.
   context building, intent dispatch, provider intent handlers, UI, and message parsing.
 - `providers/`
   External AI and media integrations:
-  OpenAI, Gemini, Claude, Stability, and Sora.
+  OpenAI, Gemini (including Veo), Claude, and Stability.
   Most `*_utils.py` files here are now compatibility facades over smaller provider modules.
 - `services/`
   Internal app services:
@@ -97,8 +97,6 @@ When tool-calling is available, current callable functions include:
   Store or remove user-scoped remembered facts.
 - `update_behavioral_instruction`
   Update the user's active behavior instruction projection.
-- `generate_sora_video`
-  Queue a Sora video job from a prompt, optionally using available image inputs.
 - `read_own_logs`
   Owner diagnostic helper that reads recent bot logs with credential-like values redacted.
 - `list_available_tools`

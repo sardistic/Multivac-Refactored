@@ -86,10 +86,26 @@ def capped(workload, guild_id=None):
 
 
 def video_config_allowed(config, guild_id=None):
+    from providers.veo_utils import DEFAULT_VEO_FAST_MODEL, VEO_MODEL_CONFIGS
+
+    model = config.get("model")
+    seconds = config.get("seconds")
+    model_config = VEO_MODEL_CONFIGS.get(model, {})
+    if config.get("provider") != "veo" or seconds not in model_config.get("durations", ()):
+        return False
     cap = get_policy(guild_id)["ceilings"].get("video")
     if cap not in {"economy", "balanced"}:
         return True
-    return config["provider"] == "sora" and config["model"] == "sora-2" and config["seconds"] <= (4 if cap == "economy" else 8)
+    return model == DEFAULT_VEO_FAST_MODEL and seconds <= (4 if cap == "economy" else 8)
+
+
+def image_config_allowed(config, guild_id=None):
+    from services.image_options import IMAGE_CONFIGS
+    if config not in IMAGE_CONFIGS:
+        return False
+    cap = get_policy(guild_id)["ceilings"].get("image")
+    rank = {"economy": 0, "balanced": 1, "quality": 2}
+    return cap not in rank or rank[config.tier] <= rank[cap]
 
 
 def channel_state(guild_id, channel_id):

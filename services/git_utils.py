@@ -54,10 +54,9 @@ REDACT_PATTERNS = [
 API_CALL_PATTERNS = {
     "openai_responses": r"responses\.create",
     "openai_chat": r"chat\.completions\.create",
-    "openai_http": r"api\.openai\.com|/v1/(chat/completions|responses|images|video|videos|sora)",
+    "openai_http": r"api\.openai\.com|/v1/(chat/completions|responses|images)",
     "gemini_client": r"genai\.Client|google\.genai",
     "anthropic_client": r"AsyncAnthropic|anthropic\.",
-    "sora_http": r"sora_headers|/videos?/|/sora/",
     "stability_sdk": r"stability_client\.StabilityInference|stability_sdk",
     "requests_http": r"requests\.(get|post|put|delete|patch)",
 }
