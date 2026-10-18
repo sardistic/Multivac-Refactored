@@ -656,7 +656,9 @@ def _get_reflection_worker() -> ReflectionWorker:
 
 async def _run_usage_metrics_publisher() -> None:
     while True:
-        await asyncio.to_thread(usage_costs.publish_metrics_snapshot)
+        # the server count rides along once the bot is connected (before that, guilds is empty, not zero)
+        guilds = len(bot.guilds) if bot.is_ready() else None
+        await asyncio.to_thread(usage_costs.publish_metrics_snapshot, guilds)
         await asyncio.sleep(300)
 
 

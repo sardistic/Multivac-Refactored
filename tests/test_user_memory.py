@@ -248,6 +248,9 @@ class UsageCostsTests(unittest.TestCase):
         self.assertEqual(len(snapshot["daily"]["days"]), 14)
         self.assertEqual(snapshot["daily"]["days"][-1], 150)
         self.assertNotEqual(snapshot["daily"]["to"], datetime.now(usage_costs.REPORT_TZ).date().isoformat())
+        self.assertNotIn("guilds", snapshot)                          # unknown server count: left out, not zero
+        self.assertTrue(usage_costs.publish_metrics_snapshot(7))
+        self.assertEqual(json.loads(Path(usage_costs.METRICS_PATH).read_text(encoding="utf-8"))["guilds"], 7)
         serialized = json.dumps(snapshot)
         for private_value in ("private-user", "private-label", "private-model", "must not leak", "99.0"):
             self.assertNotIn(private_value, serialized)

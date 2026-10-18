@@ -591,8 +591,11 @@ def _public_metrics_snapshot(now_utc: datetime | None = None) -> Dict[str, Any]:
     }
 
 
-def publish_metrics_snapshot() -> bool:
-    """Atomically publish privacy-safe usage aggregates when configured."""
+def publish_metrics_snapshot(guilds: int | None = None) -> bool:
+    """Atomically publish privacy-safe usage aggregates when configured.
+
+    ``guilds`` is how many servers the bot is in, published only when known.
+    """
     if not METRICS_PATH:
         return False
     temporary = None
@@ -601,6 +604,8 @@ def publish_metrics_snapshot() -> bool:
         directory = os.path.dirname(destination)
         os.makedirs(directory, exist_ok=True)
         payload = _public_metrics_snapshot()
+        if isinstance(guilds, int) and guilds >= 0:
+            payload["guilds"] = guilds
         with tempfile.NamedTemporaryFile(
             "w", encoding="utf-8", dir=directory, prefix=".usage-metrics-", delete=False
         ) as handle:
