@@ -664,6 +664,8 @@ async def _run_usage_metrics_publisher() -> None:
 
 @bot.event
 async def on_ready():
+    from bot.invite_approval import install as install_invite_approval
+    await install_invite_approval(bot)
     await bot.change_presence(
         activity=discord.Activity(type=discord.ActivityType.watching, name="Graphs Go BRRR 📈")
     )
@@ -2504,6 +2506,12 @@ async def _builtin_on_message(message: discord.Message):
 
 @bot.event
 async def on_message(message: discord.Message):
+    from services.portal_store import admission_allowed
+    if not await asyncio.to_thread(
+        admission_allowed, os.getenv('INVITE_APPROVAL_DB_PATH', ''),
+        message.guild.id if message.guild else None,
+    ):
+        return
     with server_scope(message.guild.id if message.guild else None):
         return await dispatch_event("message", _builtin_on_message, message)
 

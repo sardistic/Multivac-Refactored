@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>MultiVAC — Owner overview</title><link rel="icon" href="/static/eye.svg"><link rel="stylesheet" href="/static/portal.css"><script src="/static/portal.js" defer></script></head>
+<body data-view="admin"><div class="wrap">
+<header><a class="home" href="/">MULTI<small>VAC</small></a><nav aria-label="Account"><a href="/request">Server requests</a><a href="/policies">Policies</a><span id="account"></span><button id="logout" hidden>Sign out</button></nav></header>
+<main class="portal"><p class="kicker">Owner console</p><h1>A view of the whole system.</h1><p class="lede">Review server access and follow the bot’s measured usage.</p>
+<div id="notice" role="alert" hidden></div><div id="signin" hidden><p>Sign in with the Discord account that owns MultiVAC to open this overview.</p><a class="btn primary" href="/auth/discord">Sign in with Discord →</a></div>
+<div id="content" hidden><div class="toolbar"><label for="days">Reporting period</label><select id="days"><option value="1">Today</option><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select><button id="refresh">Refresh overview</button><span id="updated" class="muted"></span></div>
+<div id="stats" class="stats"></div>
+<p class="meta">Costs are estimates from recorded provider calls, not invoices. Unrecorded usage is not included. Reporting periods use America/New_York; daily bars use UTC.</p>
+<section><h2>Invite requests &amp; access</h2><p>Approve a server to release its invite link. Revoking access makes the bot leave that server within a minute. Existing installations retain approved access.</p><div id="requests"></div></section>
+<section><h2>Servers</h2><p class="muted">Current Discord installations and recorded usage for this period. Historical servers remain visible; DMs and unattributed calls are shown separately.</p><div id="servers" class="table-scroll"></div></section>
+<section><h2>Usage by model</h2><div id="models" class="table-scroll"></div><h3>Daily token usage</h3><div id="daily" class="chart" role="img" aria-label="Daily token usage in UTC"></div><p id="daily-caption" class="chart-caption"></p></section>
+<section><h2>Recent access decisions</h2><div id="audit" class="table-scroll"></div></section></div></main>
+<footer><a href="/">MultiVAC</a><a href="/privacy">Privacy</a><a href="https://sardistic.github.io/Multivac-Refactored/">Change ledger ↗</a></footer></div></body></html>

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- the plaza's eye: a lens of frosted glass holding a ring of amber glass and a core of red glass -->
+  <defs>
+    <radialGradient id="lens" cx="40%" cy="34%" r="70%">
+      <stop offset="0" stop-color="#fbf8f2"/><stop offset=".7" stop-color="#ebe5da"/><stop offset="1" stop-color="#d9d2c4"/>
+    </radialGradient>
+    <radialGradient id="amber" cx="42%" cy="38%" r="62%">
+      <stop offset="0" stop-color="#f7cf5a"/><stop offset="1" stop-color="#d6921a"/>
+    </radialGradient>
+    <radialGradient id="red" cx="40%" cy="36%" r="64%">
+      <stop offset="0" stop-color="#f06a52"/><stop offset="1" stop-color="#ad2416"/>
+    </radialGradient>
+    <radialGradient id="glint" cx="31%" cy="26%" r="48%">
+      <stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset=".35" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity=".7"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#lens)"/>
+  <circle cx="32" cy="32" r="18.5" fill="url(#amber)"/>
+  <circle cx="32" cy="32" r="18.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1"/>
+  <circle cx="32" cy="32" r="9" fill="url(#red)"/>
+  <circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width=".9"/>
+  <circle cx="32" cy="32" r="30" fill="url(#glint)"/>
+  <circle cx="32" cy="32" r="29.3" fill="none" stroke="url(#rim)" stroke-width="1.4"/>
+  <circle cx="32" cy="32" r="30.6" fill="none" stroke="#16141b" stroke-opacity=".28" stroke-width="1.2"/>
+</svg>

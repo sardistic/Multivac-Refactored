@@ -1,0 +1,40 @@
+# Layer on the existing release Compose files. Host paths and routing belong
+# in the external infrastructure runbook, not in this repository.
+services:
+  portal:
+    image: ${MULTIVAC_PORTAL_IMAGE:-multivac-multivac}
+    user: "65532:65532"
+    read_only: true
+    working_dir: /app
+    command: ["python", "-m", "services.portal"]
+    env_file: .portal.env
+    environment:
+      - HOME=/tmp
+      - PYTHONDONTWRITEBYTECODE=1
+      - PORTAL_DB_PATH=/portal/portal.db
+      - PORTAL_REPORT_PATH=/reports/usage.json
+      - USAGE_METRICS_PATH=/metrics/usage_metrics.json
+    volumes:
+      - ${MULTIVAC_APP_DIR:?Select a reviewed release}:/app:ro
+      - ./state/portal:/portal
+      - ./state/portal-metrics:/reports:ro
+      - ./state/public:/metrics:ro
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 192m
+    pids_limit: 64
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      edge:
+        aliases: [multivac-portal]
+
+networks:
+  edge:
+    external: true

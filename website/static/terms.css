@@ -1,0 +1,17 @@
+
+  :root { color-scheme: light dark; --bg: #f6f3ed; --fg: #20232b; --dim: #535b67; --rule: #d0d2d6; --link: #174da8; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #11151c; --fg: #e7eaf0; --dim: #afb8c6; --rule: #394454; --link: #94b8ff; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 22px; background: var(--bg); color: var(--fg); font: 17px/1.7 system-ui, sans-serif; }
+  header, main, footer { max-width: 800px; margin: 0 auto; }
+  header { padding: 30px 0 24px; border-bottom: 1px solid var(--rule); }
+  header > a { font-size: 20px; font-weight: 750; text-decoration: none; color: var(--fg); }
+  nav { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 12px; font-size: 14px; }
+  nav a[aria-current="page"] { font-weight: 750; text-decoration-thickness: 2px; }
+  main { padding: 30px 0 36px; overflow-wrap: anywhere; }
+  h1 { font-size: clamp(28px, 6vw, 40px); line-height: 1.2; margin: 0 0 24px; letter-spacing: -.025em; }
+  h2 { font-size: 23px; line-height: 1.35; margin: 38px 0 14px; }
+  p { margin: 0 0 18px; } li { margin: 8px 0; } ul { padding-left: 24px; }
+  a { color: var(--link); text-underline-offset: 3px; } a:hover { text-decoration-thickness: 2px; }
+  code { font-size: .92em; } :focus-visible { outline: 3px solid var(--link); outline-offset: 4px; }
+  footer { padding: 22px 0 36px; border-top: 1px solid var(--rule); font-size: 14px; color: var(--dim); }

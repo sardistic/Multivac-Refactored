@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 *.db
 .env
+.portal.env
 .venv/
 venv/
 

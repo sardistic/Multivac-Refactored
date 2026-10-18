@@ -1,5 +1,34 @@
 # Architectural Decisions
 
+## 2026-10-17: Self-hosted Discord owner portal and approved server admission
+
+Keep the existing public page design and deploy an independent aiohttp website
+alongside the bot, using the existing production image. Discord authorization
+code sign-in requests only identity and guild list. Resolve owner authority from
+Discord's application metadata; team-owned applications use the real team owner,
+not the synthetic application-owner account. Request submission freshly checks
+Manage Server or Administrator permissions. Owner-only reviews are durable,
+audited and protected by Origin plus session CSRF checks. Cookies are Secure,
+HttpOnly and SameSite=Lax; access tokens and one-hour sessions stay in memory.
+
+An explicit one-time import preserves existing installations. New servers need
+approved access; the bot blocks messages/application commands before processing
+and leaves unapproved joins or revoked servers within one minute. Read errors
+deny work but defer removal until state is readable. Never auto-approve guilds
+on startup. Requesters retrieve decisions and invites on the site; no automatic
+Discord message or email is introduced. Invite permissions exclude Administrator.
+
+The live usage ledger uses WAL, so file-only read-only database mounts cannot
+provide reliable current reporting. The bot instead atomically exports private
+aggregate reports every minute for 1/7/30/90-day periods. The website mounts only
+these aggregates and the existing public snapshot read-only, plus its own
+private request database. It receives no provider keys, raw usage ledger,
+conversation, memory, purchase or reflection database. Reports separate DMs and
+unattributed/background usage, expose estimated costs as estimates, and label
+calendar windows and UTC daily buckets. Authentication, admission, reporting and
+website files are protected from ordinary generated-code proposals. Host routing
+and deployment facts remain in the external infrastructure runbook.
+
 ## 2026-10-14: Persistent shop access and explicit storefront routing
 
 The five-minute requester-bound navigation stranded users at expired messages

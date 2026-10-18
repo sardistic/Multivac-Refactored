@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MultiVAC — a Discord bot that thinks with every model</title>
+<meta name="description" content="MultiVAC is a modular Discord bot: chat routed across OpenAI, Gemini and Claude, image and video generation, real tools, and memory that stays scoped to you.">
+<link rel="canonical" href="https://insufficient.dev/">
+<link rel="icon" href="/static/eye.svg" type="image/svg+xml">
+<meta name="theme-color" content="#f3efe7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0c11" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="MultiVAC">
+<meta property="og:description" content="A modular Discord bot: every model, real tools, memory scoped to you.">
+<meta property="og:url" content="https://insufficient.dev/">
+<meta property="og:image" content="https://insufficient.dev/static/eye.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/index.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="home" href="https://sardistic.com/"><img src="/static/eye.svg" alt="" width="28" height="28">SARDISTIC<small>.COM</small></a>
+    <nav aria-label="MultiVAC"><a href="#what">What it does</a><a href="#usage">Usage</a><a href="#models">Models</a><a href="#tools">Tools</a><a href="#memory">Memory</a><a href="/policies">Policies</a><a href="/admin">Sign in</a></nav>
+  </header>
+
+  <div class="hero">
+    <div>
+      <div class="kicker">A Discord bot · by <a href="https://sardistic.com/about/">sardistic</a></div>
+      <h1>MULTI<span>VAC</span></h1>
+      <p class="lede">One bot, every model. MultiVAC routes your conversation to OpenAI, Gemini or Claude, makes images and video, reaches for real tools when it needs facts, and remembers only what you let it.</p>
+      <div class="cta">
+        <a class="btn primary" href="/request">Request a server invite →</a>
+        <a class="btn" href="#what">See what it does</a>
+      </div>
+    </div>
+    <div class="terminal" aria-label="An example exchange with MultiVAC" id="term">
+      <p class="line dim">// an example exchange</p>
+      <p class="line"><span class="who">@you</span>  is it going to rain in raleigh this weekend? also summarize this link</p>
+      <p class="line dim">  ⟳ get_weather · summarize_url</p>
+      <p class="line"><span class="bot">MultiVAC</span>  Saturday stays dry; Sunday has a 60% chance of showers after 2 PM. The article argues …</p>
+      <p class="line"><span class="who">@you</span>  how can entropy be reversed?</p>
+      <p class="line"><span class="bot">MultiVAC</span>  INSUFFICIENT DATA FOR MEANINGFUL ANSWER.<span class="caret"></span></p>
+    </div>
+  </div>
+
+  <div class="live" aria-live="polite">
+    <div><b id="lv-status">—</b><i>Metrics feed</i></div>
+    <div><b id="lv-tokens">—</b><i>Tokens used, all time</i></div>
+    <div><b>3</b><i>Model families</i></div>
+    <div><b id="lv-servers">—</b><i id="lv-servers-l">Servers</i></div>
+  </div>
+
+  <section id="what">
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><svg class="shape" viewBox="0 0 34 34"><circle cx="17" cy="17" r="15" fill="#d6302a"/></svg><h3>Chat, by mention or reply</h3><p>Talk to it like anyone in the server. It keeps the thread, follows replies, and picks the model the task needs.</p></div>
+      <div class="card"><svg class="shape" viewBox="0 0 34 34"><rect x="3" y="3" width="28" height="28" fill="#e2a21c"/></svg><h3>Images</h3><p>Generate, edit and describe images, analyse attached files, and work from reference images.</p></div>
+      <div class="card"><svg class="shape" viewBox="0 0 34 34"><path d="M17 2 32 31H2Z" fill="#1f4fa0"/></svg><h3>Video</h3><p>Sora and Veo generation, image-to-video from a reference, Sora remixes, and prompts drawn from the message you reply to.</p></div>
+      <div class="card"><svg class="shape" viewBox="0 0 34 34"><circle cx="17" cy="17" r="15" fill="none" stroke="#15131a" stroke-width="4"/><circle cx="17" cy="17" r="5" fill="#15131a"/></svg><h3>Real tools</h3><p>Web and reverse-image search, weather, stocks, URL summaries, YouTube transcripts and repository inspection, inside bounded loops.</p></div>
+      <div class="card"><svg class="shape" viewBox="0 0 34 34"><rect x="3" y="10" width="28" height="14" fill="#d6302a"/><rect x="10" y="3" width="14" height="28" fill="#e2a21c" opacity=".85"/></svg><h3>Memory, scoped to you</h3><p>Facts you ask it to remember, saved behaviour instructions and optional long-term recall, all kept per user and forgettable on request.</p></div>
+      <div class="card"><svg class="shape" viewBox="0 0 34 34"><path d="M3 31 17 3l14 28" fill="none" stroke="#1f4fa0" stroke-width="5"/></svg><h3>Honest progress</h3><p>Live progress for long jobs, with real phase details and estimates, and a status record of exactly which tools ran.</p></div>
+    </div>
+  </section>
+
+  <section id="usage" hidden>
+    <h2>Usage</h2>
+    <div class="usage">
+      <div><i>Today</i><b id="u-today">—</b><span id="u-today-c"></span></div>
+      <div><i>This week</i><b id="u-week">—</b><span id="u-week-c"></span></div>
+      <div><i>This month</i><b id="u-month">—</b><span id="u-month-c"></span></div>
+      <div><i>All time</i><b id="u-all">—</b><span id="u-all-c"></span></div>
+    </div>
+    <div class="split" id="u-split" aria-label="Where all-time tokens went"></div>
+    <div class="legend" id="u-legend"></div>
+    <div class="spark"><svg id="u-spark" viewBox="0 0 700 120" preserveAspectRatio="none" aria-label="Tokens per day, last fourteen days"></svg><div class="cap"><span id="u-from"></span><span>tokens per day</span><span id="u-to"></span></div></div>
+    <p class="asof" id="u-asof"></p>
+  </section>
+
+  <section id="models">
+    <div class="two">
+      <div>
+        <h2>Models</h2>
+        <div class="models">
+          <div class="model"><b>OpenAI</b><span>Responses-first orchestration: reasoning models that can call tools, with tool sets shaped to the task.</span></div>
+          <div class="model"><b>Gemini</b><span>Text, images, multimodal chat, code execution and Google Search, with confirmation before retries.</span></div>
+          <div class="model"><b>Claude</b><span>The same bounded tool loop and registry as OpenAI, chosen explicitly when you want it.</span></div>
+          <div class="model"><b>Your default</b><span>Pick a personal model tier with <code>/model_defaults</code>; server managers can set a ceiling.</span></div>
+        </div>
+      </div>
+      <div id="tools">
+        <h2>Tools it can reach for</h2>
+        <ul class="tools">
+          <li>web_search</li><li>reverse_image_search</li><li>get_weather</li><li>get_stock_quote</li><li>summarize_url</li><li>get_youtube_transcript</li>
+          <li>search_memory</li><li>remember_fact</li><li>forget_fact</li><li>generate_sora_video</li><li>get_agent_run_status</li><li>git_read_file</li>
+          <li>git_search_code</li><li>git_recent_commits</li><li>list_available_tools</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="memory">
+    <div class="two">
+      <div class="quote">Every tool loop has a limit. Anything that costs money or changes state waits for you to ask for it.<small>How MultiVAC runs its tools</small></div>
+      <div>
+        <h2>Memory &amp; privacy</h2>
+        <p>Remembered facts, instructions and recall are scoped to the person, channel and server they came from. Traces of what the bot did keep orchestration metadata and public evidence links, never your prompts, attachments, memories or credentials.</p>
+        <p>Read the <a href="/privacy">privacy policy</a> and <a href="/terms">terms of service</a>, or write to <a href="mailto:bot@sardistic.com">bot@sardistic.com</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>© <span id="yr">2026</span> <a href="https://sardistic.com/about/">sardistic</a> · MultiVAC shares its name with the computer in Isaac Asimov's <a href="https://question.sardistic.com/">The Last Question</a>.</span>
+    <span class="foot-links"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="https://sardistic.com/projects/multivac/">Project notes</a><a href="https://sardistic.github.io/Multivac-Refactored/">Change ledger</a><a href="https://sardistic.com/">sardistic.com</a></span>
+  </footer>
+</div>
+<script src="/static/index.js" defer></script>
+</body>
+</html>

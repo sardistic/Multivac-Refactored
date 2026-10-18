@@ -56,6 +56,11 @@ PROTECTED_PATTERNS = (
     "ops/*",
     "tests/*",
     "dashboard/*",
+    "website/*",
+    "services/portal.py",
+    "services/portal_store.py",
+    "services/portal_usage.py",
+    "bot/invite_approval.py",
 )
 
 
